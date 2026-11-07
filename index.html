@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#101522">
-<title>MBCK 3.4.1 — Compatibility Probe</title>
+<title>MBCK 3.4.2 — Compatibility Probe</title>
 <style>
 :root{color-scheme:dark;--bg:#0b1020;--panel:#141c2e;--line:#26334b;--text:#edf3ff;--muted:#91a0ba;--ok:#42d392;--warn:#ffbf69;--bad:#ff6b78;--blue:#78aaff}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(1000px 500px at 80% -10%,#1d3157 0%,transparent 60%),var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -15,11 +15,18 @@ h1{font-size:24px;margin:0}h2{font-size:16px;margin:0 0 12px}.sub{color:var(--mu
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{background:#0d1525;border:1px solid var(--line);padding:12px;border-radius:12px;min-width:0}
 .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}.value{font-size:14px;overflow-wrap:anywhere;margin-top:5px}
 .stage{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)}.stage:first-of-type{border-top:0}
-.dot{width:10px;height:10px;border-radius:50%;background:#65748e;margin-top:6px;flex:none}.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}
-.stagebody{flex:1;min-width:0}.stagehead{display:flex;justify-content:space-between;gap:10px}.stagehead strong{font-size:14px}.status{font-size:12px;color:var(--muted)}.detail{font-size:12px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
+.dot{width:10px;height:10px;border-radius:50%;background:#65748e;margin-top:6px;flex:none}.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.dot.skip{background:#65748e}
+.stagebody{flex:1;min-width:0}.stagehead{display:flex;justify-content:space-between;gap:10px;align-items:baseline}.stagehead strong{font-size:14px}.status{font-size:12px;color:var(--muted);white-space:nowrap}.detail{font-size:12px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
+.stage details{margin-top:6px}.stage summary{cursor:pointer;font-size:12px;color:var(--blue);list-style:none}.stage summary::-webkit-details-marker{display:none}
+.stage summary::before{content:"▸ ";color:var(--muted)}.stage details[open] summary::before{content:"▾ "}
+.mini{font:11px/1.5 ui-monospace,monospace;background:#0a1120;border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:6px;color:#c8d8f4;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.bar{display:flex;align-items:center;gap:10px;margin:6px 0 2px}.bar progress{flex:1;height:8px;appearance:none;border:0;border-radius:99px;overflow:hidden;background:#0a1120}
+.bar progress::-webkit-progress-bar{background:#0a1120}.bar progress::-webkit-progress-value{background:linear-gradient(90deg,#4f8cff,#42d392)}
+.bar .pct{font-size:12px;color:var(--muted);min-width:42px;text-align:right}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:11px;padding:11px 15px;background:var(--blue);color:#07101e;font-weight:700;font-size:14px}button.secondary{background:#263550;color:var(--text)}button:disabled{opacity:.45}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1120;border:1px solid var(--line);border-radius:12px;padding:12px;color:#c8d8f4;font:12px/1.5 ui-monospace,monospace;max-height:320px;overflow:auto}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1120;border:1px solid var(--line);border-radius:12px;padding:12px;color:#c8d8f4;font:12px/1.5 ui-monospace,monospace;max-height:420px;overflow:auto}
 .note{color:var(--muted);font-size:12px}.foot{margin-top:18px;color:var(--muted);font-size:12px}
+.diff{font:12px/1.5 ui-monospace,monospace;background:#0a1120;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px;color:#c8d8f4;white-space:pre-wrap;max-height:220px;overflow:auto}
 @media(max-width:560px){.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}h1{font-size:21px}}
 </style>
 </head>
@@ -27,7 +34,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1120;border:1px so
 <main>
   <div class="top">
     <div><h1>MobileBrowserCompatKit</h1><div class="sub">Локальная проверка совместимости · ES2020+</div></div>
-    <span class="pill">MBCK 3.4.1 · Diagnostic build</span>
+    <span class="pill">MBCK 3.4.2 · Diagnostic build</span>
   </div>
 
   <section class="panel">
@@ -37,6 +44,8 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1120;border:1px so
     </div>
     <div class="actions">
       <button id="run">Запустить проверку</button>
+      <button class="secondary" id="retry" disabled>Повторить упавшие</button>
+      <button class="secondary" id="diff" disabled>Сравнить с прошлым</button>
       <button class="secondary" id="export" disabled>Экспорт JSON</button>
       <button class="secondary" id="copy" disabled>Копировать отчёт</button>
     </div>
@@ -44,7 +53,13 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1120;border:1px so
 
   <section class="panel">
     <h2>Цепочка адаптеров</h2>
+    <div class="bar"><progress id="progress" value="0" max="100"></progress><span class="pct" id="progressPct">0%</span></div>
     <div id="stages"><div class="note">Нажмите «Запустить проверку».</div></div>
+  </section>
+
+  <section class="panel" id="diffPanel" hidden>
+    <h2>Сравнение с прошлым запуском</h2>
+    <div class="diff" id="diffBody"></div>
   </section>
 
   <section class="panel">
@@ -57,7 +72,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1120;border:1px so
 "use strict";
 
 const MBCK = (() => {
-  const VERSION = "3.4.1";
+  const VERSION = "3.4.2";
   const PROFILE_RULES = [
     { id: "profile_A", min: [18,4,0], max: [18,5,99] },
     { id: "profile_B", min: [18,6,0], max: [18,7,2] },
@@ -65,18 +80,32 @@ const MBCK = (() => {
   ];
 
   const state = {
+    runId: null,
     startedAt: null,
-    completedAt: null,
+    finishedAt: null,
+    startedMs: 0,
+    wallMs: 0,
     environment: null,
     profile: null,
+    profileReason: null,
     stages: [],
-    result: "not_run"
+    result: "not_run",
+    stopReason: null,
+    webgl: null,
+    lastReport: null,
+    cache: new Map() // adapter id -> result, для retry
   };
+
+  function uid() {
+    return "run_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+  }
 
   function parseVersion(value) {
     if (!value) return null;
-    const m = String(value).match(/(\d+)\.(\d+)(?:\.(\d+))?/);
-    return m ? [Number(m[1]), Number(m[2]), Number(m[3] || 0)] : null;
+    const m = String(value).match(/(\d+)[_\.](\d+)(?:[_\.](\d+))?/);
+    if (!m) return null;
+    const parts = [Number(m[1]), Number(m[2]), m[3] != null ? Number(m[3]) : 0];
+    return { parts, patchKnown: m[3] != null };
   }
 
   function compareVersion(a, b) {
@@ -92,7 +121,8 @@ const MBCK = (() => {
 
   function parseOS(ua) {
     const match = ua.match(/OS\s(\d+[_\.]\d+(?:[_\.]\d+)?)/i);
-    return match ? parseVersion(match[1].replace(/_/g, ".")) : null;
+    if (!match) return null;
+    return parseVersion(match[1].replace(/_/g, "."));
   }
 
   function detectBrowser(ua) {
@@ -103,16 +133,23 @@ const MBCK = (() => {
     return "Unknown / embedded browser";
   }
 
+  // Возвращает { profile, reason }
+  // reason: 'matched' | 'no_match' | 'version_unverified' | 'os_unknown'
   function selectProfile(os) {
-    if (!os) return null;
-    return PROFILE_RULES.find(r =>
-      compareVersion(os, r.min) >= 0 && compareVersion(os, r.max) <= 0
-    )?.id || null;
+    if (!os) return { profile: null, reason: "os_unknown" };
+    const parts = os.parts;
+    const matches = PROFILE_RULES.filter(r =>
+      compareVersion(parts, r.min) >= 0 && compareVersion(parts, r.max) <= 0
+    );
+    if (matches.length === 0) return { profile: null, reason: "no_match" };
+    // 18.7.x (без патча) попадает в B и C одновременно — версия не определена точно.
+    if (!os.patchKnown && matches.length > 1) {
+      return { profile: null, reason: "version_unverified", candidates: matches.map(x => x.id) };
+    }
+    return { profile: matches[0].id, reason: "matched" };
   }
 
   async function detectPrivateMode() {
-    // Browsers do not expose a reliable, standards-based private-mode flag.
-    // This probe intentionally returns unknown rather than inferring it.
     return { value: "unknown", detail: "Нет надёжного публичного API для определения приватного режима." };
   }
 
@@ -125,17 +162,46 @@ const MBCK = (() => {
     };
   }
 
-  function getWebGL2() {
+  // Один контекст WebGL2 на прогон, с проверкой ошибок и освобождением.
+  function openWebGL2() {
+    if (state.webgl) return state.webgl;
     const canvas = document.createElement("canvas");
+    canvas.width = 16; canvas.height = 16;
     let gl = null;
     try { gl = canvas.getContext("webgl2"); } catch (_) {}
-    if (!gl) return { supported: false, vendor: null, renderer: null };
+    const errors = [];
+    if (!gl) {
+      state.webgl = { supported: false, gl: null, canvas, vendor: null, renderer: null, errors };
+      return state.webgl;
+    }
     const ext = gl.getExtension("WEBGL_debug_renderer_info");
-    return {
+    state.webgl = {
       supported: true,
+      gl,
+      canvas,
       vendor: ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : "masked",
-      renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : "masked"
+      renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : "masked",
+      errors
     };
+    return state.webgl;
+  }
+
+  function closeWebGL2() {
+    if (!state.webgl || !state.webgl.gl) return;
+    try {
+      const lose = state.webgl.gl.getExtension("WEBGL_lose_context");
+      if (lose) lose.loseContext();
+    } catch (_) {}
+    state.webgl = null;
+  }
+
+  function drainGLErrors(gl, errors) {
+    let code;
+    let n = 0;
+    while ((code = gl.getError()) !== gl.NO_ERROR && n < 16) {
+      errors.push("gl.error=" + code);
+      n++;
+    }
   }
 
   function getEnvironment() {
@@ -144,8 +210,9 @@ const MBCK = (() => {
     return {
       userAgent: ua,
       browser: detectBrowser(ua),
-      osVersion: os ? os.join(".") : "unknown",
-      osVersionParts: os,
+      osVersion: os ? os.parts.join(".") : "unknown",
+      osVersionParts: os ? os.parts : null,
+      osPatchKnown: os ? os.patchKnown : false,
       platform: navigator.platform || "unknown",
       language: navigator.language || "unknown",
       online: navigator.onLine,
@@ -156,8 +223,6 @@ const MBCK = (() => {
       restrictedMode: isRestrictedMode(),
       privateMode: null,
       features: {
-        webGL2: getWebGL2().supported,
-        webGL2Info: getWebGL2(),
         indexedDB: "indexedDB" in window,
         serviceWorker: "serviceWorker" in navigator,
         cryptoSubtle: !!(crypto && crypto.subtle),
@@ -168,49 +233,471 @@ const MBCK = (() => {
     };
   }
 
-  function stage(id, title, status, detail, data = {}) {
-    const item = { id, title, status, detail, data, timestamp: new Date().toISOString() };
-    state.stages.push(item);
-    renderStage(item);
-    return item;
+  // ---------- adapters ----------
+  // Общий интерфейс: { id, title, requires: string[], run(ctx) -> result }
+  // result: { status, tests: [{name,status,value,ms}], metrics, errors, durationMs, skipReason? }
+
+  function emptyResult() {
+    return { status: "SKIP", tests: [], metrics: {}, errors: [], durationMs: 0 };
+  }
+
+  function makeTest(name, fn) {
+    const t0 = performance.now();
+    try {
+      const v = fn();
+      const ok = v === true || (v && v.ok === true);
+      return {
+        name,
+        status: ok ? "PASS" : "FAIL",
+        value: v && v.value !== undefined ? v.value : v,
+        ms: Math.round((performance.now() - t0) * 100) / 100
+      };
+    } catch (e) {
+      return {
+        name,
+        status: "FAIL",
+        value: String(e && e.message || e),
+        ms: Math.round((performance.now() - t0) * 100) / 100
+      };
+    }
+  }
+
+  const AdapterA = {
+    id: "adapter_a",
+    title: "Adapter A — JavaScriptCore capability probe",
+    requires: ["probe"],
+    run() {
+      const tests = [];
+      const errors = [];
+
+      // js load: typed arrays + regexp, ~50ms
+      tests.push(makeTest("js_load_mix", () => {
+        const t0 = performance.now();
+        const arr = new Float64Array(200000);
+        for (let i = 0; i < arr.length; i++) arr[i] = i * 0.5;
+        let acc = 0;
+        for (let i = 0; i < arr.length; i++) acc += arr[i];
+        const re = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
+        let matches = 0;
+        for (let i = 0; i < 5000; i++) if (re.test("user" + i + "@example.com")) matches++;
+        const ms = performance.now() - t0;
+        const ok = acc > 0 && matches === 5000;
+        return { ok, value: { ms: Math.round(ms * 100) / 100, matches } };
+      }));
+
+      tests.push(makeTest("typed_arrays", () => {
+        const buf = new ArrayBuffer(64);
+        const u8 = new Uint8Array(buf);
+        u8[0] = 0xab; u8[63] = 0xcd;
+        const view = new DataView(buf);
+        const big = new BigInt64Array(4);
+        big[0] = 123n;
+        return { ok: u8[0] === 0xab && u8[63] === 0xcd && view.getUint8(0) === 0xab && big[0] === 123n, value: true };
+      }));
+
+      tests.push(makeTest("regexp_backtracking", () => {
+        const re = /(a+)+b/;
+        const t0 = performance.now();
+        const m = re.exec("aaaaaac");
+        const ms = performance.now() - t0;
+        return { ok: m === null && ms < 500, value: { matched: !!m, ms: Math.round(ms * 100) / 100 } };
+      }));
+
+      tests.push(makeTest("bigint_arith", () => {
+        const a = 2n ** 64n;
+        const b = a * 3n + 7n;
+        return { ok: b === (2n ** 64n) * 3n + 7n, value: String(b).length };
+      }));
+
+      const failed = tests.filter(t => t.status !== "PASS").length;
+      const status = failed === 0 ? "PASS" : failed === tests.length ? "FAIL" : "PARTIAL";
+      return { status, tests, metrics: { failed, total: tests.length }, errors, durationMs: 0 };
+    }
+  };
+
+  const AdapterB = {
+    id: "adapter_b",
+    title: "Adapter B — dynamic-linker environment probe",
+    requires: ["adapter_a"],
+    run() {
+      const tests = [];
+      const errors = [];
+
+      tests.push(makeTest("wasm_api", () => {
+        return { ok: typeof WebAssembly === "object" && typeof WebAssembly.validate === "function", value: typeof WebAssembly };
+      }));
+
+      tests.push(makeTest("wasm_module_sum_squares", () => {
+        // (module (func (export "sumsq") (param i32) (result i32)
+        //   (local i32) (local i32)
+        //   loop: local.get 1; local.get 0; i32.mul; local.get 2; i32.add; local.set 2
+        //         local.get 1; i32.const 1; i32.add; local.tee 1
+        //         local.get 0; i32.lt_s; br_if 0
+        //   local.get 2))
+        const bytes = new Uint8Array([
+          0x00,0x61,0x73,0x6d,0x01,0x00,0x00,0x00,
+          0x01,0x06,0x01,0x60,0x01,0x7f,0x01,0x7f,
+          0x03,0x02,0x01,0x00,
+          0x07,0x0a,0x01,0x06,0x73,0x75,0x6d,0x73,0x71,0x73,0x00,0x00,
+          0x0a,0x1f,0x01,0x1d,0x01,0x02,0x7f,
+          0x03,0x40,
+          0x20,0x01,0x20,0x00,0x6c,0x20,0x02,0x6a,0x21,0x02,
+          0x20,0x01,0x41,0x01,0x6a,0x22,0x01,0x20,0x00,0x48,0x0d,0x00,
+          0x0b,
+          0x20,0x02,0x0b
+        ]);
+        if (!WebAssembly.validate(bytes)) throw new Error("invalid wasm");
+        const mod = new WebAssembly.Module(bytes);
+        const inst = new WebAssembly.Instance(mod);
+        const r = inst.exports.sumsq(5);
+        return { ok: r === 55, value: r };
+      }));
+
+      tests.push(makeTest("bigint64array_shared", () => {
+        const buf = new ArrayBuffer(32);
+        const i64 = new BigInt64Array(buf);
+        i64[0] = 1n; i64[1] = 2n;
+        return { ok: i64[0] + i64[1] === 3n, value: true };
+      }));
+
+      tests.push(makeTest("shared_array_buffer", () => {
+        if (typeof SharedArrayBuffer !== "function") {
+          return { ok: false, value: "unsupported" };
+        }
+        const sab = new SharedArrayBuffer(8);
+        const i32 = new Int32Array(sab);
+        Atomics.store(i32, 0, 42);
+        return { ok: Atomics.load(i32, 0) === 42, value: true };
+      }));
+
+      const failed = tests.filter(t => t.status !== "PASS").length;
+      const status = failed === 0 ? "PASS" : failed === tests.length ? "FAIL" : "PARTIAL";
+      return { status, tests, metrics: { failed, total: tests.length }, errors, durationMs: 0 };
+    }
+  };
+
+  const AdapterC = {
+    id: "adapter_c",
+    title: "Adapter C — GPU isolation capability probe",
+    requires: ["adapter_b"],
+    run() {
+      const tests = [];
+      const errors = [];
+      const w = openWebGL2();
+      if (!w.supported) {
+        return { status: "SKIP", tests, metrics: { supported: 0 }, errors: ["webgl2_unsupported"], durationMs: 0, skipReason: "webgl2_unsupported" };
+      }
+      const gl = w.gl;
+
+      const VS = `#version 300 es
+      in vec2 a_pos;
+      void main(){ gl_Position = vec4(a_pos, 0.0, 1.0); }`;
+      const FS = `#version 300 es
+      precision mediump float;
+      out vec4 outColor;
+      void main(){ outColor = vec4(1.0, 0.5, 0.25, 1.0); }`;
+
+      let vs = null, fs = null, prog = null, vbo = null, fbo = null, tex = null;
+
+      tests.push(makeTest("compile_shaders", () => {
+        vs = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, VS); gl.compileShader(vs);
+        if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+          throw new Error("vs: " + gl.getShaderInfoLog(vs));
+        }
+        fs = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, FS); gl.compileShader(fs);
+        if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+          throw new Error("fs: " + gl.getShaderInfoLog(fs));
+        }
+        drainGLErrors(gl, errors);
+        return { ok: true, value: true };
+      }));
+
+      tests.push(makeTest("link_program", () => {
+        if (!vs || !fs) throw new Error("shaders not compiled");
+        prog = gl.createProgram();
+        gl.attachShader(prog, vs);
+        gl.attachShader(prog, fs);
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+          throw new Error("link: " + gl.getProgramInfoLog(prog));
+        }
+        drainGLErrors(gl, errors);
+        return { ok: true, value: true };
+      }));
+
+      tests.push(makeTest("buffer_data", () => {
+        if (!prog) throw new Error("no program");
+        vbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+        const loc = gl.getAttribLocation(prog, "a_pos");
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        drainGLErrors(gl, errors);
+        return { ok: true, value: true };
+      }));
+
+      tests.push(makeTest("draw_and_readback", () => {
+        if (!prog || !vbo) throw new Error("no program / buffer");
+        tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 16, 16, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+          throw new Error("fbo incomplete");
+        }
+        gl.viewport(0, 0, 16, 16);
+        gl.useProgram(prog);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        drainGLErrors(gl, errors);
+        const px = new Uint8Array(4);
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        drainGLErrors(gl, errors);
+        // ожидаем ~ (255, 127..128, 63..64, 255) для vec4(1.0, 0.5, 0.25, 1.0)
+        const near = (a, b, tol) => Math.abs(a - b) <= tol;
+        const ok = near(px[0], 255, 2) && near(px[1], 128, 4) && near(px[2], 64, 4) && near(px[3], 255, 2);
+        return { ok, value: Array.from(px) };
+      }));
+
+      // cleanup
+      try {
+        if (fbo) gl.deleteFramebuffer(fbo);
+        if (tex) gl.deleteTexture(tex);
+        if (vbo) gl.deleteBuffer(vbo);
+        if (prog) gl.deleteProgram(prog);
+        if (vs) gl.deleteShader(vs);
+        if (fs) gl.deleteShader(fs);
+        drainGLErrors(gl, errors);
+      } catch (_) {}
+
+      const failed = tests.filter(t => t.status !== "PASS").length;
+      const status = failed === 0 ? "PASS" : failed === tests.length ? "FAIL" : "PARTIAL";
+      return {
+        status,
+        tests,
+        metrics: { failed, total: tests.length, vendor: w.vendor, renderer: w.renderer },
+        errors,
+        durationMs: 0
+      };
+    }
+  };
+
+  const AdapterD = {
+    id: "adapter_d",
+    title: "Adapter D — media capability probe",
+    requires: ["adapter_a", "adapter_b"],
+    async run() {
+      const tests = [];
+      const errors = [];
+
+      tests.push(makeTest("media_devices_api", () => {
+        const ok = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+        return { ok, value: !!navigator.mediaDevices };
+      }));
+
+      tests.push(makeTest("permissions_api", () => {
+        return { ok: !!navigator.permissions?.query, value: !!navigator.permissions };
+      }));
+
+      // permission.query для camera/microphone — без запроса доступа.
+      // Возвращает 'granted' | 'denied' | 'prompt', нам важен факт ответа, не значение.
+      const perm = async (name) => {
+        if (!navigator.permissions?.query) return { ok: false, value: "no_api" };
+        try {
+          const r = await navigator.permissions.query({ name });
+          return { ok: true, value: r.state };
+        } catch (e) {
+          return { ok: false, value: String(e && e.name || e) };
+        }
+      };
+      const [cam, mic] = await Promise.all([perm("camera"), perm("microphone")]);
+      tests.push({ name: "permission_camera", status: cam.ok ? "PASS" : "SKIP", value: cam.value, ms: 0 });
+      tests.push({ name: "permission_microphone", status: mic.ok ? "PASS" : "SKIP", value: mic.value, ms: 0 });
+
+      tests.push(await (async () => {
+        const t0 = performance.now();
+        try {
+          if (!navigator.mediaDevices?.enumerateDevices) throw new Error("no_api");
+          const list = await navigator.mediaDevices.enumerateDevices();
+          const kinds = {};
+          for (const d of list) kinds[d.kind] = (kinds[d.kind] || 0) + 1;
+          return { name: "enumerate_devices", status: "PASS", value: kinds, ms: Math.round((performance.now() - t0) * 100) / 100 };
+        } catch (e) {
+          return { name: "enumerate_devices", status: "SKIP", value: String(e && e.name || e), ms: Math.round((performance.now() - t0) * 100) / 100 };
+        }
+      })());
+
+      const failed = tests.filter(t => t.status === "FAIL").length;
+      const status = failed === 0 ? "PASS" : failed === tests.length ? "FAIL" : "PARTIAL";
+      return { status, tests, metrics: { failed, total: tests.length }, errors, durationMs: 0 };
+    }
+  };
+
+  const AdapterE = {
+    id: "adapter_e",
+    title: "Adapter E — filesystem capability probe",
+    requires: ["adapter_a", "adapter_b", "adapter_d"],
+    async run() {
+      const tests = [];
+      const errors = [];
+
+      tests.push(await (async () => {
+        const t0 = performance.now();
+        try {
+          if (!("indexedDB" in window)) throw new Error("no_indexeddb");
+          const dbName = "mbck_probe_" + Date.now();
+          const open = indexedDB.open(dbName, 1);
+          const db = await new Promise((res, rej) => {
+            open.onupgradeneeded = () => {
+              open.result.createObjectStore("kv");
+            };
+            open.onsuccess = () => res(open.result);
+            open.onerror = () => rej(open.error || new Error("open_failed"));
+            setTimeout(() => rej(new Error("open_timeout")), 3000);
+          });
+          const tx = (mode) => db.transaction("kv", mode).objectStore("kv");
+          await new Promise((res, rej) => {
+            const r = tx("readwrite").put({ v: 42 }, "k");
+            r.onsuccess = () => res();
+            r.onerror = () => rej(r.error);
+          });
+          const got = await new Promise((res, rej) => {
+            const r = tx("readonly").get("k");
+            r.onsuccess = () => res(r.result);
+            r.onerror = () => rej(r.error);
+          });
+          await new Promise((res, rej) => {
+            const r = tx("readwrite").delete("k");
+            r.onsuccess = () => res();
+            r.onerror = () => rej(r.error);
+          });
+          db.close();
+          indexedDB.deleteDatabase(dbName);
+          return {
+            name: "indexeddb_roundtrip",
+            status: got && got.v === 42 ? "PASS" : "FAIL",
+            value: got,
+            ms: Math.round((performance.now() - t0) * 100) / 100
+          };
+        } catch (e) {
+          return { name: "indexeddb_roundtrip", status: "FAIL", value: String(e && e.message || e), ms: Math.round((performance.now() - t0) * 100) / 100 };
+        }
+      })());
+
+      tests.push(await (async () => {
+        const t0 = performance.now();
+        try {
+          if (!window.crypto?.subtle) throw new Error("no_subtle");
+          const data = new TextEncoder().encode("mbck");
+          const hash = await crypto.subtle.digest("SHA-256", data);
+          const ok = hash.byteLength === 32;
+          return { name: "crypto_subtle_sha256", status: ok ? "PASS" : "FAIL", value: hash.byteLength, ms: Math.round((performance.now() - t0) * 100) / 100 };
+        } catch (e) {
+          return { name: "crypto_subtle_sha256", status: "FAIL", value: String(e && e.message || e), ms: Math.round((performance.now() - t0) * 100) / 100 };
+        }
+      })());
+
+      tests.push(makeTest("service_worker_api", () => {
+        return { ok: "serviceWorker" in navigator, value: "serviceWorker" in navigator };
+      }));
+
+      const failed = tests.filter(t => t.status === "FAIL").length;
+      const status = failed === 0 ? "PASS" : failed === tests.length ? "FAIL" : "PARTIAL";
+      return { status, tests, metrics: { failed, total: tests.length }, errors, durationMs: 0 };
+    }
+  };
+
+  const ADAPTERS = [AdapterA, AdapterB, AdapterC, AdapterD, AdapterE];
+  const ADAPTER_MAP = new Map(ADAPTERS.map(a => [a.id, a]));
+
+  // ---------- ui ----------
+
+  function setProgress(done, total) {
+    const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+    document.getElementById("progress").value = pct;
+    document.getElementById("progressPct").textContent = pct + "%";
+  }
+
+  function statusClass(status) {
+    switch (status) {
+      case "PASS": return "ok";
+      case "PARTIAL": return "warn";
+      case "FAIL": return "bad";
+      case "SKIP": return "skip";
+      default: return "skip";
+    }
   }
 
   function renderStage(item) {
     const host = document.getElementById("stages");
     if (host.querySelector(".note")) host.innerHTML = "";
+
     const row = document.createElement("div");
     row.className = "stage";
+    row.dataset.adapter = item.id;
+
     const dot = document.createElement("span");
-    dot.className = "dot " + (item.status === "pass" ? "ok" : item.status === "warning" ? "warn" : "bad");
+    dot.className = "dot " + statusClass(item.status);
+
     const body = document.createElement("div");
     body.className = "stagebody";
+
     const head = document.createElement("div");
     head.className = "stagehead";
     const title = document.createElement("strong");
     title.textContent = item.title;
     const status = document.createElement("span");
     status.className = "status";
-    status.textContent = item.status.toUpperCase();
+    status.textContent = item.status + (item.durationMs ? " · " + item.durationMs + " ms" : "");
+    head.append(title, status);
+
     const detail = document.createElement("div");
     detail.className = "detail";
-    detail.textContent = item.detail;
-    head.append(title, status);
+    detail.textContent = item.detail || "";
+
     body.append(head, detail);
+
+    if (item.tests?.length || item.errors?.length || item.skipReason) {
+      const det = document.createElement("details");
+      const sum = document.createElement("summary");
+      sum.textContent = "детали";
+      const pre = document.createElement("div");
+      pre.className = "mini";
+      pre.textContent = JSON.stringify({
+        status: item.status,
+        skipReason: item.skipReason || null,
+        metrics: item.metrics || {},
+        tests: item.tests || [],
+        errors: item.errors || []
+      }, null, 2);
+      det.append(sum, pre);
+      body.append(det);
+    }
+
     row.append(dot, body);
     host.append(row);
+  }
+
+  function clearStages() {
+    document.getElementById("stages").innerHTML = "";
   }
 
   function renderEnvironment(env) {
     const values = [
       ["Browser", env.browser],
-      ["iOS version", env.osVersion],
+      ["iOS version", env.osVersion + (env.osPatchKnown ? " (patch known)" : " (patch unknown)")],
       ["Platform", env.platform],
       ["Language", env.language],
       ["Network", env.online ? "online" : "offline"],
       ["Secure context", env.secureContext ? "yes" : "no"],
       ["Restricted context", env.restrictedMode.value],
       ["Private mode", env.privateMode.value],
-      ["WebGL2", env.features.webGL2 ? "available" : "unavailable"],
       ["Touch points", String(env.touchPoints)]
     ];
     const host = document.getElementById("environment");
@@ -219,129 +706,283 @@ const MBCK = (() => {
       const box = document.createElement("div");
       box.className = "metric";
       const l = document.createElement("div");
-      l.className = "label";
-      l.textContent = label;
+      l.className = "label"; l.textContent = label;
       const v = document.createElement("div");
-      v.className = "value";
-      v.textContent = value;
+      v.className = "value"; v.textContent = value;
       box.append(l, v);
       host.append(box);
     }
   }
 
-  async function run() {
+  // ---------- runner ----------
+
+  function shouldSkip(adapter, resultsById) {
+    for (const req of adapter.requires) {
+      if (req === "probe") {
+        if (!state.profile) return "profile_unverified";
+        continue;
+      }
+      const r = resultsById.get(req);
+      if (!r) return "dependency_missing:" + req;
+      if (r.status === "FAIL") return "dependency_failed:" + req;
+      if (r.status === "SKIP") return "dependency_skipped:" + req;
+    }
+    return null;
+  }
+
+  async function runAdapter(adapter, ctx) {
+    const t0 = performance.now();
+    try {
+      const res = await adapter.run(ctx);
+      res.durationMs = Math.round((performance.now() - t0) * 100) / 100;
+      return res;
+    } catch (e) {
+      return {
+        status: "FAIL",
+        tests: [],
+        metrics: {},
+        errors: [String(e && e.message || e)],
+        durationMs: Math.round((performance.now() - t0) * 100) / 100
+      };
+    }
+  }
+
+  async function runChain(options = {}) {
+    const retryOnlyFailed = options.retryOnlyFailed === true;
     const runButton = document.getElementById("run");
+    const retryButton = document.getElementById("retry");
+
     runButton.disabled = true;
-    state.startedAt = new Date().toISOString();
-    state.completedAt = null;
-    state.stages = [];
-    state.result = "running";
-    document.getElementById("stages").innerHTML = "";
-    document.getElementById("report").textContent = "Выполняется…";
+    retryButton.disabled = true;
     document.getElementById("export").disabled = true;
     document.getElementById("copy").disabled = true;
+    document.getElementById("diff").disabled = true;
+
+    if (!retryOnlyFailed) {
+      clearStages();
+      state.stages = [];
+      state.cache.clear();
+      state.runId = uid();
+      state.startedAt = new Date().toISOString();
+      state.startedMs = performance.now();
+      state.stopReason = null;
+      state.result = "running";
+      document.getElementById("report").textContent = "Выполняется…";
+      document.getElementById("progress").value = 0;
+      document.getElementById("progressPct").textContent = "0%";
+      closeWebGL2();
+    } else {
+      state.startedAt = new Date().toISOString();
+      state.startedMs = performance.now();
+      state.stopReason = null;
+      // сохраняем успешные результаты, сбрасываем упавшие
+      for (const [k, v] of [...state.cache.entries()]) {
+        if (v.status !== "PASS" && v.status !== "PARTIAL") state.cache.delete(k);
+      }
+    }
 
     try {
-      stage("entry", "Entry — точка входа", "pass", "JavaScript запущен; navigator и DOM доступны.");
+      // entry
+      const entry = {
+        id: "entry",
+        title: "Entry — точка входа",
+        status: "PASS",
+        detail: "JavaScript запущен; navigator и DOM доступны.",
+        tests: [],
+        metrics: {},
+        errors: [],
+        durationMs: 0
+      };
+      if (!retryOnlyFailed) {
+        state.stages.push(entry);
+        renderStage(entry);
+      }
+
+      // probe
       const env = getEnvironment();
       env.privateMode = await detectPrivateMode();
       state.environment = env;
       renderEnvironment(env);
 
-      const os = env.osVersionParts;
-      const profile = selectProfile(os);
-      state.profile = profile;
-      if (profile) {
-        stage("probe", "Probe — выбор профиля", "pass", "Подходящий профиль найден: " + profile, { profile });
+      const sel = selectProfile(env.osVersionParts ? { parts: env.osVersionParts, patchKnown: env.osPatchKnown } : null);
+      state.profile = sel.profile;
+      state.profileReason = sel.reason;
+
+      let probeStatus;
+      let probeDetail;
+      if (sel.profile) {
+        probeStatus = "PASS";
+        probeDetail = "Профиль: " + sel.profile;
+      } else if (sel.reason === "version_unverified") {
+        probeStatus = "UNVERIFIED";
+        probeDetail = "iOS " + env.osVersion + ": патч не указан в UA, кандидаты " + sel.candidates.join(", ") + ". Цепочка остановлена.";
+        state.stopReason = "version_unverified";
+      } else if (sel.reason === "no_match") {
+        probeStatus = "FAIL";
+        probeDetail = "Версия ОС не попадает в диапазоны A/B/C.";
+        state.stopReason = "no_profile";
       } else {
-        stage("probe", "Probe — выбор профиля", "warning",
-          "Версия ОС не попадает в диапазоны профилей A/B/C либо не распознана. Низкоуровневые проверки не выполняются.",
-          { supportedProfiles: PROFILE_RULES.map(x => x.id) });
+        probeStatus = "FAIL";
+        probeDetail = "Версия ОС не распознана.";
+        state.stopReason = "os_unknown";
       }
 
-      // Adapters below are capability checks only. They do not exploit engine,
-      // process, GPU, media-daemon, kernel or memory-management vulnerabilities.
-      const checks = [
-        {
-          id: "adapter_a",
-          title: "Adapter A — JavaScriptCore capability probe",
-          run: () => {
-            const ok = typeof ArrayBuffer === "function"
-              && typeof BigInt64Array === "function"
-              && typeof WebAssembly === "object";
-            return { ok, detail: ok
-              ? "ArrayBuffer, BigInt64Array и WebAssembly доступны. Произвольный доступ к памяти не проверяется."
-              : "Одна или несколько базовых JS-возможностей недоступны." };
-          }
-        },
-        {
-          id: "adapter_b",
-          title: "Adapter B — dynamic-linker environment probe",
-          run: () => {
-            const ok = typeof WebAssembly === "object" && typeof WebAssembly.validate === "function";
-            return { ok, detail: ok
-              ? "WebAssembly API доступен. Mach-O, dyld и PAC не читаются и не модифицируются."
-              : "WebAssembly API недоступен." };
-          }
-        },
-        {
-          id: "adapter_c",
-          title: "Adapter C — GPU isolation capability probe",
-          run: () => {
-            const info = getWebGL2();
-            return { ok: info.supported, detail: info.supported
-              ? "WebGL2 context создан; доступ к памяти GPU-процесса не выполняется."
-              : "WebGL2 context недоступен." , info };
-          }
-        },
-        {
-          id: "adapter_d",
-          title: "Adapter D — media capability probe",
-          run: () => {
-            const ok = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-            return { ok, detail: ok
-              ? "MediaDevices API объявлен браузером; системный media daemon не затрагивается."
-              : "MediaDevices API недоступен в текущем контексте." };
-          }
-        },
-        {
-          id: "adapter_e",
-          title: "Adapter E — filesystem capability probe",
-          run: () => {
-            const ok = "indexedDB" in window && !!window.crypto?.subtle;
-            return { ok, detail: ok
-              ? "IndexedDB и Web Crypto доступны; vnode, kernel memory и системные файлы не затрагиваются."
-              : "Одна или несколько браузерных возможностей недоступны." };
-          }
-        }
-      ];
-
-      let chainContinues = !!profile;
-      for (const adapter of checks) {
-        if (!chainContinues) {
-          stage(adapter.id, adapter.title, "warning", "Пропущен: профиль не прошёл Probe.");
-          continue;
-        }
-        const result = adapter.run();
-        stage(adapter.id, adapter.title, result.ok ? "pass" : "warning", result.detail, result.info || {});
-        if (!result.ok) chainContinues = false;
+      const probe = {
+        id: "probe",
+        title: "Probe — выбор профиля",
+        status: probeStatus,
+        detail: probeDetail,
+        tests: [],
+        metrics: { reason: sel.reason },
+        errors: [],
+        durationMs: 0
+      };
+      if (!retryOnlyFailed) {
+        state.stages.push(probe);
+        renderStage(probe);
+        setProgress(2, ADAPTERS.length + 4);
       }
 
-      stage("runtime", "Runtime — диагностический runtime", "pass",
-        "Сформирован локальный снимок возможностей браузера. Чтение памяти процессов и пользовательских секретов отсутствует.");
-      stage("report", "Report — формирование отчёта", "pass", "JSON-отчёт готов; передача по сети не выполняется.");
+      // adapters
+      const resultsById = new Map(state.cache);
+      // inject probe pseudo-result
+      resultsById.set("probe", { status: sel.profile ? "PASS" : (sel.reason === "version_unverified" ? "UNVERIFIED" : "FAIL") });
 
-      state.result = profile && chainContinues ? "compatible" : "partial_or_unsupported";
+      const totalSteps = ADAPTERS.length + 4;
+      let step = retryOnlyFailed ? 0 : 2;
+
+      for (const adapter of ADAPTERS) {
+        // в retry — пропускаем уже закэшированные PASS/PARTIAL
+        if (retryOnlyFailed && state.cache.has(adapter.id)) {
+          const cached = state.cache.get(adapter.id);
+          if (cached.status === "PASS" || cached.status === "PARTIAL") {
+            resultsById.set(adapter.id, cached);
+            step++;
+            setProgress(step, totalSteps);
+            continue;
+          }
+        }
+
+        const skipReason = shouldSkip(adapter, resultsById);
+        let result;
+        if (skipReason) {
+          result = {
+            ...emptyResult(),
+            status: "SKIP",
+            skipReason,
+            tests: [],
+            metrics: {},
+            errors: []
+          };
+        } else {
+          result = await runAdapter(adapter, { env, profile: state.profile, webgl: state.webgl });
+        }
+
+        const item = {
+          id: adapter.id,
+          title: adapter.title,
+          status: result.status,
+          detail: describeResult(result),
+          tests: result.tests,
+          metrics: result.metrics,
+          errors: result.errors,
+          skipReason: result.skipReason,
+          durationMs: result.durationMs
+        };
+        state.stages.push(item);
+        renderStage(item);
+        state.cache.set(adapter.id, result);
+        resultsById.set(adapter.id, result);
+
+        step++;
+        setProgress(step, totalSteps);
+      }
+
+      // runtime
+      state.finishedAt = new Date().toISOString();
+      state.wallMs = Math.round((performance.now() - state.startedMs) * 100) / 100;
+
+      const runtimeItem = {
+        id: "runtime",
+        title: "Runtime — диагностический runtime",
+        status: "PASS",
+        detail: "Снимок возможностей собран. wall=" + state.wallMs + " ms.",
+        tests: [],
+        metrics: { wallMs: state.wallMs },
+        errors: [],
+        durationMs: state.wallMs
+      };
+      if (!retryOnlyFailed) {
+        state.stages.push(runtimeItem);
+        renderStage(runtimeItem);
+      }
+      step++; setProgress(step, totalSteps);
+
+      // report
+      const reportItem = {
+        id: "report",
+        title: "Report — формирование отчёта",
+        status: "PASS",
+        detail: "JSON-отчёт готов; передача по сети не выполняется.",
+        tests: [],
+        metrics: {},
+        errors: [],
+        durationMs: 0
+      };
+      if (!retryOnlyFailed) {
+        state.stages.push(reportItem);
+        renderStage(reportItem);
+      }
+      step++; setProgress(step, totalSteps);
+
+      // итоговый статус
+      state.result = computeResult(resultsById, state.profile, state.stopReason);
     } catch (error) {
       state.result = "error";
-      stage("error", "Ошибка проверки", "fail", String(error && error.message || error));
+      state.stopReason = "exception";
+      const item = {
+        id: "error",
+        title: "Ошибка проверки",
+        status: "FAIL",
+        detail: String(error && error.message || error),
+        tests: [],
+        metrics: {},
+        errors: [String(error && error.stack || error)],
+        durationMs: 0
+      };
+      state.stages.push(item);
+      renderStage(item);
     } finally {
-      state.completedAt = new Date().toISOString();
+      closeWebGL2();
+      state.finishedAt = state.finishedAt || new Date().toISOString();
       document.getElementById("report").textContent = JSON.stringify(buildReport(), null, 2);
       document.getElementById("export").disabled = false;
       document.getElementById("copy").disabled = false;
+      document.getElementById("diff").disabled = !state.lastReport;
       runButton.disabled = false;
+      retryButton.disabled = false;
+      state.lastReport = buildReport();
     }
+  }
+
+  function describeResult(r) {
+    switch (r.status) {
+      case "PASS": return "Все проверки прошли.";
+      case "PARTIAL": return "Часть проверок прошла, часть — нет.";
+      case "FAIL": return r.errors?.length ? r.errors[0] : "Проверки не прошли.";
+      case "SKIP": return "Пропущено: " + (r.skipReason || "причина не указана") + ".";
+      default: return "";
+    }
+  }
+
+  function computeResult(resultsById, profile, stopReason) {
+    if (stopReason === "version_unverified") return "unverified";
+    if (!profile) return "unsupported";
+    const statuses = ADAPTERS.map(a => resultsById.get(a.id)?.status || "SKIP");
+    if (statuses.every(s => s === "PASS")) return "browser_api_compatible";
+    if (statuses.some(s => s === "FAIL") && !statuses.some(s => s === "PASS" || s === "PARTIAL")) return "unsupported";
+    if (statuses.some(s => s === "PASS" || s === "PARTIAL")) return "partially_compatible";
+    return "unsupported";
   }
 
   function buildReport() {
@@ -349,10 +990,14 @@ const MBCK = (() => {
       framework: "MobileBrowserCompatKit",
       version: VERSION,
       mode: "local_diagnostic_only",
+      runId: state.runId,
       result: state.result,
+      stopReason: state.stopReason,
       startedAt: state.startedAt,
-      completedAt: state.completedAt,
+      finishedAt: state.finishedAt,
+      wallMs: state.wallMs,
       profile: state.profile,
+      profileReason: state.profileReason,
       environment: state.environment,
       stages: state.stages,
       limitations: [
@@ -388,10 +1033,42 @@ const MBCK = (() => {
     return ok;
   }
 
-  return { run, exportReport, copyReport, getEnvironment };
+  function diffWithLast() {
+    if (!state.lastReport) return;
+    const prev = state.lastReport;
+    const cur = buildReport();
+    const panel = document.getElementById("diffPanel");
+    const body = document.getElementById("diffBody");
+    const lines = [];
+
+    lines.push("prev run " + prev.runId + " @ " + prev.startedAt);
+    lines.push("cur  run " + cur.runId + " @ " + cur.startedAt);
+    lines.push("");
+    lines.push("result: " + prev.result + " -> " + cur.result + (prev.result === cur.result ? "  (same)" : ""));
+    lines.push("profile: " + prev.profile + " -> " + cur.profile);
+    lines.push("wallMs: " + prev.wallMs + " -> " + cur.wallMs);
+    lines.push("");
+
+    const prevStages = new Map((prev.stages || []).map(s => [s.id, s]));
+    for (const s of cur.stages || []) {
+      const p = prevStages.get(s.id);
+      if (!p) { lines.push("+ " + s.id + "  " + s.status); continue; }
+      if (p.status !== s.status) lines.push("~ " + s.id + "  " + p.status + " -> " + s.status);
+    }
+    for (const [id, p] of prevStages) {
+      if (!(cur.stages || []).some(s => s.id === id)) lines.push("- " + id + "  " + p.status);
+    }
+
+    body.textContent = lines.join("\n");
+    panel.hidden = false;
+  }
+
+  return { runChain, exportReport, copyReport, diffWithLast, getEnvironment };
 })();
 
-document.getElementById("run").addEventListener("click", MBCK.run);
+document.getElementById("run").addEventListener("click", () => MBCK.runChain({ retryOnlyFailed: false }));
+document.getElementById("retry").addEventListener("click", () => MBCK.runChain({ retryOnlyFailed: true }));
+document.getElementById("diff").addEventListener("click", () => MBCK.diffWithLast());
 document.getElementById("export").addEventListener("click", MBCK.exportReport);
 document.getElementById("copy").addEventListener("click", async () => {
   const button = document.getElementById("copy");
