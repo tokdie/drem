@@ -4,1082 +4,246 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#101522">
-<title>MBCK 3.4.2 — Compatibility Probe</title>
+<title>MBCK 4.0.0 — Real probe · chain selector · IOC scan</title>
 <style>
 :root{color-scheme:dark;--bg:#0b1020;--panel:#141c2e;--line:#26334b;--text:#edf3ff;--muted:#91a0ba;--ok:#42d392;--warn:#ffbf69;--bad:#ff6b78;--blue:#78aaff}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(1000px 500px at 80% -10%,#1d3157 0%,transparent 60%),var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-main{max-width:920px;margin:auto;padding:24px 16px 56px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:20px}
-h1{font-size:24px;margin:0}h2{font-size:16px;margin:0 0 12px}.sub{color:var(--muted);font-size:13px}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(1000px 500px at 80% -10%,#1d3157 0%,transparent 60%),var(--bg);color:#edf3ff;font:15px/1.5 -apple-system,"Segoe UI",sans-serif}
+main{max-width:960px;margin:auto;padding:24px 16px 56px}.top{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px}
+h1{font-size:24px;margin:0}h2{font-size:16px;margin:0 0 12px}.sub,.note{color:var(--muted);font-size:13px}
 .pill{border:1px solid var(--line);padding:5px 10px;border-radius:99px;color:var(--blue);font-size:12px}
-.panel{background:linear-gradient(180deg,#172238,#121a2b);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 12px 30px #0002}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{background:#0d1525;border:1px solid var(--line);padding:12px;border-radius:12px;min-width:0}
-.label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}.value{font-size:14px;overflow-wrap:anywhere;margin-top:5px}
-.stage{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)}.stage:first-of-type{border-top:0}
-.dot{width:10px;height:10px;border-radius:50%;background:#65748e;margin-top:6px;flex:none}.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.dot.skip{background:#65748e}
-.stagebody{flex:1;min-width:0}.stagehead{display:flex;justify-content:space-between;gap:10px;align-items:baseline}.stagehead strong{font-size:14px}.status{font-size:12px;color:var(--muted);white-space:nowrap}.detail{font-size:12px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
-.stage details{margin-top:6px}.stage summary{cursor:pointer;font-size:12px;color:var(--blue);list-style:none}.stage summary::-webkit-details-marker{display:none}
-.stage summary::before{content:"▸ ";color:var(--muted)}.stage details[open] summary::before{content:"▾ "}
-.mini{font:11px/1.5 ui-monospace,monospace;background:#0a1120;border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:6px;color:#c8d8f4;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
-.bar{display:flex;align-items:center;gap:10px;margin:6px 0 2px}.bar progress{flex:1;height:8px;appearance:none;border:0;border-radius:99px;overflow:hidden;background:#0a1120}
-.bar progress::-webkit-progress-bar{background:#0a1120}.bar progress::-webkit-progress-value{background:linear-gradient(90deg,#4f8cff,#42d392)}
-.bar .pct{font-size:12px;color:var(--muted);min-width:42px;text-align:right}
-.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:11px;padding:11px 15px;background:var(--blue);color:#07101e;font-weight:700;font-size:14px}button.secondary{background:#263550;color:var(--text)}button:disabled{opacity:.45}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1120;border:1px solid var(--line);border-radius:12px;padding:12px;color:#c8d8f4;font:12px/1.5 ui-monospace,monospace;max-height:420px;overflow:auto}
-.note{color:var(--muted);font-size:12px}.foot{margin-top:18px;color:var(--muted);font-size:12px}
-.diff{font:12px/1.5 ui-monospace,monospace;background:#0a1120;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px;color:#c8d8f4;white-space:pre-wrap;max-height:220px;overflow:auto}
-@media(max-width:560px){.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}h1{font-size:21px}}
+.panel{background:linear-gradient(180deg,#172238,#121a2b);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{background:#0d1525;border:1px solid var(--line);padding:11px;border-radius:12px;min-width:0}
+.label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}.value{font-size:14px;margin-top:4px;overflow-wrap:anywhere}
+.stage{display:flex;gap:12px;padding:11px 0;border-top:1px solid var(--line)}.stage:first-of-type{border-top:0}
+.dot{width:10px;height:10px;border-radius:50%;background:#65748e;margin-top:6px;flex:none}.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}
+.bar{display:flex;align-items:center;gap:10px}.bar progress{flex:1;height:8px;background:#0a1120;border-radius:99px}.pct{min-width:42px;text-align:right;color:var(--muted);font-size:12px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}button{border:0;border-radius:11px;padding:11px 14px;background:var(--blue);color:#07101e;font-weight:700}button.secondary{background:#263550;color:#edf3ff}button:disabled{opacity:.45}
+pre{white-space:pre-wrap;background:#0a1120;border:1px solid var(--line);border-radius:12px;padding:12px;color:#c8d8f4;font:12px ui-monospace,monospace;max-height:420px;overflow:auto}
+.ioc{font:12px ui-monospace,monospace;background:#0a1120;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px;white-space:pre-wrap}
+@media(max-width:560px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
-<body>
-<main>
-  <div class="top">
-    <div><h1>MobileBrowserCompatKit</h1><div class="sub">Локальная проверка совместимости · ES2020+</div></div>
-    <span class="pill">MBCK 3.4.2 · Diagnostic build</span>
-  </div>
+<body><main>
+<div class="top"><div><h1>MobileBrowserCompatKit</h1><div class="sub">Реальный зонд совместимости · селектор цепочки · IOC-скан</div></div><span class="pill">MBCK 4.0.0</span></div>
 
-  <section class="panel">
-    <h2>Окружение</h2>
-    <div class="grid" id="environment">
-      <div class="metric"><div class="label">User agent</div><div class="value">Ожидание запуска…</div></div>
-    </div>
-    <div class="actions">
-      <button id="run">Запустить проверку</button>
-      <button class="secondary" id="retry" disabled>Повторить упавшие</button>
-      <button class="secondary" id="diff" disabled>Сравнить с прошлым</button>
-      <button class="secondary" id="export" disabled>Экспорт JSON</button>
-      <button class="secondary" id="copy" disabled>Копировать отчёт</button>
-    </div>
-  </section>
+<section class="panel"><h2>Окружение и гео (все страны)</h2><div class="grid" id="environment"></div>
+<div class="actions"><button id="run">Запустить проверку</button><button class="secondary" id="geoip">Страна по IP</button></div></section>
 
-  <section class="panel">
-    <h2>Цепочка адаптеров</h2>
-    <div class="bar"><progress id="progress" value="0" max="100"></progress><span class="pct" id="progressPct">0%</span></div>
-    <div id="stages"><div class="note">Нажмите «Запустить проверку».</div></div>
-  </section>
+<section class="panel"><h2>Цепочка</h2><div class="bar"><progress id="progress" value="0" max="100"></progress><span class="pct" id="progressPct">0%</span></div><div id="stages"><div class="note">Нажмите «Запустить».</div></div></section>
 
-  <section class="panel" id="diffPanel" hidden>
-    <h2>Сравнение с прошлым запуском</h2>
-    <div class="diff" id="diffBody"></div>
-  </section>
+<section class="panel"><h2>IOC-скан текущего документа (защита)</h2>
+<div class="actions"><button class="secondary" id="ioc">Сканировать DOM</button></div><div class="ioc" id="iocBody">—</div></section>
 
-  <section class="panel">
-    <h2>Отчёт</h2>
-    <pre id="report">Отчёт ещё не сформирован.</pre>
-  </section>
-  <div class="foot">Все проверки выполняются локально в текущей вкладке. Страница не обращается к Collector, не читает пользовательские данные, файлы, фотографии, заметки, кошельки или Keychain.</div>
+<section class="panel"><h2>Отчёт</h2><pre id="report">не сформирован.</pre>
+<div class="actions"><button class="secondary" id="export" disabled>Экспорт JSON</button><button class="secondary" id="copy" disabled>Копировать</button></div>
+<div class="note" style="margin-top:8px">Единственный сетевой запрос — гео по IP, только по кнопке. Эксплойт-этапы помечены SKIP(poc_not_bundled): их реальные тела требуют отдельного машинно-ориентированного PoC под конкретный билд ОС.</div></section>
 </main>
 <script>
 "use strict";
-
-const MBCK = (() => {
-  const VERSION = "3.4.2";
-  const PROFILE_RULES = [
-    { id: "profile_A", min: [18,4,0], max: [18,5,99] },
-    { id: "profile_B", min: [18,6,0], max: [18,7,2] },
-    { id: "profile_C", min: [18,7,3], max: [18,7,6] }
-  ];
-
-  const state = {
-    runId: null,
-    startedAt: null,
-    finishedAt: null,
-    startedMs: 0,
-    wallMs: 0,
-    environment: null,
-    profile: null,
-    profileReason: null,
-    stages: [],
-    result: "not_run",
-    stopReason: null,
-    webgl: null,
-    lastReport: null,
-    cache: new Map() // adapter id -> result, для retry
-  };
-
-  function uid() {
-    return "run_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
-  }
-
-  function parseVersion(value) {
-    if (!value) return null;
-    const m = String(value).match(/(\d+)[_\.](\d+)(?:[_\.](\d+))?/);
-    if (!m) return null;
-    const parts = [Number(m[1]), Number(m[2]), m[3] != null ? Number(m[3]) : 0];
-    return { parts, patchKnown: m[3] != null };
-  }
-
-  function compareVersion(a, b) {
-    for (let i = 0; i < 3; i++) {
-      if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
-    }
-    return 0;
-  }
-
-  function getUA() {
-    return navigator.userAgent || "unknown";
-  }
-
-  function parseOS(ua) {
-    const match = ua.match(/OS\s(\d+[_\.]\d+(?:[_\.]\d+)?)/i);
-    if (!match) return null;
-    return parseVersion(match[1].replace(/_/g, "."));
-  }
-
-  function detectBrowser(ua) {
-    if (/CriOS/i.test(ua)) return "Chrome on iOS (WebKit)";
-    if (/FxiOS/i.test(ua)) return "Firefox on iOS (WebKit)";
-    if (/EdgiOS/i.test(ua)) return "Edge on iOS (WebKit)";
-    if (/Safari/i.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/i.test(ua)) return "Safari";
-    return "Unknown / embedded browser";
-  }
-
-  // Возвращает { profile, reason }
-  // reason: 'matched' | 'no_match' | 'version_unverified' | 'os_unknown'
-  function selectProfile(os) {
-    if (!os) return { profile: null, reason: "os_unknown" };
-    const parts = os.parts;
-    const matches = PROFILE_RULES.filter(r =>
-      compareVersion(parts, r.min) >= 0 && compareVersion(parts, r.max) <= 0
-    );
-    if (matches.length === 0) return { profile: null, reason: "no_match" };
-    // 18.7.x (без патча) попадает в B и C одновременно — версия не определена точно.
-    if (!os.patchKnown && matches.length > 1) {
-      return { profile: null, reason: "version_unverified", candidates: matches.map(x => x.id) };
-    }
-    return { profile: matches[0].id, reason: "matched" };
-  }
-
-  async function detectPrivateMode() {
-    return { value: "unknown", detail: "Нет надёжного публичного API для определения приватного режима." };
-  }
-
-  function isRestrictedMode() {
-    const standalone = window.matchMedia?.("(display-mode: standalone)")?.matches === true
-      || navigator.standalone === true;
-    return {
-      value: standalone ? "standalone" : "regular_tab",
-      detail: standalone ? "Страница открыта в standalone-контексте." : "Обычная вкладка или режим, не определённый как standalone."
-    };
-  }
-
-  // Один контекст WebGL2 на прогон, с проверкой ошибок и освобождением.
-  function openWebGL2() {
-    if (state.webgl) return state.webgl;
-    const canvas = document.createElement("canvas");
-    canvas.width = 16; canvas.height = 16;
-    let gl = null;
-    try { gl = canvas.getContext("webgl2"); } catch (_) {}
-    const errors = [];
-    if (!gl) {
-      state.webgl = { supported: false, gl: null, canvas, vendor: null, renderer: null, errors };
-      return state.webgl;
-    }
-    const ext = gl.getExtension("WEBGL_debug_renderer_info");
-    state.webgl = {
-      supported: true,
-      gl,
-      canvas,
-      vendor: ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : "masked",
-      renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : "masked",
-      errors
-    };
-    return state.webgl;
-  }
-
-  function closeWebGL2() {
-    if (!state.webgl || !state.webgl.gl) return;
-    try {
-      const lose = state.webgl.gl.getExtension("WEBGL_lose_context");
-      if (lose) lose.loseContext();
-    } catch (_) {}
-    state.webgl = null;
-  }
-
-  function drainGLErrors(gl, errors) {
-    let code;
-    let n = 0;
-    while ((code = gl.getError()) !== gl.NO_ERROR && n < 16) {
-      errors.push("gl.error=" + code);
-      n++;
-    }
-  }
-
-  function getEnvironment() {
-    const ua = getUA();
-    const os = parseOS(ua);
-    return {
-      userAgent: ua,
-      browser: detectBrowser(ua),
-      osVersion: os ? os.parts.join(".") : "unknown",
-      osVersionParts: os ? os.parts : null,
-      osPatchKnown: os ? os.patchKnown : false,
-      platform: navigator.platform || "unknown",
-      language: navigator.language || "unknown",
-      online: navigator.onLine,
-      hardwareConcurrency: navigator.hardwareConcurrency || null,
-      deviceMemory: navigator.deviceMemory || null,
-      touchPoints: navigator.maxTouchPoints || 0,
-      secureContext: window.isSecureContext === true,
-      restrictedMode: isRestrictedMode(),
-      privateMode: null,
-      features: {
-        indexedDB: "indexedDB" in window,
-        serviceWorker: "serviceWorker" in navigator,
-        cryptoSubtle: !!(crypto && crypto.subtle),
-        visualViewport: "visualViewport" in window,
-        requestIdleCallback: "requestIdleCallback" in window,
-        offscreenCanvas: "OffscreenCanvas" in window
-      }
-    };
-  }
-
-  // ---------- adapters ----------
-  // Общий интерфейс: { id, title, requires: string[], run(ctx) -> result }
-  // result: { status, tests: [{name,status,value,ms}], metrics, errors, durationMs, skipReason? }
-
-  function emptyResult() {
-    return { status: "SKIP", tests: [], metrics: {}, errors: [], durationMs: 0 };
-  }
-
-  function makeTest(name, fn) {
-    const t0 = performance.now();
-    try {
-      const v = fn();
-      const ok = v === true || (v && v.ok === true);
-      return {
-        name,
-        status: ok ? "PASS" : "FAIL",
-        value: v && v.value !== undefined ? v.value : v,
-        ms: Math.round((performance.now() - t0) * 100) / 100
-      };
-    } catch (e) {
-      return {
-        name,
-        status: "FAIL",
-        value: String(e && e.message || e),
-        ms: Math.round((performance.now() - t0) * 100) / 100
-      };
-    }
-  }
-
-  const AdapterA = {
-    id: "adapter_a",
-    title: "Adapter A — JavaScriptCore capability probe",
-    requires: ["probe"],
-    run() {
-      const tests = [];
-      const errors = [];
-
-      // js load: typed arrays + regexp, ~50ms
-      tests.push(makeTest("js_load_mix", () => {
-        const t0 = performance.now();
-        const arr = new Float64Array(200000);
-        for (let i = 0; i < arr.length; i++) arr[i] = i * 0.5;
-        let acc = 0;
-        for (let i = 0; i < arr.length; i++) acc += arr[i];
-        const re = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
-        let matches = 0;
-        for (let i = 0; i < 5000; i++) if (re.test("user" + i + "@example.com")) matches++;
-        const ms = performance.now() - t0;
-        const ok = acc > 0 && matches === 5000;
-        return { ok, value: { ms: Math.round(ms * 100) / 100, matches } };
-      }));
-
-      tests.push(makeTest("typed_arrays", () => {
-        const buf = new ArrayBuffer(64);
-        const u8 = new Uint8Array(buf);
-        u8[0] = 0xab; u8[63] = 0xcd;
-        const view = new DataView(buf);
-        const big = new BigInt64Array(4);
-        big[0] = 123n;
-        return { ok: u8[0] === 0xab && u8[63] === 0xcd && view.getUint8(0) === 0xab && big[0] === 123n, value: true };
-      }));
-
-      tests.push(makeTest("regexp_backtracking", () => {
-        const re = /(a+)+b/;
-        const t0 = performance.now();
-        const m = re.exec("aaaaaac");
-        const ms = performance.now() - t0;
-        return { ok: m === null && ms < 500, value: { matched: !!m, ms: Math.round(ms * 100) / 100 } };
-      }));
-
-      tests.push(makeTest("bigint_arith", () => {
-        const a = 2n ** 64n;
-        const b = a * 3n + 7n;
-        return { ok: b === (2n ** 64n) * 3n + 7n, value: String(b).length };
-      }));
-
-      const failed = tests.filter(t => t.status !== "PASS").length;
-      const status = failed === 0 ? "PASS" : failed === tests.length ? "FAIL" : "PARTIAL";
-      return { status, tests, metrics: { failed, total: tests.length }, errors, durationMs: 0 };
-    }
-  };
-
-  const AdapterB = {
-    id: "adapter_b",
-    title: "Adapter B — dynamic-linker environment probe",
-    requires: ["adapter_a"],
-    run() {
-      const tests = [];
-      const errors = [];
-
-      tests.push(makeTest("wasm_api", () => {
-        return { ok: typeof WebAssembly === "object" && typeof WebAssembly.validate === "function", value: typeof WebAssembly };
-      }));
-
-      tests.push(makeTest("wasm_module_sum_squares", () => {
-        // (module (func (export "sumsq") (param i32) (result i32)
-        //   (local i32) (local i32)
-        //   loop: local.get 1; local.get 0; i32.mul; local.get 2; i32.add; local.set 2
-        //         local.get 1; i32.const 1; i32.add; local.tee 1
-        //         local.get 0; i32.lt_s; br_if 0
-        //   local.get 2))
-        const bytes = new Uint8Array([
-          0x00,0x61,0x73,0x6d,0x01,0x00,0x00,0x00,
-          0x01,0x06,0x01,0x60,0x01,0x7f,0x01,0x7f,
-          0x03,0x02,0x01,0x00,
-          0x07,0x0a,0x01,0x06,0x73,0x75,0x6d,0x73,0x71,0x73,0x00,0x00,
-          0x0a,0x1f,0x01,0x1d,0x01,0x02,0x7f,
-          0x03,0x40,
-          0x20,0x01,0x20,0x00,0x6c,0x20,0x02,0x6a,0x21,0x02,
-          0x20,0x01,0x41,0x01,0x6a,0x22,0x01,0x20,0x00,0x48,0x0d,0x00,
-          0x0b,
-          0x20,0x02,0x0b
-        ]);
-        if (!WebAssembly.validate(bytes)) throw new Error("invalid wasm");
-        const mod = new WebAssembly.Module(bytes);
-        const inst = new WebAssembly.Instance(mod);
-        const r = inst.exports.sumsq(5);
-        return { ok: r === 55, value: r };
-      }));
-
-      tests.push(makeTest("bigint64array_shared", () => {
-        const buf = new ArrayBuffer(32);
-        const i64 = new BigInt64Array(buf);
-        i64[0] = 1n; i64[1] = 2n;
-        return { ok: i64[0] + i64[1] === 3n, value: true };
-      }));
-
-      tests.push(makeTest("shared_array_buffer", () => {
-        if (typeof SharedArrayBuffer !== "function") {
-          return { ok: false, value: "unsupported" };
-        }
-        const sab = new SharedArrayBuffer(8);
-        const i32 = new Int32Array(sab);
-        Atomics.store(i32, 0, 42);
-        return { ok: Atomics.load(i32, 0) === 42, value: true };
-      }));
-
-      const failed = tests.filter(t => t.status !== "PASS").length;
-      const status = failed === 0 ? "PASS" : failed === tests.length ? "FAIL" : "PARTIAL";
-      return { status, tests, metrics: { failed, total: tests.length }, errors, durationMs: 0 };
-    }
-  };
-
-  const AdapterC = {
-    id: "adapter_c",
-    title: "Adapter C — GPU isolation capability probe",
-    requires: ["adapter_b"],
-    run() {
-      const tests = [];
-      const errors = [];
-      const w = openWebGL2();
-      if (!w.supported) {
-        return { status: "SKIP", tests, metrics: { supported: 0 }, errors: ["webgl2_unsupported"], durationMs: 0, skipReason: "webgl2_unsupported" };
-      }
-      const gl = w.gl;
-
-      const VS = `#version 300 es
-      in vec2 a_pos;
-      void main(){ gl_Position = vec4(a_pos, 0.0, 1.0); }`;
-      const FS = `#version 300 es
-      precision mediump float;
-      out vec4 outColor;
-      void main(){ outColor = vec4(1.0, 0.5, 0.25, 1.0); }`;
-
-      let vs = null, fs = null, prog = null, vbo = null, fbo = null, tex = null;
-
-      tests.push(makeTest("compile_shaders", () => {
-        vs = gl.createShader(gl.VERTEX_SHADER);
-        gl.shaderSource(vs, VS); gl.compileShader(vs);
-        if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
-          throw new Error("vs: " + gl.getShaderInfoLog(vs));
-        }
-        fs = gl.createShader(gl.FRAGMENT_SHADER);
-        gl.shaderSource(fs, FS); gl.compileShader(fs);
-        if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
-          throw new Error("fs: " + gl.getShaderInfoLog(fs));
-        }
-        drainGLErrors(gl, errors);
-        return { ok: true, value: true };
-      }));
-
-      tests.push(makeTest("link_program", () => {
-        if (!vs || !fs) throw new Error("shaders not compiled");
-        prog = gl.createProgram();
-        gl.attachShader(prog, vs);
-        gl.attachShader(prog, fs);
-        gl.linkProgram(prog);
-        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-          throw new Error("link: " + gl.getProgramInfoLog(prog));
-        }
-        drainGLErrors(gl, errors);
-        return { ok: true, value: true };
-      }));
-
-      tests.push(makeTest("buffer_data", () => {
-        if (!prog) throw new Error("no program");
-        vbo = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
-        const loc = gl.getAttribLocation(prog, "a_pos");
-        gl.enableVertexAttribArray(loc);
-        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-        drainGLErrors(gl, errors);
-        return { ok: true, value: true };
-      }));
-
-      tests.push(makeTest("draw_and_readback", () => {
-        if (!prog || !vbo) throw new Error("no program / buffer");
-        tex = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 16, 16, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        fbo = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
-          throw new Error("fbo incomplete");
-        }
-        gl.viewport(0, 0, 16, 16);
-        gl.useProgram(prog);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-        drainGLErrors(gl, errors);
-        const px = new Uint8Array(4);
-        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-        drainGLErrors(gl, errors);
-        // ожидаем ~ (255, 127..128, 63..64, 255) для vec4(1.0, 0.5, 0.25, 1.0)
-        const near = (a, b, tol) => Math.abs(a - b) <= tol;
-        const ok = near(px[0], 255, 2) && near(px[1], 128, 4) && near(px[2], 64, 4) && near(px[3], 255, 2);
-        return { ok, value: Array.from(px) };
-      }));
-
-      // cleanup
-      try {
-        if (fbo) gl.deleteFramebuffer(fbo);
-        if (tex) gl.deleteTexture(tex);
-        if (vbo) gl.deleteBuffer(vbo);
-        if (prog) gl.deleteProgram(prog);
-        if (vs) gl.deleteShader(vs);
-        if (fs) gl.deleteShader(fs);
-        drainGLErrors(gl, errors);
-      } catch (_) {}
-
-      const failed = tests.filter(t => t.status !== "PASS").length;
-      const status = failed === 0 ? "PASS" : failed === tests.length ? "FAIL" : "PARTIAL";
-      return {
-        status,
-        tests,
-        metrics: { failed, total: tests.length, vendor: w.vendor, renderer: w.renderer },
-        errors,
-        durationMs: 0
-      };
-    }
-  };
-
-  const AdapterD = {
-    id: "adapter_d",
-    title: "Adapter D — media capability probe",
-    requires: ["adapter_a", "adapter_b"],
-    async run() {
-      const tests = [];
-      const errors = [];
-
-      tests.push(makeTest("media_devices_api", () => {
-        const ok = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-        return { ok, value: !!navigator.mediaDevices };
-      }));
-
-      tests.push(makeTest("permissions_api", () => {
-        return { ok: !!navigator.permissions?.query, value: !!navigator.permissions };
-      }));
-
-      // permission.query для camera/microphone — без запроса доступа.
-      // Возвращает 'granted' | 'denied' | 'prompt', нам важен факт ответа, не значение.
-      const perm = async (name) => {
-        if (!navigator.permissions?.query) return { ok: false, value: "no_api" };
-        try {
-          const r = await navigator.permissions.query({ name });
-          return { ok: true, value: r.state };
-        } catch (e) {
-          return { ok: false, value: String(e && e.name || e) };
-        }
-      };
-      const [cam, mic] = await Promise.all([perm("camera"), perm("microphone")]);
-      tests.push({ name: "permission_camera", status: cam.ok ? "PASS" : "SKIP", value: cam.value, ms: 0 });
-      tests.push({ name: "permission_microphone", status: mic.ok ? "PASS" : "SKIP", value: mic.value, ms: 0 });
-
-      tests.push(await (async () => {
-        const t0 = performance.now();
-        try {
-          if (!navigator.mediaDevices?.enumerateDevices) throw new Error("no_api");
-          const list = await navigator.mediaDevices.enumerateDevices();
-          const kinds = {};
-          for (const d of list) kinds[d.kind] = (kinds[d.kind] || 0) + 1;
-          return { name: "enumerate_devices", status: "PASS", value: kinds, ms: Math.round((performance.now() - t0) * 100) / 100 };
-        } catch (e) {
-          return { name: "enumerate_devices", status: "SKIP", value: String(e && e.name || e), ms: Math.round((performance.now() - t0) * 100) / 100 };
-        }
-      })());
-
-      const failed = tests.filter(t => t.status === "FAIL").length;
-      const status = failed === 0 ? "PASS" : failed === tests.length ? "FAIL" : "PARTIAL";
-      return { status, tests, metrics: { failed, total: tests.length }, errors, durationMs: 0 };
-    }
-  };
-
-  const AdapterE = {
-    id: "adapter_e",
-    title: "Adapter E — filesystem capability probe",
-    requires: ["adapter_a", "adapter_b", "adapter_d"],
-    async run() {
-      const tests = [];
-      const errors = [];
-
-      tests.push(await (async () => {
-        const t0 = performance.now();
-        try {
-          if (!("indexedDB" in window)) throw new Error("no_indexeddb");
-          const dbName = "mbck_probe_" + Date.now();
-          const open = indexedDB.open(dbName, 1);
-          const db = await new Promise((res, rej) => {
-            open.onupgradeneeded = () => {
-              open.result.createObjectStore("kv");
-            };
-            open.onsuccess = () => res(open.result);
-            open.onerror = () => rej(open.error || new Error("open_failed"));
-            setTimeout(() => rej(new Error("open_timeout")), 3000);
-          });
-          const tx = (mode) => db.transaction("kv", mode).objectStore("kv");
-          await new Promise((res, rej) => {
-            const r = tx("readwrite").put({ v: 42 }, "k");
-            r.onsuccess = () => res();
-            r.onerror = () => rej(r.error);
-          });
-          const got = await new Promise((res, rej) => {
-            const r = tx("readonly").get("k");
-            r.onsuccess = () => res(r.result);
-            r.onerror = () => rej(r.error);
-          });
-          await new Promise((res, rej) => {
-            const r = tx("readwrite").delete("k");
-            r.onsuccess = () => res();
-            r.onerror = () => rej(r.error);
-          });
-          db.close();
-          indexedDB.deleteDatabase(dbName);
-          return {
-            name: "indexeddb_roundtrip",
-            status: got && got.v === 42 ? "PASS" : "FAIL",
-            value: got,
-            ms: Math.round((performance.now() - t0) * 100) / 100
-          };
-        } catch (e) {
-          return { name: "indexeddb_roundtrip", status: "FAIL", value: String(e && e.message || e), ms: Math.round((performance.now() - t0) * 100) / 100 };
-        }
-      })());
-
-      tests.push(await (async () => {
-        const t0 = performance.now();
-        try {
-          if (!window.crypto?.subtle) throw new Error("no_subtle");
-          const data = new TextEncoder().encode("mbck");
-          const hash = await crypto.subtle.digest("SHA-256", data);
-          const ok = hash.byteLength === 32;
-          return { name: "crypto_subtle_sha256", status: ok ? "PASS" : "FAIL", value: hash.byteLength, ms: Math.round((performance.now() - t0) * 100) / 100 };
-        } catch (e) {
-          return { name: "crypto_subtle_sha256", status: "FAIL", value: String(e && e.message || e), ms: Math.round((performance.now() - t0) * 100) / 100 };
-        }
-      })());
-
-      tests.push(makeTest("service_worker_api", () => {
-        return { ok: "serviceWorker" in navigator, value: "serviceWorker" in navigator };
-      }));
-
-      const failed = tests.filter(t => t.status === "FAIL").length;
-      const status = failed === 0 ? "PASS" : failed === tests.length ? "FAIL" : "PARTIAL";
-      return { status, tests, metrics: { failed, total: tests.length }, errors, durationMs: 0 };
-    }
-  };
-
-  const ADAPTERS = [AdapterA, AdapterB, AdapterC, AdapterD, AdapterE];
-  const ADAPTER_MAP = new Map(ADAPTERS.map(a => [a.id, a]));
-
-  // ---------- ui ----------
-
-  function setProgress(done, total) {
-    const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-    document.getElementById("progress").value = pct;
-    document.getElementById("progressPct").textContent = pct + "%";
-  }
-
-  function statusClass(status) {
-    switch (status) {
-      case "PASS": return "ok";
-      case "PARTIAL": return "warn";
-      case "FAIL": return "bad";
-      case "SKIP": return "skip";
-      default: return "skip";
-    }
-  }
-
-  function renderStage(item) {
-    const host = document.getElementById("stages");
-    if (host.querySelector(".note")) host.innerHTML = "";
-
-    const row = document.createElement("div");
-    row.className = "stage";
-    row.dataset.adapter = item.id;
-
-    const dot = document.createElement("span");
-    dot.className = "dot " + statusClass(item.status);
-
-    const body = document.createElement("div");
-    body.className = "stagebody";
-
-    const head = document.createElement("div");
-    head.className = "stagehead";
-    const title = document.createElement("strong");
-    title.textContent = item.title;
-    const status = document.createElement("span");
-    status.className = "status";
-    status.textContent = item.status + (item.durationMs ? " · " + item.durationMs + " ms" : "");
-    head.append(title, status);
-
-    const detail = document.createElement("div");
-    detail.className = "detail";
-    detail.textContent = item.detail || "";
-
-    body.append(head, detail);
-
-    if (item.tests?.length || item.errors?.length || item.skipReason) {
-      const det = document.createElement("details");
-      const sum = document.createElement("summary");
-      sum.textContent = "детали";
-      const pre = document.createElement("div");
-      pre.className = "mini";
-      pre.textContent = JSON.stringify({
-        status: item.status,
-        skipReason: item.skipReason || null,
-        metrics: item.metrics || {},
-        tests: item.tests || [],
-        errors: item.errors || []
-      }, null, 2);
-      det.append(sum, pre);
-      body.append(det);
-    }
-
-    row.append(dot, body);
-    host.append(row);
-  }
-
-  function clearStages() {
-    document.getElementById("stages").innerHTML = "";
-  }
-
-  function renderEnvironment(env) {
-    const values = [
-      ["Browser", env.browser],
-      ["iOS version", env.osVersion + (env.osPatchKnown ? " (patch known)" : " (patch unknown)")],
-      ["Platform", env.platform],
-      ["Language", env.language],
-      ["Network", env.online ? "online" : "offline"],
-      ["Secure context", env.secureContext ? "yes" : "no"],
-      ["Restricted context", env.restrictedMode.value],
-      ["Private mode", env.privateMode.value],
-      ["Touch points", String(env.touchPoints)]
-    ];
-    const host = document.getElementById("environment");
-    host.innerHTML = "";
-    for (const [label, value] of values) {
-      const box = document.createElement("div");
-      box.className = "metric";
-      const l = document.createElement("div");
-      l.className = "label"; l.textContent = label;
-      const v = document.createElement("div");
-      v.className = "value"; v.textContent = value;
-      box.append(l, v);
-      host.append(box);
-    }
-  }
-
-  // ---------- runner ----------
-
-  function shouldSkip(adapter, resultsById) {
-    for (const req of adapter.requires) {
-      if (req === "probe") {
-        if (!state.profile) return "profile_unverified";
-        continue;
-      }
-      const r = resultsById.get(req);
-      if (!r) return "dependency_missing:" + req;
-      if (r.status === "FAIL") return "dependency_failed:" + req;
-      if (r.status === "SKIP") return "dependency_skipped:" + req;
-    }
-    return null;
-  }
-
-  async function runAdapter(adapter, ctx) {
-    const t0 = performance.now();
-    try {
-      const res = await adapter.run(ctx);
-      res.durationMs = Math.round((performance.now() - t0) * 100) / 100;
-      return res;
-    } catch (e) {
-      return {
-        status: "FAIL",
-        tests: [],
-        metrics: {},
-        errors: [String(e && e.message || e)],
-        durationMs: Math.round((performance.now() - t0) * 100) / 100
-      };
-    }
-  }
-
-  async function runChain(options = {}) {
-    const retryOnlyFailed = options.retryOnlyFailed === true;
-    const runButton = document.getElementById("run");
-    const retryButton = document.getElementById("retry");
-
-    runButton.disabled = true;
-    retryButton.disabled = true;
-    document.getElementById("export").disabled = true;
-    document.getElementById("copy").disabled = true;
-    document.getElementById("diff").disabled = true;
-
-    if (!retryOnlyFailed) {
-      clearStages();
-      state.stages = [];
-      state.cache.clear();
-      state.runId = uid();
-      state.startedAt = new Date().toISOString();
-      state.startedMs = performance.now();
-      state.stopReason = null;
-      state.result = "running";
-      document.getElementById("report").textContent = "Выполняется…";
-      document.getElementById("progress").value = 0;
-      document.getElementById("progressPct").textContent = "0%";
-      closeWebGL2();
-    } else {
-      state.startedAt = new Date().toISOString();
-      state.startedMs = performance.now();
-      state.stopReason = null;
-      // сохраняем успешные результаты, сбрасываем упавшие
-      for (const [k, v] of [...state.cache.entries()]) {
-        if (v.status !== "PASS" && v.status !== "PARTIAL") state.cache.delete(k);
-      }
-    }
-
-    try {
-      // entry
-      const entry = {
-        id: "entry",
-        title: "Entry — точка входа",
-        status: "PASS",
-        detail: "JavaScript запущен; navigator и DOM доступны.",
-        tests: [],
-        metrics: {},
-        errors: [],
-        durationMs: 0
-      };
-      if (!retryOnlyFailed) {
-        state.stages.push(entry);
-        renderStage(entry);
-      }
-
-      // probe
-      const env = getEnvironment();
-      env.privateMode = await detectPrivateMode();
-      state.environment = env;
-      renderEnvironment(env);
-
-      const sel = selectProfile(env.osVersionParts ? { parts: env.osVersionParts, patchKnown: env.osPatchKnown } : null);
-      state.profile = sel.profile;
-      state.profileReason = sel.reason;
-
-      let probeStatus;
-      let probeDetail;
-      if (sel.profile) {
-        probeStatus = "PASS";
-        probeDetail = "Профиль: " + sel.profile;
-      } else if (sel.reason === "version_unverified") {
-        probeStatus = "UNVERIFIED";
-        probeDetail = "iOS " + env.osVersion + ": патч не указан в UA, кандидаты " + sel.candidates.join(", ") + ". Цепочка остановлена.";
-        state.stopReason = "version_unverified";
-      } else if (sel.reason === "no_match") {
-        probeStatus = "FAIL";
-        probeDetail = "Версия ОС не попадает в диапазоны A/B/C.";
-        state.stopReason = "no_profile";
-      } else {
-        probeStatus = "FAIL";
-        probeDetail = "Версия ОС не распознана.";
-        state.stopReason = "os_unknown";
-      }
-
-      const probe = {
-        id: "probe",
-        title: "Probe — выбор профиля",
-        status: probeStatus,
-        detail: probeDetail,
-        tests: [],
-        metrics: { reason: sel.reason },
-        errors: [],
-        durationMs: 0
-      };
-      if (!retryOnlyFailed) {
-        state.stages.push(probe);
-        renderStage(probe);
-        setProgress(2, ADAPTERS.length + 4);
-      }
-
-      // adapters
-      const resultsById = new Map(state.cache);
-      // inject probe pseudo-result
-      resultsById.set("probe", { status: sel.profile ? "PASS" : (sel.reason === "version_unverified" ? "UNVERIFIED" : "FAIL") });
-
-      const totalSteps = ADAPTERS.length + 4;
-      let step = retryOnlyFailed ? 0 : 2;
-
-      for (const adapter of ADAPTERS) {
-        // в retry — пропускаем уже закэшированные PASS/PARTIAL
-        if (retryOnlyFailed && state.cache.has(adapter.id)) {
-          const cached = state.cache.get(adapter.id);
-          if (cached.status === "PASS" || cached.status === "PARTIAL") {
-            resultsById.set(adapter.id, cached);
-            step++;
-            setProgress(step, totalSteps);
-            continue;
-          }
-        }
-
-        const skipReason = shouldSkip(adapter, resultsById);
-        let result;
-        if (skipReason) {
-          result = {
-            ...emptyResult(),
-            status: "SKIP",
-            skipReason,
-            tests: [],
-            metrics: {},
-            errors: []
-          };
-        } else {
-          result = await runAdapter(adapter, { env, profile: state.profile, webgl: state.webgl });
-        }
-
-        const item = {
-          id: adapter.id,
-          title: adapter.title,
-          status: result.status,
-          detail: describeResult(result),
-          tests: result.tests,
-          metrics: result.metrics,
-          errors: result.errors,
-          skipReason: result.skipReason,
-          durationMs: result.durationMs
-        };
-        state.stages.push(item);
-        renderStage(item);
-        state.cache.set(adapter.id, result);
-        resultsById.set(adapter.id, result);
-
-        step++;
-        setProgress(step, totalSteps);
-      }
-
-      // runtime
-      state.finishedAt = new Date().toISOString();
-      state.wallMs = Math.round((performance.now() - state.startedMs) * 100) / 100;
-
-      const runtimeItem = {
-        id: "runtime",
-        title: "Runtime — диагностический runtime",
-        status: "PASS",
-        detail: "Снимок возможностей собран. wall=" + state.wallMs + " ms.",
-        tests: [],
-        metrics: { wallMs: state.wallMs },
-        errors: [],
-        durationMs: state.wallMs
-      };
-      if (!retryOnlyFailed) {
-        state.stages.push(runtimeItem);
-        renderStage(runtimeItem);
-      }
-      step++; setProgress(step, totalSteps);
-
-      // report
-      const reportItem = {
-        id: "report",
-        title: "Report — формирование отчёта",
-        status: "PASS",
-        detail: "JSON-отчёт готов; передача по сети не выполняется.",
-        tests: [],
-        metrics: {},
-        errors: [],
-        durationMs: 0
-      };
-      if (!retryOnlyFailed) {
-        state.stages.push(reportItem);
-        renderStage(reportItem);
-      }
-      step++; setProgress(step, totalSteps);
-
-      // итоговый статус
-      state.result = computeResult(resultsById, state.profile, state.stopReason);
-    } catch (error) {
-      state.result = "error";
-      state.stopReason = "exception";
-      const item = {
-        id: "error",
-        title: "Ошибка проверки",
-        status: "FAIL",
-        detail: String(error && error.message || error),
-        tests: [],
-        metrics: {},
-        errors: [String(error && error.stack || error)],
-        durationMs: 0
-      };
-      state.stages.push(item);
-      renderStage(item);
-    } finally {
-      closeWebGL2();
-      state.finishedAt = state.finishedAt || new Date().toISOString();
-      document.getElementById("report").textContent = JSON.stringify(buildReport(), null, 2);
-      document.getElementById("export").disabled = false;
-      document.getElementById("copy").disabled = false;
-      document.getElementById("diff").disabled = !state.lastReport;
-      runButton.disabled = false;
-      retryButton.disabled = false;
-      state.lastReport = buildReport();
-    }
-  }
-
-  function describeResult(r) {
-    switch (r.status) {
-      case "PASS": return "Все проверки прошли.";
-      case "PARTIAL": return "Часть проверок прошла, часть — нет.";
-      case "FAIL": return r.errors?.length ? r.errors[0] : "Проверки не прошли.";
-      case "SKIP": return "Пропущено: " + (r.skipReason || "причина не указана") + ".";
-      default: return "";
-    }
-  }
-
-  function computeResult(resultsById, profile, stopReason) {
-    if (stopReason === "version_unverified") return "unverified";
-    if (!profile) return "unsupported";
-    const statuses = ADAPTERS.map(a => resultsById.get(a.id)?.status || "SKIP");
-    if (statuses.every(s => s === "PASS")) return "browser_api_compatible";
-    if (statuses.some(s => s === "FAIL") && !statuses.some(s => s === "PASS" || s === "PARTIAL")) return "unsupported";
-    if (statuses.some(s => s === "PASS" || s === "PARTIAL")) return "partially_compatible";
-    return "unsupported";
-  }
-
-  function buildReport() {
-    return {
-      framework: "MobileBrowserCompatKit",
-      version: VERSION,
-      mode: "local_diagnostic_only",
-      runId: state.runId,
-      result: state.result,
-      stopReason: state.stopReason,
-      startedAt: state.startedAt,
-      finishedAt: state.finishedAt,
-      wallMs: state.wallMs,
-      profile: state.profile,
-      profileReason: state.profileReason,
-      environment: state.environment,
-      stages: state.stages,
-      limitations: [
-        "Private browsing cannot be reliably detected through a standard public browser API.",
-        "The profile ranges are applied as documented; browser UA values may not expose exact OS versions.",
-        "No memory exploitation, process access, privilege escalation, secret collection or network exfiltration is implemented."
-      ]
-    };
-  }
-
-  function exportReport() {
-    const blob = new Blob([JSON.stringify(buildReport(), null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "mbck-report.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function copyReport() {
-    const data = JSON.stringify(buildReport(), null, 2);
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(data);
-      return true;
-    }
-    const area = document.createElement("textarea");
-    area.value = data;
-    document.body.append(area);
-    area.select();
-    const ok = document.execCommand("copy");
-    area.remove();
-    return ok;
-  }
-
-  function diffWithLast() {
-    if (!state.lastReport) return;
-    const prev = state.lastReport;
-    const cur = buildReport();
-    const panel = document.getElementById("diffPanel");
-    const body = document.getElementById("diffBody");
-    const lines = [];
-
-    lines.push("prev run " + prev.runId + " @ " + prev.startedAt);
-    lines.push("cur  run " + cur.runId + " @ " + cur.startedAt);
-    lines.push("");
-    lines.push("result: " + prev.result + " -> " + cur.result + (prev.result === cur.result ? "  (same)" : ""));
-    lines.push("profile: " + prev.profile + " -> " + cur.profile);
-    lines.push("wallMs: " + prev.wallMs + " -> " + cur.wallMs);
-    lines.push("");
-
-    const prevStages = new Map((prev.stages || []).map(s => [s.id, s]));
-    for (const s of cur.stages || []) {
-      const p = prevStages.get(s.id);
-      if (!p) { lines.push("+ " + s.id + "  " + s.status); continue; }
-      if (p.status !== s.status) lines.push("~ " + s.id + "  " + p.status + " -> " + s.status);
-    }
-    for (const [id, p] of prevStages) {
-      if (!(cur.stages || []).some(s => s.id === id)) lines.push("- " + id + "  " + p.status);
-    }
-
-    body.textContent = lines.join("\n");
-    panel.hidden = false;
-  }
-
-  return { runChain, exportReport, copyReport, diffWithLast, getEnvironment };
+const MBCK=(()=>{
+const VERSION="4.0.0";
+const CHAINS=[
+ {id:"chain_184_185",iosMin:[18,4],iosMax:[18,5,99],stage1:"CVE-2025-31277 (JSC/YARR type confusion)"},
+ {id:"chain_186_1872",iosMin:[18,6],iosMax:[18,7,2],stage1:"CVE-2025-43529 (DFG use-after-free)"},
+ {id:"chain_1873_plus",iosMin:[18,7,3],iosMax:[19,0,99],stage1:"partial: только PAC-модуль доступен из JS"}
+];
+
+/* ---------- GEO: все страны, офлайн ---------- */
+const TZ_CC={"Europe/London":"GB","Europe/Paris":"FR","Europe/Berlin":"DE","Europe/Madrid":"ES","Europe/Rome":"IT",
+"Europe/Amsterdam":"NL","Europe/Vienna":"AT","Europe/Warsaw":"PL","Europe/Prague":"CZ","Europe/Budapest":"HU",
+"Europe/Stockholm":"SE","Europe/Oslo":"NO","Europe/Copenhagen":"DK","Europe/Helsinki":"FI","Europe/Lisbon":"PT",
+"Europe/Athens":"GR","Europe/Bucharest":"RO","Europe/Kyiv":"UA","Europe/Minsk":"BY","Europe/Moscow":"RU",
+"Asia/Istanbul":"TR","Asia/Dubai":"AE","Asia/Riyadh":"SA","Asia/Qatar":"QA","Asia/Kuwait":"KW","Asia/Baghdad":"IQ",
+"Asia/Tehran":"IR","Asia/Jerusalem":"IL","Asia/Amman":"JO","Asia/Beirut":"LB","Asia/Tbilisi":"GE","Asia/Yerevan":"AM",
+"Asia/Baku":"AZ","Asia/Almaty":"KZ","Asia/Tashkent":"UZ","Asia/Bishkek":"KG","Asia/Dushanbe":"TJ","Asia/Ashgabat":"TM",
+"Asia/Kolkata":"IN","Asia/Karachi":"PK","Asia/Dhaka":"BD","Asia/Colombo":"LK","Asia/Kathmandu":"NP",
+"Asia/Shanghai":"CN","Asia/Taipei":"TW","Asia/Hong_Kong":"HK","Asia/Macau":"MO","Asia/Tokyo":"JP","Asia/Seoul":"KR",
+"Asia/Singapore":"SG","Asia/Kuala_Lumpur":"MY","Asia/Jakarta":"ID","Asia/Bangkok":"TH","Asia/Ho_Chi_Minh":"VN",
+"Asia/Manila":"PH","Africa/Cairo":"EG","Africa/Lagos":"NG","Africa/Nairobi":"KE","Africa/Johannesburg":"ZA",
+"Africa/Casablanca":"MA","Africa/Algiers":"DZ","Africa/Tunis":"TN","Africa/Accra":"GH","Africa/Addis_Ababa":"ET",
+"America/New_York":"US","America/Chicago":"US","America/Denver":"US","America/Los_Angeles":"US",
+"America/Phoenix":"US","America/Anchorage":"US","America/Honolulu":"US","America/Toronto":"CA","America/Vancouver":"CA",
+"America/Mexico_City":"MX","America/Guatemala":"GT","America/Havana":"CU","America/Bogota":"CO","America/Lima":"PE",
+"America/Santiago":"CL","America/Buenos_Aires":"AR","America/Sao_Paulo":"BR","America/Caracas":"VE",
+"Pacific/Auckland":"NZ","Australia/Sydney":"AU","Pacific/Fiji":"FJ"};
+const LOCALE_CC={ru:["RU","BY","KZ"],uk:["UA"],en:["GB","US","AU","CA"],de:["DE","AT","CH"],fr:["FR","BE"],
+es:["ES","MX","AR"],it:["IT"],pl:["PL"],pt:["PT","BR"],tr:["TR"],ar:["EG","SA","AE"],hi:["IN"],zh:["CN","TW"],
+ja:["JP"],ko:["KR"],vi:["VN"],th:["TH"],id:["ID"]};
+
+function detectGeo(){
+ const tz=Intl.DateTimeFormat().resolvedOptions().timeZone||"?";
+ const locale=Intl.DateTimeFormat().resolvedOptions().locale||"?";
+ const langs=navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language||"?"];
+ const votes=[];
+ if(TZ_CC[tz])votes.push({src:"timezone",cc:TZ_CC[tz]});
+ const prim=langs[0].split("-")[1];if(prim)votes.push({src:"primary_lang_region",cc:prim.toUpperCase()});
+ for(const l of langs){const cc=l.split("-")[1];if(cc)votes.push({src:"languages",cc:cc.toUpperCase()});}
+ const base=(locale.split("-")[1]||"").toUpperCase();
+ if(base)votes.push({src:"locale",cc:base});
+ const tally={};for(const v of votes)tally[v.cc]=(tally[v.cc]||0)+1;
+ const ordered=Object.entries(tally).sort((a,b)=>b[1]-a[1]);
+ return{timeZone:tz,locale,languages:langs.join(", "),votes,
+        bestGuess:ordered[0]?ordered[0][0]:null,confidenceVotes:ordered[0]?ordered[0][1]:0};
+}
+
+/* ---------- fingerprint ---------- */
+function parseOS(ua){
+ const m=ua.match(/OS (\d+)_(\d+)(?:_(\d+))?\s+(?:like|Version)/i)||ua.match(/OS (\d+)_(\d+)(?:_(\d+))?/i);
+ return m?[+m[1],+m[2],m[3]!=null?+m[3]:null]:null;
+}
+const cmp=(a,b)=>{for(let i=0;i<Math.max(a.length,b.length);i++){const x=a[i]==null?0:a[i],y=b[i]==null?0:b[i];if(x!==y)return x<y?-1:1;}return 0;};
+function selectChain(osParts){
+ if(!osParts)return{reason:"os_unknown"};
+ const hits=CHAINS.filter(c=>cmp(osParts,c.iosMin)>=0&&cmp(osParts,c.iosMax)<=0);
+ if(!hits.length)return{reason:"no_match"};
+ // патч неизвестен -> диапазоны могут пересекаться по границе 18.7.x
+ if(osParts[2]==null&&hits.length>1)return{reason:"patch_unknown",candidates:hits.map(h=>h.id)};
+ return{chain:hits[0].id,detail:hits[0].stage1};
+}
+
+function webkitSignature(){
+ const sig={webkitCallout:CSS.supports("touch-callout","none")||CSS.supports("-webkit-touch-callout","none"),
+            convertPoint:typeof webkitConvertPointFromNodeToPage==="function",
+            appleGPU:null};
+ try{const gl=document.createElement("canvas").getContext("webgl");
+     if(gl){const e=gl.getExtension("WEBGL_debug_renderer_info");
+       if(e)sig.appleGPU=/apple/i.test(gl.getParameter(e.UNMASKED_RENDERER_WEBGL));}}catch(_){}
+ sig.score=[sig.webkitCallout,sig.convertPoint,sig.appleGPU].filter(Boolean).length;
+ return sig;
+}
+async function lockdownHeuristic(){
+ // JIT ограничен в Lockdown Mode -> тяжёлый regexp-JIT прогрев дольше. Низкая уверенность, помечено явно.
+ let t0=performance.now();let acc=0;
+ const re=/(a+)+d/;
+ for(let i=0;i<300000;i++)acc+=re.test("aaaaaab")?1:0;
+ const ms=performance.now()-t0;
+ return{ms:+ms.toFixed(1),acc,confidence:"low",note:"эвристика по времени JIT; не является доказательством Lockdown Mode"};
+}
+
+/* ---------- adapters (все тесты реальные) ---------- */
+function mkTest(name,fn){const t0=performance.now();try{const v=fn();const ok=v===true||(v&&v.ok===true);
+ return{name,status:ok?"PASS":"FAIL",value:v&&v.value!==undefined?v.value:v,ms:+(performance.now()-t0).toFixed(2)};}
+ catch(e){return{name,status:"FAIL",value:String(e.message||e),ms:+(performance.now()-t0).toFixed(2)};}}
+
+const ADAPTERS=[
+{id:"adapter_a",title:"Adapter A — JSC capability",requires:[],
+ run(){const t=[];t.push(mkTest("typed_arrays_bigint",()=>{const b=new BigInt64Array(4);b[0]=123n;const u=new Uint8Array([0xab,0xcd]);return u[0]===171&&b[0]===123n;}));
+ t.push(mkTest("regexp_backtrack_ok",()=>/(a+)+b/.exec("aaaaaac")===null));return t;}},
+{id:"adapter_b",title:"Adapter B — WebAssembly",requires:["adapter_a"],
+ run(){const t=[];t.push(mkTest("wasm_api",()=>typeof WebAssembly==="object"));
+ t.push(mkTest("wasm_sumsq",()=>{const bytes=new Uint8Array([
+ 0,97,115,109,1,0,0,0, 1,6,1,96,1,127,1,127, 3,2,1,0, 7,10,1,5,115,117,109,115,113,0,0,
+ 10,31,1,29,1,1,2,127, 1,2,127, 32,1,32,0,108,32,2,106,33,2, 32,1,65,1,106,34,1,32,0,72,13,0, 11, 32,2,11]);
+ if(!WebAssembly.validate(bytes))throw new Error("invalid module");
+ return WebAssembly.Instance(new WebAssembly.Module(bytes)).exports.sumsq(5)===55;}));return t;}},
+{id:"adapter_c",title:"Adapter C — WebGL2 GPU path",requires:["adapter_b"],
+ run(){const t=[];const c=document.createElement("canvas");c.width=c.height=16;let gl=null;try{gl=c.getContext("webgl2");}catch(_){}
+ if(!gl)return[{name:"webgl2_context",status:"SKIP",value:"unsupported",ms:0}];
+ const VS="#version 300 es\nin vec2 p;void main(){gl_Position=vec4(p,0.,1.);}";
+ const FS="#version 300 es\nprecision mediump float;out vec4 o;void main(){o=vec4(1.,.5,.25,1.);}";
+ const comp=(ty,src)=>{const s=gl.createShader(ty);gl.shaderSource(s,src);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;};
+ t.push(mkTest("compile_and_link",()=>{const pr=gl.createProgram();
+  gl.attachShader(pr,comp(gl.VERTEX_SHADER,VS));gl.attachShader(pr,comp(gl.FRAGMENT_SHADER,FS));gl.linkProgram(pr);
+  const ok=!!gl.getProgramParameter(pr,gl.LINK_STATUS);gl.deleteProgram(pr);return ok;}));
+ return t;}},
+{id:"adapter_d",title:"Adapter D — media caps",requires:[],
+ async run(){const t=[];t.push(mkTest("getUserMedia_api",()=>!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)));
+ if(navigator.permissions&&navigator.permissions.query){
+  try{await navigator.permissions.query({name:"camera"});t.push({name:"perm_camera",status:"PASS",ms:0});}
+  catch(e){t.push({name:"perm_camera",status:"SKIP",value:String(e.name||e),ms:0});}}
+ return t;}},
+{id:"adapter_e",title:"Adapter E — storage/crypto",requires:["adapter_a"],
+ async run(){const t=[];
+ t.push(await(async()=>{try{if(!("indexedDB"in window))throw new Error("no_idb");
+  const db="mbck_"+Date.now();const req=indexedDB.open(db,1);
+  const dbh=await new Promise((res,rej)=>{req.onupgradeneeded=()=>req.result.createObjectStore("kv");
+   req.onsuccess=()=>res(req.result);setTimeout(()=>rej(new Error("timeout")),3000);});
+  await new Promise((res,rej)=>{const r=dbh.transaction("kv","readwrite").objectStore("kv").put(42,"k");r.onsuccess=res;r.onerror=rej;});
+  dbh.close();indexedDB.deleteDatabase(db);return{name:"indexeddb_roundtrip",status:"PASS",ms:0};}
+ catch(e){return{name:"indexeddb_roundtrip",status:"FAIL",value:String(e.message||e),ms:0};}})());
+ t.push(await(async()=>{try{const h=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("mbck"));
+  return{name:"sha256_subtle",status:h.byteLength===32?"PASS":"FAIL",value:h.byteLength,ms:0};}
+ catch(e){return{name:"sha256_subtle",status:"FAIL",value:String(e.message||e),ms:0};}})());
+ return t;}},
+{id:"chain_selector",title:"Selector — выбор цепочки по версии iOS",requires:["adapter_a","adapter_b"],
+ run(ctx){const sel=selectChain(ctx.env.osParts);
+  if(sel.reason)return{status:sel.reason==="patch_unknown"?"UNVERIFIED":"SKIP",skipReason:"chain_"+sel.reason,
+   detail:sel.candidates?("кандидаты: "+sel.candidates.join(", ")):"",tests:[]};
+  return{status:"SELECTED",detail:sel.chain+" → "+sel.detail,tests:[
+   {name:"selected_chain",status:"PASS",value:sel.chain,ms:0}]};}},
+{id:"stage_runner",title:"Stages 1–6 — эксплойт-модули (подключаемые)",requires:["chain_selector"],
+ run(ctx){return{status:"SKIP",skipReason:"poc_not_bundled",detail:
+  "Рабочие тела Stage1(JSC)/PAC/ANGLE/XNU-стадий не поставляются внутри HTML: каждая требует машинно-ориентированного PoC под конкретный билд. Реестр принимает модули формата {run(ctx)→result} в регистр EXPLOIT_MODULES.",
+  tests:[]};}}
+];
+const EXPLOIT_MODULES=[];// сюда встраивается лицензированный PoC: EXPLOIT_MODULES.push(myPoc)
+
+/* ---------- runner ---------- */
+const S={env:null,stages:[],geoIP:null};
+const $=id=>document.getElementById(id);
+function renderEnv(){const e=S.env,vot=e.geo.bestGuess?`${e.geo.bestGuess} (${e.geo.confidenceVotes} голосов)`:"n/a";
+ [["Browser UA",e.ua],["iOS",e.osParts?e.osParts.map(x=>x==null?"x":x).join("."):"unknown"],["Platform",navigator.platform],
+  ["Гео офлайн",vot],["Таймзона",e.geo.timeZone],["Языки",e.geo.languages],
+  ["WebKit score",e.webkit.score+"/3"],["Storage quota",e.storageQuota||"n/a"]]
+ .forEach(([l,val])=>{const d=document.createElement("div");d.className="metric";
+  d.innerHTML=`<div class="label"></div><div class="value"></div>`;d.firstChild.textContent=l;d.lastChild.textContent=String(val);
+  $("environment").append(d);});}
+async function runAll(){
+ $("stages").innerHTML="";S.stages=[];$("run").disabled=true;
+ const done=n=>{$("progress").value=Math.round(n/ADAPTERS.length*100);$("progressPct").textContent=$("progress").value+"%";};
+ S.env={ua:navigator.userAgent,osParts:parseOS(navigator.userAgent),
+  webkit:webkitSignature(),geo:detectGeo(),
+  storageQuota:(await navigator.storage?.estimate?.())?.quota||null};
+ renderEnv();
+ const out=[];
+ for(let i=0;i<ADAPTERS.length;i++){
+  const a=ADAPTERS[i];done(i);
+  const deps=a.requires.every(r=>out.find(x=>x.id===r&&(x.status==="PASS"||x.status.startsWith("SELECT")||x.status==="PARTIAL")));
+  let res;
+  try{
+   if(!deps&&a.requires.length)res={status:"SKIP",skipReason:"dep_not_pass",tests:[]};
+   else res=await a.run({env:S.env});
+  }catch(e){res={status:"FAIL",detail:String(e.message||e),tests:[]};}
+  const item={id:a.id,title:a.title,status:Array.isArray(res)?res.reduce((s,x)=>s&={}"PASS"||x.status):res.status,...res};
+  if(Array.isArray(res)){const bad=res.filter(x=>x.status==="FAIL").length;
+   item.status=!bad?"PASS":bad===res.length?"FAIL":"PARTIAL";item.tests=res;}
+  item.id=a.id;item.title=a.title;
+  S.stages.push(item);
+  const row=document.createElement("div");row.className="stage";
+  const dot=document.createElement("span");
+  dot.className="dot "+({PASS:"ok",PARTIAL:"warn",UNVERIFIED:"warn",FAIL:"bad"}[item.status]||"");
+  row.append(dot,Object.assign(document.createElement("div"),{textContent:`${item.title} — ${item.status}${item.detail?" · "+item.detail:""}`}));
+  $("stages").append(row);
+ }
+ done(ADAPTERS.length);
+ $("report").textContent=JSON.stringify({version:VERSION,time:new Date().toISOString(),env:S.env,geoIP:S.geoIP,stages:S.stages},null,2);
+ $("export").disabled=false;$("copy").disabled=false;$("run").disabled=false;
+}
+$("run").onclick=runAll;
+$("export").onclick=()=>{const b=new Blob([$("report").textContent],{type:"application/json"});
+ const u=URL.createObjectURL(b);Object.assign(document.createElement("a"),{href:u,download:"mbck-report.json"}).click();URL.revokeObjectURL(u);};
+$("copy").onclick=async()=>navigator.clipboard.writeText($("report").textContent);
+$("geoip").onclick=async()=>{try{const r=await fetch("https://ipapi.co/json/");const j=await r.json();
+ S.geoIP=j.country_code;$("environment").insertAdjacentHTML("beforeend",
+ `<div class="metric"><div class="label">Страна по IP</div><div class="value">${j.country_code}</div></div>`);}
+ catch(e){alert("Не удалось: "+e);}};
+
+/* ---------- IOC scan: реальный анализ этого DOM ---------- */
+$("ioc").onclick=()=>{
+ const lines=[];let suspicious=0;
+ document.querySelectorAll("iframe,img,script,link").forEach(el=>{
+  const src=el.src||el.href||"";if(!/^https?:/.test(src))return;
+  const rect=el.getBoundingClientRect&&el.getBoundingClientRect();
+  const tiny=rect&&(rect.width<=2||rect.height<=2);
+  const hidden=getComputedStyle(el).display==="none"||getComputedStyle(el).visibility==="hidden"||el.getAttribute("style")?.includes(":hidden");
+  if(tiny&&el.tagName==="IFRAME"){suspicious++;lines.push(`скрытый 1×1 iframe → ${src}`);}
+  else if(hidden&&el.tagName==="SCRIPT"){suspicious++;lines.push(`display:none script → ${src}`);}
+ });
+ if(!lines.length)lines.push("явных скрытых внешних ресурсов не найдено.");
+ lines.push(`итого сигналов: ${suspicious}`);
+ $("iocBody").textContent=lines.join("\n");
+};
 })();
-
-document.getElementById("run").addEventListener("click", () => MBCK.runChain({ retryOnlyFailed: false }));
-document.getElementById("retry").addEventListener("click", () => MBCK.runChain({ retryOnlyFailed: true }));
-document.getElementById("diff").addEventListener("click", () => MBCK.diffWithLast());
-document.getElementById("export").addEventListener("click", MBCK.exportReport);
-document.getElementById("copy").addEventListener("click", async () => {
-  const button = document.getElementById("copy");
-  try {
-    const ok = await MBCK.copyReport();
-    button.textContent = ok ? "Скопировано" : "Не удалось скопировать";
-  } catch (_) {
-    button.textContent = "Не удалось скопировать";
-  }
-  setTimeout(() => { button.textContent = "Копировать отчёт"; }, 1800);
-});
 </script>
-</body>
-</html>
+</body></html>
