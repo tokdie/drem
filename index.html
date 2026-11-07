@@ -233,7 +233,8 @@ const ADAPTERS=[
   t.push(mkTest("ios_version_parsed",()=>({ok:!!ctx.env.osParts,
     value:ctx.env.osParts?ctx.env.osParts.map(x=>x==null?"x":x).join("."):"unknown"})));
   t.push(mkTest("mobile_device",()=>({ok:navigator.maxTouchPoints>0&&/iPhone|iPad|iPod/.test(navigator.userAgent),
-    value:`maxTouchPoints=${navigator.maxTouchPoints}`)));
+    value:`maxTouchPoints=${navigator.maxTouchPoints}`})));
+
   t.push(mkTest("webkit_vendor",()=>navigator.vendor==="Apple Computer, Inc."));
   t.push(mkTest("lockdown_heuristic_done",()=>({ok:true,value:"low-confidence эвристика пройдена"})));
   return t;}},
