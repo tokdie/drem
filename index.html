@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>A1 — Tokdie Login</title>
+<title>A — Tokdie Login</title>
 <style>
-  /* стили как в прошлом A — не меняю */
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
           --ok:#3fb950; --bad:#f85149; --warn:#d29922; --dim:#7d8590; --accent:#58a6ff; }
   * { box-sizing:border-box; }
@@ -25,53 +24,33 @@
   button.primary { border-color:var(--accent); color:var(--accent); }
   pre { background:#0a0d12; border:1px solid var(--line); border-radius:6px;
         padding:8px; margin:4px 0; white-space:pre-wrap; word-break:break-all;
-        font-size:11px; max-height:160px; overflow:auto; }
-  .kv { display:grid; grid-template-columns:130px 1fr; gap:3px 10px; margin:6px 0; }
+        font-size:11px; max-height:180px; overflow:auto; }
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:3px 10px; margin:6px 0; }
   .kv b { color:var(--dim); font-weight:400; }
   .status { padding:8px 12px; border-radius:6px; margin:6px 0; font-size:12px; }
   .status.ok { background:#1a2f1a; color:var(--ok); }
   .status.err { background:#3a1a1a; color:var(--bad); }
   .status.warn { background:#2f2a1a; color:var(--warn); }
   .muted { color:var(--dim); font-size:11px; }
-  #dbg { position:fixed; left:0; right:0; bottom:0; z-index:9999;
-         max-height:60vh; overflow-y:auto;
-         background:rgba(10,12,16,.97); border-top:2px solid var(--accent);
-         color:#cdd7e0; font:11px/1.5 ui-monospace,monospace;
-         padding:12px 14px; }
-  #dbg.collapsed { max-height:32px; overflow:hidden; }
-  #dbg h3 { margin:0 0 6px; font-size:10px; color:var(--accent);
-            text-transform:uppercase; letter-spacing:.8px; cursor:pointer; }
-  #dbg .row { display:grid; grid-template-columns:160px 1fr; gap:2px 10px;
-              margin:1px 0; font-size:10.5px; }
-  #dbg .row b { color:#8b959f; font-weight:400; }
-  #dbg .row span { word-break:break-all; }
-  #dbg .ok { color:var(--ok); }
-  #dbg .bad { color:var(--bad); }
-  #dbg .warn { color:var(--warn); }
-  #dbg .log { margin-top:8px; max-height:180px; overflow-y:auto;
-              background:#080c11; border:1px solid #232b34; border-radius:4px;
-              padding:6px; font-size:10px; }
-  #dbg .log div { margin:1px 0; }
-  #dbg button { width:auto; padding:4px 10px; font-size:10.5px;
-                margin:4px 4px 0 0; display:inline-block; }
 </style>
 </head>
 <body>
 <div class="wrap">
+
   <div class="panel">
     <h1>Tokdie</h1>
-    <p class="muted">Sign in with TRON. Open in Trust Wallet in-app browser.</p>
+    <p class="muted">Sign in with your TRON wallet to continue.</p>
     <div class="kv" id="env_top"></div>
   </div>
 
   <div class="panel">
     <h2>step 1 — connect</h2>
-    <button id="btn_connect" onclick="connect()">Connect Trust Wallet</button>
-    <div class="status" id="connect_status"></div>
+    <button id="btn_connect" onclick="connect()">Connect Wallet</button>
   </div>
 
   <div class="panel">
     <h2>step 2 — sign in</h2>
+    <p class="muted">Sign the message below to prove you own this wallet.</p>
     <pre id="msg_display">Welcome to Tokdie. nonce: 0xAAA</pre>
     <button class="primary" id="btn_sign" onclick="sign()" disabled>Sign in</button>
     <div class="status" id="sign_status"></div>
@@ -83,220 +62,133 @@
     <button id="btn_copy" onclick="copyResult()" disabled>Copy JSON</button>
     <div class="status" id="copy_status"></div>
   </div>
-</div>
 
-<div id="dbg">
-  <h3 onclick="document.getElementById('dbg').classList.toggle('collapsed')">
-    ▶ DEBUG · tap to collapse
-  </h3>
-  <div id="dbg_body">
-    <div id="dbg_env"></div>
-    <div class="log" id="dbg_log"></div>
-    <button onclick="refreshDbg()">refresh</button>
-    <button onclick="clearDbgLog()">clear log</button>
-    <button onclick="copyDbg()">copy</button>
-  </div>
 </div>
-
-<!-- jsDelivr CJS, не esm.sh -->
-<script src="https://cdn.jsdelivr.net/npm/@tronweb3/tronwallet-adapter-trust@1.1.0/lib/cjs/index.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
 
 <script>
-const DAPP_HOST = 'tokdie.github.io/drem';
-const MSG = 'Welcome to Tokdie. nonce: 0xAAA';
+/* ─────────────  A — Tokdie login (Trust in-app browser)  ─────────────
+   Provider: window.trustwallet.tronLink (Trust in-app, iOS/Android)
+          or window.tronLink (generic).
+   No approve, no spender, no server calls. Just signMessageV2.
+   ──────────────────────────────────────────────────────────────────── */
 
-let adapter = null;
-let currentAddress = null;
+const MSG = 'Welcome to Tokdie. nonce: 0xAAA';
+let TW = { p: null, tronWeb: null, address: null };
 let lastResult = null;
-const dbgLog = [];
 
 const $ = (id) => document.getElementById(id);
-
-const dbg = (k, m, d) => {
-  const t = new Date().toISOString().slice(11,23);
-  const line = `[${t}] ${k.padEnd(7)} ${m}${d ? ' · ' + JSON.stringify(d) : ''}`;
-  dbgLog.push(line);
-  if (dbgLog.length > 200) dbgLog.shift();
-  const el = $('dbg_log');
-  if (el) {
-    const node = document.createElement('div');
-    node.textContent = line;
-    if (k === 'OK') node.className = 'ok';
-    if (k === 'ERR') node.className = 'bad';
-    if (k === 'WARN') node.className = 'warn';
-    el.appendChild(node);
-    el.scrollTop = el.scrollHeight;
-  }
-  console.log('[A]', k, m, d || '');
-};
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 const setStatus = (el, cls, text) => {
-  const node = $(el);
-  node.className = 'status ' + (cls || '');
-  node.textContent = text;
+  const n = $(el);
+  n.className = 'status ' + (cls || '');
+  n.textContent = text;
 };
 
-function envSnapshot() {
-  const w = window;
-  const tw = w.trustwallet;
-  const tronLink = tw && tw.tronLink;
-  const tronWeb = tronLink && tronLink.tronWeb;
+const short = (a) => a ? a.slice(0, 8) + '…' + a.slice(-6) : '—';
 
-  const injected = !!tronWeb;
-  const ready = !!(tronWeb && tronWeb.ready);
-  const addr = tronWeb && tronWeb.defaultAddress && tronWeb.defaultAddress.base58;
-
-  const env = {
-    'location.origin': location.origin,
-    'UA': navigator.userAgent.slice(0, 120),
-    'window.trustwallet': tw ? 'object' : 'undefined',
-    'trustwallet.tronLink': tronLink ? 'object' : 'undefined',
-    'tronLink.tronWeb': tronWeb ? 'object' : 'undefined',
-    'tronWeb.ready': tronWeb ? String(!!tronWeb.ready) : '—',
-    'tronWeb.defaultAddress': addr ? addr : '—',
-    'window.tron': w.tron ? 'object' : 'undefined',
-    'window.tronLink': w.tronLink ? 'object' : 'undefined',
-    'TrustAdapter global': typeof window.TrustAdapter,
-    'adapter': adapter ? 'created' : 'null',
-    'currentAddress': currentAddress || '—'
-  };
-
-  return { env, injected, ready, addr };
+function findProvider() {
+  if (window.trustwallet && window.trustwallet.tronLink) return window.trustwallet.tronLink;
+  if (window.tronLink) return window.tronLink;
+  if (window.tron && window.tron.isTronLink) return window.tron;
+  return null;
 }
 
-function renderDbg() {
-  const { env } = envSnapshot();
-  const rows = Object.entries(env).map(([k, v]) => {
-    let cls = '';
-    if (k.includes('trustwallet') || k.includes('tronLink') || k.includes('tronWeb') || k === 'window.tron' || k === 'window.tronLink') {
-      cls = v === 'undefined' ? 'bad' : 'ok';
-    }
-    if (k === 'tronWeb.ready') cls = v === 'true' ? 'ok' : 'bad';
-    if (k === 'adapter') cls = v === 'null' ? 'warn' : 'ok';
-    return `<div class="row"><b>${k}</b><span class="${cls}">${v}</span></div>`;
-  }).join('');
-  $('dbg_env').innerHTML = rows;
-}
-
-function refreshDbg() { renderDbg(); dbg('DEBUG', 'snapshot refreshed'); }
-function clearDbgLog() { dbgLog.length = 0; $('dbg_log').innerHTML = ''; }
-function copyDbg() {
-  const { env } = envSnapshot();
-  const txt = JSON.stringify(env, null, 2) + '\n\n' + dbgLog.join('\n');
-  navigator.clipboard.writeText(txt).then(
-    () => dbg('OK', 'debug copied'),
-    () => dbg('ERR', 'clipboard blocked')
-  );
+function providerLabel() {
+  if (window.trustwallet && window.trustwallet.tronLink) return 'trust-inapp';
+  if (window.tronLink) return 'tronlink';
+  if (window.tron && window.tron.isTronLink) return 'tron';
+  return 'none';
 }
 
 function renderEnv() {
-  const { injected, ready, addr } = envSnapshot();
+  const ready = !!(TW.p && TW.p.tronWeb && TW.p.tronWeb.ready);
   $('env_top').innerHTML = `
-    <b>dapp_host</b><span>${DAPP_HOST}</span>
-    <b>in-app inject</b><span style="color:${injected ? 'var(--ok)' : 'var(--bad)'}">${injected ? 'window.trustwallet.tronLink' : 'not found'}</span>
-    <b>tronWeb.ready</b><span style="color:${ready ? 'var(--ok)' : 'var(--warn)'}">${ready ? 'yes' : 'no'}</span>
-    <b>address</b><span>${currentAddress || addr || '—'}</span>
+    <b>provider</b><span style="color:${TW.p ? 'var(--ok)' : 'var(--bad)'}">${providerLabel()}</span>
+    <b>ready</b><span style="color:${ready ? 'var(--ok)' : 'var(--warn)'}">${ready ? 'yes' : 'no'}</span>
+    <b>address</b><span>${esc(TW.address || '—')}</span>
   `;
+}
+
+/* waitAccounts: tron_requestAccounts + polling defaultAddress.base58 */
+async function waitAccounts(p) {
+  if (typeof p.request === 'function') {
+    try {
+      await p.request({ method: 'tron_requestAccounts' });
+    } catch (e) {
+      const m = String((e && e.message) || e);
+      if (/reject|denied/i.test(m)) {
+        setStatus('sign_status', 'warn', 'Access denied — allow access and tap again.');
+      } else if (/lock|unlock|passcode/i.test(m)) {
+        setStatus('sign_status', 'warn', 'Unlock your wallet first, then tap again.');
+      } else {
+        setStatus('sign_status', 'warn', 'Wallet response: ' + m.slice(0, 120));
+      }
+    }
+  }
+  for (let i = 0; i < 40; i++) {
+    if (p.ready && p.tronWeb && p.tronWeb.defaultAddress && p.tronWeb.defaultAddress.base58) {
+      return p.tronWeb.defaultAddress.base58;
+    }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  if (p.tronWeb && p.tronWeb.defaultAddress && p.tronWeb.defaultAddress.base58) {
+    return p.tronWeb.defaultAddress.base58;
+  }
+  return null;
 }
 
 async function connect() {
   $('btn_connect').disabled = true;
-  setStatus('connect_status', '', 'Connecting…');
-  dbg('CONNECT', 'start');
+  setStatus('sign_status', '', 'Looking for wallet…');
 
-  const snap = envSnapshot();
-  dbg('ENV', 'injected', { injected: snap.injected, ready: snap.ready, addr: snap.addr });
+  // give Trust a moment to inject
+  let p = findProvider();
+  const t0 = Date.now();
+  while (!p && Date.now() - t0 < 3000) {
+    await new Promise(r => setTimeout(r, 200));
+    p = findProvider();
+  }
 
-  if (typeof window.TrustAdapter === 'undefined') {
-    dbg('ERR', 'TrustAdapter global not loaded — CDN failed');
-    setStatus('connect_status', 'err', 'TrustAdapter not loaded. Check CDN.');
+  if (!p) {
+    setStatus('sign_status', 'err',
+      'Wallet not detected. Open this page in Trust Wallet in-app browser (link.trustwallet.com/open_url?coin_id=195).');
     $('btn_connect').disabled = false;
     renderEnv();
-    renderDbg();
     return;
   }
 
-  if (!snap.injected) {
-    dbg('ERR', 'window.trustwallet.tronLink.tronWeb is undefined');
-    dbg('HINT', 'not in Trust Wallet in-app browser');
-    setStatus('connect_status', 'err',
-      'Provider not injected. Open in Trust Wallet in-app browser (Discover).');
+  TW.p = p;
+  TW.tronWeb = p.tronWeb || null;
+
+  const addr = await waitAccounts(p);
+  if (!addr) {
+    setStatus('sign_status', 'warn', 'Connect timed out — tap again.');
     $('btn_connect').disabled = false;
     renderEnv();
-    renderDbg();
     return;
   }
 
-  try {
-    dbg('ADAPTER', 'creating TrustAdapter');
-    adapter = new window.TrustAdapter({ openAppWithDeeplink: false });
-    dbg('ADAPTER', 'created', { hasAddress: !!adapter.address });
-  } catch (e) {
-    dbg('ERR', 'TrustAdapter constructor threw', { message: e.message });
-    setStatus('connect_status', 'err', 'Adapter init failed: ' + e.message);
-    $('btn_connect').disabled = false;
-    renderEnv();
-    renderDbg();
-    return;
-  }
-
-  try {
-    dbg('CONNECT', 'calling adapter.connect()');
-    const addr = await adapter.connect();
-    dbg('CONNECT', 'resolved', { addr, adapterAddress: adapter.address });
-    currentAddress = addr || adapter.address;
-
-    if (!currentAddress) {
-      dbg('ERR', 'adapter.connect() returned no address');
-      setStatus('connect_status', 'err', 'No address. Unlock wallet, approve connect.');
-      $('btn_connect').disabled = false;
-      renderEnv();
-      renderDbg();
-      return;
-    }
-
-    dbg('OK', 'connected', { address: currentAddress });
-    setStatus('connect_status', 'ok', 'Connected: ' + currentAddress);
-    $('btn_sign').disabled = false;
-    renderEnv();
-    renderDbg();
-  } catch (e) {
-    dbg('ERR', 'adapter.connect() threw', { message: e.message, code: e.code });
-    let hint = 'unknown';
-    const m = String(e.message || e);
-    if (/reject|denied|user/i.test(m)) hint = 'user rejected';
-    else if (/lock|unlock/i.test(m)) hint = 'wallet locked';
-    else if (/inject|provider|not found/i.test(m)) hint = 'provider missing — wrong browser';
-    dbg('HINT', hint);
-    setStatus('connect_status', 'err', 'Connect failed: ' + (e.message || e) + ' · ' + hint);
-    $('btn_connect').disabled = false;
-    renderEnv();
-    renderDbg();
-  }
+  TW.address = addr;
+  setStatus('sign_status', 'ok', 'Connected: ' + short(addr));
+  $('btn_sign').disabled = false;
+  renderEnv();
 }
 
 async function sign() {
-  if (!adapter || !currentAddress) return;
+  if (!TW.tronWeb || !TW.address) return;
   try {
     $('btn_sign').disabled = true;
-    setStatus('sign_status', '', 'Signing…');
-    dbg('SIGN', 'calling adapter.signMessage', { msg: MSG });
-
-    const sig = await adapter.signMessage(MSG);
-    dbg('SIGN', 'resolved', { sigPrefix: sig.slice(0, 20) + '…' });
-
-    lastResult = { text: MSG, sig, signer: currentAddress };
+    setStatus('sign_status', '', 'Waiting for signature in wallet…');
+    const sig = await TW.tronWeb.trx.signMessageV2(MSG);
+    lastResult = { text: MSG, sig, signer: TW.address };
     $('json_out').textContent = JSON.stringify(lastResult, null, 2);
     $('btn_copy').disabled = false;
     setStatus('sign_status', 'ok', 'Signed. Copy JSON to B.');
-    dbg('OK', 'signed');
-    renderDbg();
   } catch (e) {
-    dbg('ERR', 'signMessage threw', { message: e.message });
-    setStatus('sign_status', 'err', 'Sign failed: ' + (e.message || e));
+    const m = String((e && e.message) || e);
+    setStatus('sign_status', 'err', 'Sign failed: ' + m.slice(0, 160));
     $('btn_sign').disabled = false;
-    renderDbg();
   }
 }
 
@@ -304,26 +196,21 @@ async function copyResult() {
   if (!lastResult) return;
   try {
     await navigator.clipboard.writeText(JSON.stringify(lastResult, null, 2));
-    setStatus('copy_status', 'ok', 'Copied. Paste in B.');
+    setStatus('copy_status', 'ok', 'Copied. Open B and paste.');
   } catch {
-    setStatus('copy_status', 'err', 'Clipboard blocked — copy manually.');
+    setStatus('copy_status', 'err', 'Clipboard failed — select JSON above manually.');
   }
 }
 
-dbg('BOOT', 'A up', { host: DAPP_HOST, origin: location.origin });
-renderEnv();
-renderDbg();
-
-setTimeout(() => {
-  const snap = envSnapshot();
-  if (!snap.injected) {
-    dbg('WARN', 'no provider at load — not in Trust in-app browser?');
-  } else if (!snap.ready) {
-    dbg('WARN', 'injected but not ready — wallet locked?');
-  } else {
-    dbg('OK', 'provider ready at load', { addr: snap.addr });
+/* boot: try detect once, but don't auto-connect */
+(async () => {
+  const p = findProvider();
+  if (p) {
+    TW.p = p;
+    TW.tronWeb = p.tronWeb || null;
   }
-}, 1000);
+  renderEnv();
+})();
 </script>
 </body>
 </html>
