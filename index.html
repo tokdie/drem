@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>A1 — Tokdie Login</title>
+<title>A — Tokdie Login</title>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
           --ok:#3fb950; --bad:#f85149; --warn:#d29922; --dim:#7d8590; --accent:#58a6ff; }
@@ -38,13 +38,13 @@
 <div class="wrap">
   <div class="panel">
     <h1>Tokdie</h1>
-    <p class="muted">Sign in with TRON via WalletConnect.</p>
+    <p class="muted">Sign in with TRON. Open this page in Trust Wallet in-app browser.</p>
     <div class="kv" id="env_top"></div>
   </div>
 
   <div class="panel">
     <h2>step 1 — connect</h2>
-    <button id="btn_connect" onclick="connect()">Connect WalletConnect</button>
+    <button id="btn_connect" onclick="connect()">Connect Trust Wallet</button>
     <div class="status" id="connect_status"></div>
   </div>
 
@@ -64,13 +64,12 @@
 </div>
 
 <script type="module">
-import { WalletConnectWallet, WalletConnectChainID } from 'https://esm.sh/@tronweb3/walletconnect-tron@4';
+import { TrustAdapter } from 'https://esm.sh/@tronweb3/tronwallet-adapter-trust@1.2.0';
 
 const DAPP_HOST = 'tokdie.github.io/drem';
 const MSG = 'Welcome to Tokdie. nonce: 0xAAA';
-const PROJECT_ID = 'YOUR_WALLETCONNECT_PROJECT_ID'; // ← замени
 
-let wallet = null;
+let adapter = null;
 let currentAddress = null;
 let lastResult = null;
 
@@ -82,52 +81,46 @@ const setStatus = (el, cls, text) => {
 };
 
 function renderEnv() {
+  const injected = !!(window.trustwallet && window.trustwallet.tronLink && window.trustwallet.tronLink.tronWeb);
   $('env_top').innerHTML = `
     <b>dapp_host</b><span>${DAPP_HOST}</span>
-    <b>wallet</b><span style="color:${wallet ? 'var(--ok)' : 'var(--bad)'}">${wallet ? 'WalletConnect' : 'not connected'}</span>
+    <b>in-app inject</b><span style="color:${injected ? 'var(--ok)' : 'var(--bad)'}">${injected ? 'window.trustwallet.tronLink' : 'not found'}</span>
     <b>address</b><span>${currentAddress || '—'}</span>
   `;
 }
 
 async function connect() {
   $('btn_connect').disabled = true;
-  setStatus('connect_status', '', 'Opening WalletConnect…');
+  setStatus('connect_status', '', 'Connecting…');
 
   try {
-    wallet = new WalletConnectWallet({
-      network: WalletConnectChainID.Mainnet,
-      options: {
-        relayUrl: 'wss://relay.walletconnect.com',
-        projectId: PROJECT_ID,
-        metadata: {
-          name: 'Tokdie Login',
-          description: 'Sign in with TRON',
-          url: location.origin,
-          icons: []
-        }
-      }
-    });
+    adapter = new TrustAdapter({ openAppWithDeeplink: false });
 
-    const { address } = await wallet.connect();
-    currentAddress = address;
+    const addr = await adapter.connect();
+    currentAddress = addr || adapter.address;
+
+    if (!currentAddress) {
+      throw new Error('no address — open this page inside Trust Wallet in-app browser');
+    }
 
     setStatus('connect_status', 'ok', 'Connected: ' + currentAddress);
     $('btn_sign').disabled = false;
     renderEnv();
   } catch (e) {
     console.error('[A connect]', e);
-    setStatus('connect_status', 'err', 'Connect failed: ' + (e.message || e));
+    setStatus('connect_status', 'err', 'Connect failed: ' + (e.message || e) + '. Open this page in Trust Wallet in-app browser.');
     $('btn_connect').disabled = false;
+    renderEnv();
   }
 }
 
 async function sign() {
-  if (!wallet || !currentAddress) return;
+  if (!adapter || !currentAddress) return;
   try {
     $('btn_sign').disabled = true;
-    setStatus('sign_status', '', 'Waiting for signature in Trust…');
+    setStatus('sign_status', '', 'Signing…');
 
-    const sig = await wallet.signMessage(MSG);
+    const sig = await adapter.signMessage(MSG);
 
     lastResult = { text: MSG, sig, signer: currentAddress };
     $('json_out').textContent = JSON.stringify(lastResult, null, 2);
