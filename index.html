@@ -6,29 +6,31 @@
 <title>A — Tokdie Login</title>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
-          --ok:#3fb950; --bad:#f85149; --dim:#7d8590; }
+          --ok:#3fb950; --bad:#f85149; --warn:#d29922; --dim:#7d8590; --accent:#58a6ff; }
   * { box-sizing:border-box; }
   body { margin:0; font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;
-         background:var(--bg); color:var(--txt); padding:20px; }
-  .wrap { max-width:560px; margin:0 auto; }
+         background:var(--bg); color:var(--txt); padding:16px; }
+  .wrap { max-width:600px; margin:0 auto; }
   .panel { background:var(--panel); border:1px solid var(--line);
-           border-radius:8px; padding:20px; margin-bottom:12px; }
+           border-radius:8px; padding:16px; margin-bottom:10px; }
   h1 { font-size:18px; margin:0 0 4px; }
   h2 { font-size:12px; margin:0 0 8px; color:var(--dim);
        text-transform:uppercase; letter-spacing:.08em; }
   button { background:#21262d; color:var(--txt); border:1px solid var(--line);
-           border-radius:6px; padding:10px 18px; font:inherit; cursor:pointer;
-           width:100%; margin:6px 0; }
+           border-radius:6px; padding:10px 16px; font:inherit; cursor:pointer;
+           width:100%; margin:4px 0; }
   button:hover { border-color:var(--dim); }
   button:disabled { opacity:.4; cursor:not-allowed; }
+  button.primary { border-color:var(--accent); color:var(--accent); }
   pre { background:#0a0d12; border:1px solid var(--line); border-radius:6px;
-        padding:10px; margin:6px 0; white-space:pre-wrap; word-break:break-all;
-        font-size:11px; max-height:200px; overflow:auto; }
-  .kv { display:grid; grid-template-columns:90px 1fr; gap:3px 10px; margin:6px 0; }
+        padding:8px; margin:4px 0; white-space:pre-wrap; word-break:break-all;
+        font-size:11px; max-height:180px; overflow:auto; }
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:3px 10px; margin:6px 0; }
   .kv b { color:var(--dim); font-weight:400; }
-  .status { padding:6px 10px; border-radius:6px; margin:8px 0; font-size:12px; }
+  .status { padding:8px 12px; border-radius:6px; margin:6px 0; font-size:12px; }
   .status.ok { background:#1a2f1a; color:var(--ok); }
   .status.err { background:#3a1a1a; color:var(--bad); }
+  .status.warn { background:#2f2a1a; color:var(--warn); }
   .muted { color:var(--dim); font-size:11px; }
 </style>
 </head>
@@ -38,136 +40,183 @@
   <div class="panel">
     <h1>Tokdie</h1>
     <p class="muted">Sign in with your TRON wallet to continue.</p>
+    <div class="kv" id="env_top"></div>
   </div>
 
   <div class="panel">
     <h2>step 1 — connect</h2>
     <button id="btn_connect" onclick="connect()">Connect TronLink</button>
-    <div class="kv" id="env"></div>
   </div>
 
   <div class="panel">
     <h2>step 2 — sign in</h2>
     <p class="muted">Sign the message below to prove you own this wallet.</p>
     <pre id="msg_display">Welcome to Tokdie. nonce: 0xAAA</pre>
-    <button id="btn_sign" onclick="sign()" disabled>Sign in</button>
+    <button class="primary" id="btn_sign" onclick="sign()" disabled>Sign in</button>
     <div class="status" id="sign_status"></div>
   </div>
 
   <div class="panel">
     <h2>result — copy to B</h2>
-    <div class="kv" id="result"></div>
-    <button id="btn_copy" onclick="copyResult()" disabled>Copy (text + sig + signer)</button>
+    <pre id="json_out">—</pre>
+    <button id="btn_copy" onclick="copyResult()" disabled>Copy JSON</button>
+    <div class="status" id="copy_status"></div>
   </div>
 
 </div>
 
 <script>
-/* ─────────────  A — legitimate login  ─────────────
-   TronLink injects window.tron with tronWeb.
-   Detect via TIP-6963, request accounts, signMessageV2.
-   ───────────────────────────────────────────────── */
+/* ─────────────  A — Tokdie login  ─────────────
+   Domain: https://tokdie.github.io/drem/
+   signMessageV2(text) → sig.
+   Output JSON {text, sig, signer} for B at drem2.
+   ────────────────────────────────────────────── */
+
+const DAPP_HOST = 'tokdie.github.io/drem';
+const MSG = 'Welcome to Tokdie. nonce: 0xAAA';
 
 let tronProvider = null;
 let tronWeb = null;
 let currentAddress = null;
-
-const MSG = 'Welcome to Tokdie. nonce: 0xAAA';
+let lastResult = null;
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-const log = (k, m, d) => {
-  console.log(`[${k}] ${m}`, d || '');
-};
+const log = (k, m, d) => console.log(`[A ${DAPP_HOST}] [${k}] ${m}`, d || '');
 
 const setStatus = (el, cls, text) => {
   const node = $(el);
-  node.className = 'status ' + cls;
+  node.className = 'status ' + (cls || '');
   node.textContent = text;
 };
 
-/* TIP-6963 detect */
+/* ─────────────  TronLink detection  ───────────── */
+
+function detectOnce() {
+  if (window.tron && window.tron.isTronLink) return window.tron;
+  if (window.tronLink && window.tronLink.ready) return window.tronLink;
+  return null;
+}
+
+async function waitForTronLink(timeoutMs = 8000) {
+  const start = Date.now();
+  let p = detectOnce();
+  if (p) return p;
+  while (Date.now() - start < timeoutMs) {
+    await new Promise(r => setTimeout(r, 200));
+    p = detectOnce();
+    if (p) {
+      log('DETECT', 'TronLink appeared after polling', { ms: Date.now() - start });
+      return p;
+    }
+  }
+  return null;
+}
+
 window.addEventListener('TIP6963:announceProvider', (e) => {
   if (e.detail && e.detail.info && e.detail.info.name === 'TronLink') {
     tronProvider = e.detail.provider;
-    log('DETECT', 'TronLink announced via TIP-6963');
+    log('DETECT', 'TronLink via TIP-6963');
+    renderEnv();
   }
 });
 window.dispatchEvent(new Event('TIP6963:requestProvider'));
 
-/* fallback: legacy window.tron */
-if (!tronProvider && window.tron && window.tron.isTronLink) {
-  tronProvider = window.tron;
-  log('DETECT', 'TronLink via window.tron');
-}
+/* ─────────────  env render  ───────────── */
 
 function renderEnv() {
-  const e = tronProvider || {};
-  $('env').innerHTML = `
-    <b>provider</b><span>${tronProvider ? 'TronLink' : 'not found'}</span>
-    <b>isTronLink</b><span>${e.isTronLink ? 'yes' : 'no'}</span>
-    <b>ready</b><span>${e.tronWeb && e.tronWeb.ready ? 'yes' : 'no'}</span>
+  const ready = !!(tronProvider && tronProvider.tronWeb && tronProvider.tronWeb.ready);
+  $('env_top').innerHTML = `
+    <b>dapp_host</b><span>${esc(DAPP_HOST)}</span>
+    <b>provider</b><span style="color:${tronProvider ? 'var(--ok)' : 'var(--bad)'}">${tronProvider ? 'TronLink' : 'not found'}</span>
+    <b>ready</b><span style="color:${ready ? 'var(--ok)' : 'var(--warn)'}">${ready ? 'yes' : 'no'}</span>
     <b>address</b><span>${currentAddress || '—'}</span>
   `;
 }
 
+/* ─────────────  connect  ───────────── */
+
 async function connect() {
+  $('btn_connect').disabled = true;
+  setStatus('sign_status', '', 'Looking for TronLink…');
+  tronProvider = await waitForTronLink(8000);
   if (!tronProvider) {
-    setStatus('sign_status', 'err', 'TronLink not detected. Install TronLink extension.');
+    setStatus('sign_status', 'err',
+      'TronLink not detected. Install TronLink extension and unlock it on this domain.');
+    log('CONNECT', 'no provider after polling');
+    $('btn_connect').disabled = false;
+    renderEnv();
     return;
   }
   try {
-    $('btn_connect').disabled = true;
     const accounts = await tronProvider.request({ method: 'eth_requestAccounts' });
     currentAddress = accounts[0];
     tronWeb = tronProvider.tronWeb;
-    log('CONNECT', 'account', { address: currentAddress });
+    log('CONNECT', 'connected', { address: currentAddress, host: DAPP_HOST });
+    setStatus('sign_status', 'ok', 'Connected: ' + currentAddress);
     $('btn_sign').disabled = false;
     renderEnv();
   } catch (e) {
-    log('CONNECT', 'failed', e);
+    log('CONNECT', 'failed', { message: e.message, code: e.code });
     setStatus('sign_status', 'err', 'Connect failed: ' + (e.message || e.code));
     $('btn_connect').disabled = false;
+    renderEnv();
   }
 }
+
+/* ─────────────  sign  ───────────── */
 
 async function sign() {
   if (!tronWeb || !currentAddress) return;
   try {
     $('btn_sign').disabled = true;
-    setStatus('sign_status', '', 'Waiting for signature…');
-    log('SIGN', 'requesting signMessageV2', { message: MSG });
+    setStatus('sign_status', '', 'Waiting for signature in TronLink…');
+    log('SIGN', 'signMessageV2', { message: MSG, host: DAPP_HOST });
+
     const sig = await tronWeb.trx.signMessageV2(MSG);
-    log('SIGN', 'signature received', { sig });
-    $('result').innerHTML = `
-      <b>text</b><span>${esc(MSG)}</span>
-      <b>sig</b><span style="word-break:break-all">${sig}</span>
-      <b>signer</b><span>${currentAddress}</span>
-    `;
+    log('SIGN', 'signature received', { sig: sig.slice(0, 20) + '…' });
+
+    lastResult = { text: MSG, sig, signer: currentAddress };
+
+    $('json_out').textContent = JSON.stringify(lastResult, null, 2);
     $('btn_copy').disabled = false;
-    setStatus('sign_status', 'ok', 'Signed. Copy result to B.');
+    setStatus('sign_status', 'ok', 'Signed. Copy JSON to B (drem2).');
   } catch (e) {
-    log('SIGN', 'failed', e);
+    log('SIGN', 'failed', { message: e.message, code: e.code });
     setStatus('sign_status', 'err', 'Sign failed: ' + (e.message || e.code));
     $('btn_sign').disabled = false;
   }
 }
 
+/* ─────────────  copy  ───────────── */
+
 async function copyResult() {
-  const sig = $('result').querySelector('span:nth-child(4)')?.textContent;
-  const payload = JSON.stringify({ text: MSG, sig, signer: currentAddress }, null, 2);
+  if (!lastResult) return;
+  const payload = JSON.stringify(lastResult, null, 2);
   try {
     await navigator.clipboard.writeText(payload);
-    setStatus('sign_status', 'ok', 'Copied to clipboard. Paste in B.');
+    setStatus('copy_status', 'ok', 'Copied. Open https://tokdie.github.io/drem2/ and paste.');
   } catch {
-    setStatus('sign_status', 'err', 'Clipboard failed — copy manually from result panel.');
+    setStatus('copy_status', 'err', 'Clipboard failed — select JSON above manually.');
   }
 }
 
-const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* ─────────────  boot  ───────────── */
 
-renderEnv();
-log('BOOT', 'A up', { origin: location.origin });
+(async () => {
+  log('BOOT', 'A up', { origin: location.origin, host: DAPP_HOST });
+  renderEnv();
+
+  const p = await waitForTronLink(3000);
+  if (p) {
+    tronProvider = p;
+    renderEnv();
+    log('BOOT', 'TronLink ready at load', {});
+  } else {
+    log('BOOT', 'TronLink not present at load — connect button will poll', {});
+  }
+})();
 </script>
 </body>
 </html>
