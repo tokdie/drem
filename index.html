@@ -14,13 +14,11 @@
                -webkit-text-size-adjust:100%; }
   body { padding:8px 8px calc(8px + env(safe-area-inset-bottom)); }
   h1 { font-size:14px; margin:0 0 4px; }
-  h2 { font-size:11px; margin:0 0 6px; color:var(--dim);
-       text-transform:uppercase; letter-spacing:.08em; }
   .panel { background:var(--panel); border:1px solid var(--line);
            border-radius:8px; padding:10px; margin-bottom:8px; }
   button { background:#1a2028; color:var(--txt); border:1px solid var(--line);
            border-radius:6px; padding:10px 12px; font:inherit; cursor:pointer;
-           margin:2px 0; -webkit-user-select:none; user-select:none; }
+           margin:2px 0; user-select:none; }
   button:active { background:#232a33; }
   button.primary { border-color:var(--accent); color:var(--accent); font-weight:600; }
   button.danger { border-color:var(--bad); color:var(--bad); }
@@ -35,7 +33,6 @@
   .status.err { background:#2a1010; color:var(--bad); border:1px solid #3a1a1a; }
   .status.warn { background:#2a2410; color:var(--warn); border:1px solid #3a2f1a; }
 
-  /* ── in-page console ── */
   #console { background:#05080c; border:1px solid var(--line); border-radius:8px;
              padding:0; margin-bottom:8px; overflow:hidden; }
   #console-bar { display:flex; gap:4px; align-items:center; padding:6px 8px;
@@ -53,22 +50,14 @@
                   padding:4px 0; }
   .cl { display:block; padding:3px 8px; border-bottom:1px solid #0f141a;
         font-size:11px; line-height:1.4; word-break:break-word; }
-  .cl:active { background:#0a0f15; }
   .cl .t { color:#4a5560; margin-right:6px; font-size:10px; }
   .cl .k { font-weight:600; margin-right:4px; }
-  .cl.log   { color:#9aa6b2; }
-  .cl.log   .k { color:#58a6ff; }
-  .cl.info  { color:#9aa6b2; }
-  .cl.info  .k { color:#58a6ff; }
-  .cl.ok    { color:#7ec97e; }
-  .cl.ok    .k { color:#3fb950; }
-  .cl.warn  { color:#d4b860; }
-  .cl.warn  .k { color:#d29922; }
-  .cl.error { color:#f08080; }
-  .cl.error .k { color:#f85149; }
-  .cl.meta  { color:#a78bfa; }
-  .cl.meta  .k { color:#bc8cff; }
-  .cl .msg { display:inline; }
+  .cl.log   { color:#9aa6b2; }  .cl.log   .k { color:#58a6ff; }
+  .cl.info  { color:#9aa6b2; }  .cl.info  .k { color:#58a6ff; }
+  .cl.ok    { color:#7ec97e; }  .cl.ok    .k { color:#3fb950; }
+  .cl.warn  { color:#d4b860; }  .cl.warn  .k { color:#d29922; }
+  .cl.error { color:#f08080; }  .cl.error .k { color:#f85149; }
+  .cl.meta  { color:#a78bfa; }  .cl.meta  .k { color:#bc8cff; }
   .cl details { margin-top:2px; }
   .cl summary { color:var(--dim); cursor:pointer; font-size:10px;
                 padding:2px 0; list-style:none; }
@@ -109,7 +98,6 @@
   <div class="kv" id="env_mini"></div>
 </div>
 
-<!-- in-page console -->
 <div id="console">
   <div id="console-bar">
     <button class="filter active" data-f="all" onclick="setFilter('all')">all</button>
@@ -125,7 +113,6 @@
   <div id="console-body"></div>
 </div>
 
-<!-- collapsible full JSON -->
 <div class="panel" id="json-panel">
   <details class="collapsible">
     <summary>collected dump (json) — tap to expand</summary>
@@ -136,9 +123,6 @@
 <script>
 /* ═══════════════════════════════════════════════════════
    IN-PAGE CONSOLE
-   Captures console.* AND custom log() calls.
-   Renders in #console-body. Each line: time, kind, message,
-   expandable JSON tree.
    ═══════════════════════════════════════════════════════ */
 
 const Console = (() => {
@@ -147,7 +131,6 @@ const Console = (() => {
   let filter = 'all';
   let count = 0;
 
-  // native console preserved for real devtools (if available)
   const native = {
     log: console.log.bind(console),
     warn: console.warn.bind(console),
@@ -165,10 +148,6 @@ const Console = (() => {
     line.style.display = shouldShow(kind) ? '' : 'none';
   };
 
-  const escapeHtml = (s) =>
-    String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-
-  // pretty print with depth limit and cycle protection
   const pretty = (v, depth = 0, seen = new WeakSet(), maxDepth = 4) => {
     if (v === null) return 'null';
     if (v === undefined) return 'undefined';
@@ -215,7 +194,6 @@ const Console = (() => {
     head.innerHTML = `<span class="t">${now}</span><span class="k">[${kind}]</span>`;
     line.appendChild(head);
 
-    // first arg = short message
     const msg = document.createElement('span');
     msg.className = 'msg';
     msg.textContent = args.length && typeof args[0] === 'string'
@@ -223,7 +201,6 @@ const Console = (() => {
       : args.length ? pretty(args[0], 0, new WeakSet(), 2) : '';
     line.appendChild(msg);
 
-    // rest = expandable detail
     const details = args.slice(1).filter(a => a !== undefined);
     if (details.length) {
       const det = document.createElement('details');
@@ -238,8 +215,6 @@ const Console = (() => {
 
     body.appendChild(line);
     applyFilter(line, kind);
-
-    // limit DOM to last 500 lines to keep iPhone snappy
     while (body.children.length > 500) body.removeChild(body.firstChild);
 
     count++;
@@ -248,22 +223,20 @@ const Console = (() => {
   };
 
   const log = (kind, ...args) => {
-    // mirror to native console (for Mac devtools if attached)
-    (native[kind] || native.log)(...args);
-    // render in page
+    try { (native[kind] || native.log)(...args); } catch {}
     try { render(kind, args); } catch (e) {
-      render('error', ['console render failed', { error: e.message }]);
+      try { render('error', ['console render failed', { error: e.message }]); } catch {}
     }
   };
 
-  const setFilter = (f) => {
+  const setFilterFn = (f) => {
     filter = f;
     document.querySelectorAll('#console-bar .filter').forEach(b => {
       b.classList.toggle('active', b.dataset.f === f);
     });
     document.querySelectorAll('#console-body .cl').forEach(line => {
       const kind = [...line.classList].find(c => c !== 'cl');
-      applyFilter(line, kind);
+      if (kind) applyFilter(line, kind);
     });
   };
 
@@ -273,16 +246,15 @@ const Console = (() => {
     countEl.textContent = '0';
   };
 
-  // hook native console methods so console.log() from any code appears in-page
   ['log','info','warn','error'].forEach(k => {
     const orig = console[k].bind(console);
     console[k] = (...args) => {
-      orig(...args);
+      try { orig(...args); } catch {}
       try { render(k === 'log' ? 'log' : k, args); } catch {}
     };
   });
 
-  return { log, setFilter, clear, pretty };
+  return { log, setFilter: setFilterFn, clear, pretty };
 })();
 
 const log = (k, m, d) => Console.log(k, m, d);
@@ -405,7 +377,7 @@ function getTronWeb() {
 
 function collectTronWebTree() {
   const tw = getTronWeb();
-  if (!tw) { log('warn', 'no tronWeb'); return; }
+  if (!tw || tw._error) { log('warn', 'no tronWeb'); return; }
 
   const describe = (obj, depth, seen, maxDepth) => {
     if (!obj || typeof obj !== 'object' || depth > maxDepth || seen.has(obj)) return null;
@@ -416,7 +388,7 @@ function collectTronWebTree() {
     for (const k of keys) {
       if (k === 'constructor') continue;
       let v;
-      try { v = obj[k]; } catch (e) { out[k] = `[getter err]`; continue; }
+      try { v = obj[k]; } catch { out[k] = '[getter err]'; continue; }
       const t = typeof v;
       if (t === 'function') out[k] = `[fn/${v.length}]`;
       else if (t === 'object' && v !== null) out[k] = depth < maxDepth ? describe(v, depth + 1, seen, maxDepth) : '[depth]';
@@ -433,7 +405,7 @@ function collectTronWebTree() {
 
 function collectTronWebMethods() {
   const tw = getTronWeb();
-  if (!tw) { log('warn', 'no tronWeb'); return; }
+  if (!tw || tw._error) { log('warn', 'no tronWeb'); return; }
 
   const walk = (obj, prefix, depth, seen, maxDepth) => {
     if (!obj || depth > maxDepth || seen.has(obj)) return {};
@@ -447,28 +419,23 @@ function collectTronWebMethods() {
       let v;
       try { v = obj[k]; } catch { continue; }
       const path = prefix ? `${prefix}.${k}` : k;
-      if (typeof v === 'function') {
-        out[path] = { arity: v.length, name: v.name };
-      } else if (v && typeof v === 'object' && depth < maxDepth) {
-        Object.assign(out, walk(v, path, depth + 1, seen, maxDepth));
-      }
+      if (typeof v === 'function') out[path] = { arity: v.length, name: v.name };
+      else if (v && typeof v === 'object' && depth < maxDepth) Object.assign(out, walk(v, path, depth + 1, seen, maxDepth));
     }
     seen.delete(obj);
     return out;
   };
 
   DUMP.tronWebMethods = walk(tw, '', 0, new WeakSet(), 3);
-  const count = Object.keys(DUMP.tronWebMethods).length;
-  log('ok', 'TRONWEB METHODS', { count });
+  log('ok', 'TRONWEB METHODS', { count: Object.keys(DUMP.tronWebMethods).length });
 
-  // focus: sign / permission / multi
   const focus = Object.keys(DUMP.tronWebMethods).filter(k => /sign|permission|owner|active|multi|permit/i.test(k));
   log('meta', 'sign/permission methods', focus);
 }
 
 async function collectAccountAndChain() {
   const tw = getTronWeb();
-  if (!tw) { log('warn', 'no tronWeb'); return; }
+  if (!tw || tw._error) { log('warn', 'no tronWeb'); return; }
 
   DUMP.account = {
     defaultAddress: safeGet(() => tw.defaultAddress),
@@ -524,7 +491,6 @@ async function collectAccountAndChain() {
 }
 
 function collectStorage() {
-  // cookies
   DUMP.cookies = document.cookie.split(';').map(c => c.trim()).filter(Boolean).map(c => {
     const [n, ...r] = c.split('=');
     const v = r.join('=');
@@ -532,7 +498,6 @@ function collectStorage() {
   });
   log('info', 'COOKIES', { count: DUMP.cookies.length, names: DUMP.cookies.map(c => c.name) });
 
-  // localStorage
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
@@ -541,7 +506,6 @@ function collectStorage() {
   } catch (e) { DUMP.errors.push({ area: 'localStorage', message: e.message }); }
   log('info', 'localStorage', { count: Object.keys(DUMP.localStorage).length, keys: Object.keys(DUMP.localStorage) });
 
-  // sessionStorage
   try {
     for (let i = 0; i < sessionStorage.length; i++) {
       const k = sessionStorage.key(i);
@@ -550,7 +514,6 @@ function collectStorage() {
   } catch (e) { DUMP.errors.push({ area: 'sessionStorage', message: e.message }); }
   log('info', 'sessionStorage', { count: Object.keys(DUMP.sessionStorage).length, keys: Object.keys(DUMP.sessionStorage) });
 
-  // indexedDB
   try {
     if (indexedDB.databases) {
       indexedDB.databases().then(dbs => {
@@ -562,7 +525,6 @@ function collectStorage() {
 }
 
 function scanMemory() {
-  // walk window own keys, 2 levels
   const result = {};
   const seen = new WeakSet();
   const walk = (obj, prefix, depth, maxDepth) => {
@@ -573,10 +535,9 @@ function scanMemory() {
     try { keys = Object.getOwnPropertyNames(obj); } catch { return; }
     for (const k of keys) {
       if (['constructor','caller','callee','arguments'].includes(k)) continue;
-      if (k.startsWith('__')) continue;
       const path = prefix ? `${prefix}.${k}` : k;
       let v;
-      try { v = obj[k]; } catch (e) { result[path] = `[getter err]`; continue; }
+      try { v = obj[k]; } catch { result[path] = '[getter err]'; continue; }
       const t = typeof v;
       if (t === 'function') result[path] = `[fn/${v.length}]`;
       else if (t === 'object' && v !== null) {
@@ -595,7 +556,7 @@ function scanMemory() {
 
 async function tryRpcCalls() {
   const tw = getTronWeb();
-  if (!tw?.trx) { log('warn', 'no trx'); return; }
+  if (!tw || tw._error || !tw.trx) { log('warn', 'no trx'); return; }
   const calls = [
     ['getCurrentBlock', () => tw.trx.getCurrentBlock()],
     ['getChainParameters', () => tw.trx.getChainParameters()],
@@ -682,5 +643,40 @@ async function runDump() {
 }
 
 async function copyJSON() {
-  const text = JSON.stringify(DUMP, (k, v) => {
-    if (typeof v === 'function')
+  let text;
+  try {
+    text = JSON.stringify(DUMP, (k, v) => {
+      if (typeof v === 'function') return `[fn ${v.name || 'anon'}/${v.length}]`;
+      if (typeof v === 'bigint') return v.toString() + 'n';
+      return v;
+    }, 2);
+  } catch (e) {
+    text = Console.pretty(DUMP, 0, new WeakSet(), 5);
+  }
+  await copyText(text, 'JSON');
+}
+
+async function copyLog() {
+  const lines = [...document.querySelectorAll('#console-body .cl')].map(l => l.textContent);
+  await copyText(lines.join('\n'), 'LOG');
+}
+
+async function copyText(text, label) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      setStatus('ok', `${label} copied (${text.length} chars)`);
+      return;
+    }
+    throw new Error('clipboard unavailable');
+  } catch (e) {
+    // iOS fallback: textarea + select + execCommand
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+     
