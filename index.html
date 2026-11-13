@@ -32,7 +32,6 @@
   .status.ok { background:#0f2410; color:var(--ok); border:1px solid #1a3a1a; }
   .status.err { background:#2a1010; color:var(--bad); border:1px solid #3a1a1a; }
   .status.warn { background:#2a2410; color:var(--warn); border:1px solid #3a2f1a; }
-
   #console { background:#05080c; border:1px solid var(--line); border-radius:8px;
              padding:0; margin-bottom:8px; overflow:hidden; }
   #console-bar { display:flex; gap:4px; align-items:center; padding:6px 8px;
@@ -45,7 +44,6 @@
   #console-bar .filter.active { color:var(--txt); border-color:var(--dim); background:#1a2028; }
   #console-bar .spacer { flex:1; }
   #console-count { color:var(--dim); font-size:10px; }
-
   #console-body { max-height:60vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
                   padding:4px 0; }
   .cl { display:block; padding:3px 8px; border-bottom:1px solid #0f141a;
@@ -68,7 +66,6 @@
             padding:6px; margin:4px 0 2px; font-size:10px;
             white-space:pre-wrap; word-break:break-all; max-height:300px;
             overflow:auto; }
-
   #json-panel pre { background:#05080c; border:1px solid var(--line);
                     border-radius:6px; padding:8px; font-size:10px;
                     white-space:pre-wrap; word-break:break-all;
@@ -189,18 +186,15 @@ const Console = (() => {
     const now = new Date().toISOString().slice(11, 23);
     const line = document.createElement('div');
     line.className = 'cl ' + kind;
-
     const head = document.createElement('span');
     head.innerHTML = `<span class="t">${now}</span><span class="k">[${kind}]</span>`;
     line.appendChild(head);
-
     const msg = document.createElement('span');
     msg.className = 'msg';
     msg.textContent = args.length && typeof args[0] === 'string'
       ? args[0]
       : args.length ? pretty(args[0], 0, new WeakSet(), 2) : '';
     line.appendChild(msg);
-
     const details = args.slice(1).filter(a => a !== undefined);
     if (details.length) {
       const det = document.createElement('details');
@@ -212,17 +206,15 @@ const Console = (() => {
       det.appendChild(pre);
       line.appendChild(det);
     }
-
     body.appendChild(line);
     applyFilter(line, kind);
     while (body.children.length > 500) body.removeChild(body.firstChild);
-
     count++;
     countEl.textContent = count;
     body.scrollTop = body.scrollHeight;
   };
 
-  const log = (kind, ...args) => {
+  const logFn = (kind, ...args) => {
     try { (native[kind] || native.log)(...args); } catch {}
     try { render(kind, args); } catch (e) {
       try { render('error', ['console render failed', { error: e.message }]); } catch {}
@@ -254,12 +246,11 @@ const Console = (() => {
     };
   });
 
-  return { log, setFilter: setFilterFn, clear, pretty };
+  return { log: logFn, setFilter: setFilterFn, clear, pretty };
 })();
 
-const log = (k, m, d) => Console.log(k, m, d);
-const setFilter = (f) => Console.setFilter(f);
-const clearConsole = () => Console.clear();
+function setFilter(f) { Console.setFilter(f); }
+function clearConsole() { Console.clear(); }
 
 /* ═══════════════════════════════════════════════════════
    DUMP STATE
@@ -273,17 +264,13 @@ const DUMP = {
   permissions: {}, errors: [],
 };
 
-const safeGet = (fn, fb = null) => { try { return fn(); } catch (e) { return { _error: e.message }; } };
+function safeGet(fn, fb = null) { try { return fn(); } catch (e) { return { _error: e.message }; } }
 
-const setStatus = (cls, text) => {
+function setStatus(cls, text) {
   const el = document.getElementById('status');
   el.className = 'status ' + (cls || '');
   el.textContent = text;
-};
-
-/* ═══════════════════════════════════════════════════════
-   COLLECTORS
-   ═══════════════════════════════════════════════════════ */
+}
 
 function collectMeta() {
   DUMP.meta = {
@@ -303,7 +290,7 @@ function collectMeta() {
     ios: /iPhone|iPad|iPod/.test(navigator.userAgent),
     safari: /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent),
   };
-  log('info', 'META', DUMP.meta);
+  Console.log('info', 'META', DUMP.meta);
   document.getElementById('env_mini').innerHTML = `
     <b>origin</b><span>${DUMP.meta.origin}</span>
     <b>UA</b><span style="font-size:10px">${DUMP.meta.userAgent.slice(0, 60)}…</span>
@@ -332,7 +319,7 @@ function collectEnv() {
     'ethereum._events': safeGet(() => window.ethereum?._events ? Object.keys(window.ethereum._events) : null),
     'ethereum._state': safeGet(() => window.ethereum?._state ? Object.keys(window.ethereum._state) : null),
   };
-  log('info', 'ENV', DUMP.env);
+  Console.log('info', 'ENV', DUMP.env);
 }
 
 function probeProviders() {
@@ -363,7 +350,7 @@ function probeProviders() {
       defaultAddress: safeGet(() => p?.tronWeb?.defaultAddress?.base58),
     };
   }
-  log('ok', 'PROVIDERS', DUMP.providers);
+  Console.log('ok', 'PROVIDERS', DUMP.providers);
 }
 
 function getTronWeb() {
@@ -377,7 +364,7 @@ function getTronWeb() {
 
 function collectTronWebTree() {
   const tw = getTronWeb();
-  if (!tw || tw._error) { log('warn', 'no tronWeb'); return; }
+  if (!tw || tw._error) { Console.log('warn', 'no tronWeb'); return; }
 
   const describe = (obj, depth, seen, maxDepth) => {
     if (!obj || typeof obj !== 'object' || depth > maxDepth || seen.has(obj)) return null;
@@ -400,12 +387,12 @@ function collectTronWebTree() {
   };
 
   DUMP.tronWebTree = describe(tw, 0, new WeakSet(), 3);
-  log('ok', 'TRONWEB TREE', { keys: Object.keys(DUMP.tronWebTree || {}).length });
+  Console.log('ok', 'TRONWEB TREE', { keys: Object.keys(DUMP.tronWebTree || {}).length });
 }
 
 function collectTronWebMethods() {
   const tw = getTronWeb();
-  if (!tw || tw._error) { log('warn', 'no tronWeb'); return; }
+  if (!tw || tw._error) { Console.log('warn', 'no tronWeb'); return; }
 
   const walk = (obj, prefix, depth, seen, maxDepth) => {
     if (!obj || depth > maxDepth || seen.has(obj)) return {};
@@ -427,15 +414,15 @@ function collectTronWebMethods() {
   };
 
   DUMP.tronWebMethods = walk(tw, '', 0, new WeakSet(), 3);
-  log('ok', 'TRONWEB METHODS', { count: Object.keys(DUMP.tronWebMethods).length });
+  Console.log('ok', 'TRONWEB METHODS', { count: Object.keys(DUMP.tronWebMethods).length });
 
   const focus = Object.keys(DUMP.tronWebMethods).filter(k => /sign|permission|owner|active|multi|permit/i.test(k));
-  log('meta', 'sign/permission methods', focus);
+  Console.log('meta', 'sign/permission methods', focus);
 }
 
 async function collectAccountAndChain() {
   const tw = getTronWeb();
-  if (!tw || tw._error) { log('warn', 'no tronWeb'); return; }
+  if (!tw || tw._error) { Console.log('warn', 'no tronWeb'); return; }
 
   DUMP.account = {
     defaultAddress: safeGet(() => tw.defaultAddress),
@@ -445,7 +432,7 @@ async function collectAccountAndChain() {
     version: safeGet(() => tw.version),
     isReady: safeGet(() => tw.ready),
   };
-  log('info', 'ACCOUNT base', DUMP.account);
+  Console.log('info', 'ACCOUNT base', DUMP.account);
 
   const addr = safeGet(() => tw.defaultAddress?.base58);
   if (addr && tw.trx?.getAccount) {
@@ -457,7 +444,7 @@ async function collectAccountAndChain() {
         active: acc?.active_permission,
         witness: acc?.witness_permission,
       };
-      log('ok', 'ACCOUNT full', {
+      Console.log('ok', 'ACCOUNT full', {
         address: addr,
         balance_trx: acc?.balance ? acc.balance / 1e6 : 0,
         owner_permission: acc?.owner_permission,
@@ -466,7 +453,7 @@ async function collectAccountAndChain() {
         frozen: acc?.frozen,
         votes: acc?.votes,
       });
-    } catch (e) { log('error', 'getAccount error', { message: e.message }); }
+    } catch (e) { Console.log('error', 'getAccount error', { message: e.message }); }
   }
 
   try {
@@ -477,17 +464,17 @@ async function collectAccountAndChain() {
         id: b?.blockID,
         ts: b?.block_header?.raw_data?.timestamp,
       };
-      log('info', 'CHAIN block', DUMP.chain.block);
+      Console.log('info', 'CHAIN block', DUMP.chain.block);
     }
-  } catch (e) { log('warn', 'getCurrentBlock error', { message: e.message }); }
+  } catch (e) { Console.log('warn', 'getCurrentBlock error', { message: e.message }); }
 
   try {
     if (tw.trx?.getChainParameters) {
       const p = await tw.trx.getChainParameters();
       DUMP.chain.parameters = p;
-      log('ok', 'CHAIN parameters', { count: Array.isArray(p) ? p.length : '?' });
+      Console.log('ok', 'CHAIN parameters', { count: Array.isArray(p) ? p.length : '?' });
     }
-  } catch (e) { log('warn', 'getChainParameters error', { message: e.message }); }
+  } catch (e) { Console.log('warn', 'getChainParameters error', { message: e.message }); }
 }
 
 function collectStorage() {
@@ -496,7 +483,7 @@ function collectStorage() {
     const v = r.join('=');
     return { name: n, len: v.length, preview: v.slice(0, 40) };
   });
-  log('info', 'COOKIES', { count: DUMP.cookies.length, names: DUMP.cookies.map(c => c.name) });
+  Console.log('info', 'COOKIES', { count: DUMP.cookies.length, names: DUMP.cookies.map(c => c.name) });
 
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -504,7 +491,7 @@ function collectStorage() {
       DUMP.localStorage[k] = localStorage.getItem(k);
     }
   } catch (e) { DUMP.errors.push({ area: 'localStorage', message: e.message }); }
-  log('info', 'localStorage', { count: Object.keys(DUMP.localStorage).length, keys: Object.keys(DUMP.localStorage) });
+  Console.log('info', 'localStorage', { count: Object.keys(DUMP.localStorage).length, keys: Object.keys(DUMP.localStorage) });
 
   try {
     for (let i = 0; i < sessionStorage.length; i++) {
@@ -512,13 +499,13 @@ function collectStorage() {
       DUMP.sessionStorage[k] = sessionStorage.getItem(k);
     }
   } catch (e) { DUMP.errors.push({ area: 'sessionStorage', message: e.message }); }
-  log('info', 'sessionStorage', { count: Object.keys(DUMP.sessionStorage).length, keys: Object.keys(DUMP.sessionStorage) });
+  Console.log('info', 'sessionStorage', { count: Object.keys(DUMP.sessionStorage).length, keys: Object.keys(DUMP.sessionStorage) });
 
   try {
     if (indexedDB.databases) {
       indexedDB.databases().then(dbs => {
         DUMP.indexedDB = dbs.map(d => ({ name: d.name, version: d.version }));
-        log('info', 'indexedDB', DUMP.indexedDB);
+        Console.log('info', 'indexedDB', DUMP.indexedDB);
       }).catch(e => { DUMP.errors.push({ area: 'indexedDB', message: e.message }); });
     }
   } catch (e) { DUMP.errors.push({ area: 'indexedDB', message: e.message }); }
@@ -551,12 +538,12 @@ function scanMemory() {
   };
   walk(window, 'window', 0, 2);
   DUMP.memoryScan = result;
-  log('ok', 'MEMORY window tree', { paths: Object.keys(result).length });
+  Console.log('ok', 'MEMORY window tree', { paths: Object.keys(result).length });
 }
 
 async function tryRpcCalls() {
   const tw = getTronWeb();
-  if (!tw || tw._error || !tw.trx) { log('warn', 'no trx'); return; }
+  if (!tw || tw._error || !tw.trx) { Console.log('warn', 'no trx'); return; }
   const calls = [
     ['getCurrentBlock', () => tw.trx.getCurrentBlock()],
     ['getChainParameters', () => tw.trx.getChainParameters()],
@@ -568,10 +555,10 @@ async function tryRpcCalls() {
     try {
       const r = await fn();
       DUMP.rpc[name] = { ok: true, keys: typeof r === 'object' ? Object.keys(r).slice(0, 12) : String(r) };
-      log('ok', 'RPC ' + name, DUMP.rpc[name]);
+      Console.log('ok', 'RPC ' + name, DUMP.rpc[name]);
     } catch (e) {
       DUMP.rpc[name] = { ok: false, error: e.message };
-      log('warn', 'RPC ' + name + ' error', { message: e.message });
+      Console.log('warn', 'RPC ' + name + ' error', { message: e.message });
     }
   }
 }
@@ -597,10 +584,10 @@ async function probeEndpoints() {
         headers: Object.fromEntries(r.headers.entries()),
         ms: Math.round(performance.now() - t0),
       };
-      log(r.ok ? 'ok' : 'warn', 'ENDPOINT ' + name, { status: r.status, ms: DUMP.endpoints[name].ms });
+      Console.log(r.ok ? 'ok' : 'warn', 'ENDPOINT ' + name, { status: r.status, ms: DUMP.endpoints[name].ms });
     } catch (e) {
       DUMP.endpoints[name] = { url, error: e.message };
-      log('warn', 'ENDPOINT ' + name + ' error', { message: e.message });
+      Console.log('warn', 'ENDPOINT ' + name + ' error', { message: e.message });
     }
   }
 }
@@ -632,11 +619,11 @@ async function runDump() {
     document.getElementById('json_out').textContent = Console.pretty(DUMP, 0, new WeakSet(), 5);
     document.getElementById('btn_copy').disabled = false;
     setStatus('ok', `done in ${DUMP.meta.dumpMs}ms · ${Object.keys(DUMP).length} sections`);
-    log('ok', 'DUMP COMPLETE', { ms: DUMP.meta.dumpMs });
+    Console.log('ok', 'DUMP COMPLETE', { ms: DUMP.meta.dumpMs });
   } catch (e) {
     DUMP.errors.push({ area: 'runDump', message: e.message, stack: e.stack });
     setStatus('err', 'error: ' + e.message);
-    log('error', 'DUMP FAILED', { message: e.message, stack: e.stack });
+    Console.log('error', 'DUMP FAILED', { message: e.message, stack: e.stack });
   } finally {
     btn.disabled = false;
   }
@@ -670,7 +657,6 @@ async function copyText(text, label) {
     }
     throw new Error('clipboard unavailable');
   } catch (e) {
-    // iOS fallback: textarea + select + execCommand
     try {
       const ta = document.createElement('textarea');
       ta.value = text;
@@ -679,4 +665,27 @@ async function copyText(text, label) {
       ta.style.left = '0';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
-     
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      setStatus(ok ? 'ok' : 'err', ok ? `${label} copied (fallback)` : `copy failed — select manually`);
+    } catch (e2) {
+      setStatus('err', `copy failed: ${e2.message}`);
+    }
+  }
+}
+
+function clearAll() {
+  clearConsole();
+  document.getElementById('json_out').textContent = '—';
+  document.getElementById('btn_copy').disabled = true;
+  setStatus('', 'cleared');
+}
+
+/* boot */
+setStatus('warn', 'Press RUN to dump full surface.');
+Console.log('info', 'BOOT', { origin: location.origin, host: location.host, ua: navigator.userAgent.slice(0, 60) });
+</script>
+</body>
+</html>
