@@ -66,11 +66,11 @@
 </div>
 
 <script>
-/* ─────────────  A — Tokdie login  ─────────────
+/* ─────────────  A — Tokdie login (TRON)  ─────────────
    Domain: https://tokdie.github.io/drem/
-   signMessageV2(text) → sig.
+   Connect via TronLink (tron_requestAccounts), sign via signMessageV2.
    Output JSON {text, sig, signer} for B at drem2.
-   ────────────────────────────────────────────── */
+   ─────────────────────────────────────────────────── */
 
 const DAPP_HOST = 'tokdie.github.io/drem';
 const MSG = 'Welcome to Tokdie. nonce: 0xAAA';
@@ -94,6 +94,7 @@ const setStatus = (el, cls, text) => {
 /* ─────────────  TronLink detection  ───────────── */
 
 function detectOnce() {
+  // TronLink injects window.tron + window.tronWeb
   if (window.tron && window.tron.isTronLink) return window.tron;
   if (window.tronLink && window.tronLink.ready) return window.tronLink;
   return null;
@@ -126,11 +127,11 @@ window.dispatchEvent(new Event('TIP6963:requestProvider'));
 /* ─────────────  env render  ───────────── */
 
 function renderEnv() {
-  const ready = !!(tronProvider && tronProvider.tronWeb && tronProvider.tronWeb.ready);
+  const ready = !!(tronWeb && tronWeb.ready);
   $('env_top').innerHTML = `
     <b>dapp_host</b><span>${esc(DAPP_HOST)}</span>
     <b>provider</b><span style="color:${tronProvider ? 'var(--ok)' : 'var(--bad)'}">${tronProvider ? 'TronLink' : 'not found'}</span>
-    <b>ready</b><span style="color:${ready ? 'var(--ok)' : 'var(--warn)'}">${ready ? 'yes' : 'no'}</span>
+    <b>tronWeb.ready</b><span style="color:${ready ? 'var(--ok)' : 'var(--warn)'}">${ready ? 'yes' : 'no'}</span>
     <b>address</b><span>${currentAddress || '—'}</span>
   `;
 }
@@ -140,20 +141,46 @@ function renderEnv() {
 async function connect() {
   $('btn_connect').disabled = true;
   setStatus('sign_status', '', 'Looking for TronLink…');
+
   tronProvider = await waitForTronLink(8000);
   if (!tronProvider) {
     setStatus('sign_status', 'err',
-      'TronLink not detected. Install TronLink extension and unlock it on this domain.');
+      'TronLink not detected. Install TronLink extension, unlock it, and reload.');
     log('CONNECT', 'no provider after polling');
     $('btn_connect').disabled = false;
     renderEnv();
     return;
   }
+
   try {
-    const accounts = await tronProvider.request({ method: 'eth_requestAccounts' });
-    currentAddress = accounts[0];
+    // TRON-specific account request
+    if (tronProvider.request) {
+      try {
+        await tronProvider.request({ method: 'tron_requestAccounts' });
+      } catch (e) {
+        log('CONNECT', 'tron_requestAccounts threw (may be already authorized)', { message: e.message });
+      }
+    }
+
     tronWeb = tronProvider.tronWeb;
-    log('CONNECT', 'connected', { address: currentAddress, host: DAPP_HOST });
+    if (!tronWeb) {
+      throw new Error('tronWeb missing on provider');
+    }
+
+    // wait for tronWeb.ready
+    let waited = 0;
+    while (!tronWeb.ready && waited < 4000) {
+      await new Promise(r => setTimeout(r, 150));
+      waited += 150;
+    }
+
+    const addr = tronWeb.defaultAddress && tronWeb.defaultAddress.base58;
+    if (!addr) {
+      throw new Error('no address — unlock TronLink and allow this site');
+    }
+
+    currentAddress = addr;
+    log('CONNECT', 'connected', { address: currentAddress, ready: tronWeb.ready });
     setStatus('sign_status', 'ok', 'Connected: ' + currentAddress);
     $('btn_sign').disabled = false;
     renderEnv();
@@ -172,10 +199,22 @@ async function sign() {
   try {
     $('btn_sign').disabled = true;
     setStatus('sign_status', '', 'Waiting for signature in TronLink…');
-    log('SIGN', 'signMessageV2', { message: MSG, host: DAPP_HOST });
+    log('SIGN', 'signing', { message: MSG, host: DAPP_HOST });
 
-    const sig = await tronWeb.trx.signMessageV2(MSG);
-    log('SIGN', 'signature received', { sig: sig.slice(0, 20) + '…' });
+    let sig;
+    if (typeof tronWeb.trx.signMessageV2 === 'function') {
+      sig = await tronWeb.trx.signMessageV2(MSG);
+    } else if (typeof tronWeb.trx.signMessage === 'function') {
+      // legacy fallback
+      sig = await tronWeb.trx.signMessage(MSG);
+      log('SIGN', 'used legacy signMessage');
+    } else {
+      throw new Error('signMessageV2 not available on this TronLink');
+    }
+
+    if (!sig) throw new Error('empty signature');
+
+    log('SIGN', 'signature received', { prefix: sig.slice(0, 20) + '…', len: sig.length });
 
     lastResult = { text: MSG, sig, signer: currentAddress };
 
@@ -198,7 +237,7 @@ async function copyResult() {
     await navigator.clipboard.writeText(payload);
     setStatus('copy_status', 'ok', 'Copied. Open https://tokdie.github.io/drem2/ and paste.');
   } catch {
-    setStatus('copy_status', 'err', 'Clipboard failed — select JSON above manually.');
+    setStatus('copy_status', 'err', 'Clipboard blocked — select JSON manually.');
   }
 }
 
@@ -211,10 +250,15 @@ async function copyResult() {
   const p = await waitForTronLink(3000);
   if (p) {
     tronProvider = p;
+    tronWeb = p.tronWeb || null;
+    if (tronWeb && tronWeb.defaultAddress && tronWeb.defaultAddress.base58) {
+      currentAddress = tronWeb.defaultAddress.base58;
+      $('btn_sign').disabled = false;
+    }
     renderEnv();
-    log('BOOT', 'TronLink ready at load', {});
+    log('BOOT', 'TronLink ready at load', { address: currentAddress });
   } else {
-    log('BOOT', 'TronLink not present at load — connect button will poll', {});
+    log('BOOT', 'TronLink not present at load — connect button will poll');
   }
 })();
 </script>
