@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>A — Tokdie Login</title>
+<title>A1 — Tokdie Login (WalletConnect TRON)</title>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
           --ok:#3fb950; --bad:#f85149; --warn:#d29922; --dim:#7d8590; --accent:#58a6ff; }
@@ -24,7 +24,7 @@
   button.primary { border-color:var(--accent); color:var(--accent); }
   pre { background:#0a0d12; border:1px solid var(--line); border-radius:6px;
         padding:8px; margin:4px 0; white-space:pre-wrap; word-break:break-all;
-        font-size:11px; max-height:180px; overflow:auto; }
+        font-size:11px; max-height:160px; overflow:auto; }
   .kv { display:grid; grid-template-columns:110px 1fr; gap:3px 10px; margin:6px 0; }
   .kv b { color:var(--dim); font-weight:400; }
   .status { padding:8px 12px; border-radius:6px; margin:6px 0; font-size:12px; }
@@ -39,13 +39,13 @@
 
   <div class="panel">
     <h1>Tokdie</h1>
-    <p class="muted">Sign in with your TRON wallet to continue.</p>
+    <p class="muted">Sign in with your TRON wallet via WalletConnect.</p>
     <div class="kv" id="env_top"></div>
   </div>
 
   <div class="panel">
     <h2>step 1 — connect</h2>
-    <button id="btn_connect" onclick="connect()">Connect TronLink</button>
+    <button id="btn_connect" onclick="connect()">Connect WalletConnect</button>
   </div>
 
   <div class="panel">
@@ -65,18 +65,14 @@
 
 </div>
 
-<script>
-/* ─────────────  A — Tokdie login (TRON)  ─────────────
-   Domain: https://tokdie.github.io/drem/
-   Connect via TronLink (tron_requestAccounts), sign via signMessageV2.
-   Output JSON {text, sig, signer} for B at drem2.
-   ─────────────────────────────────────────────────── */
+<script type="module">
+import { UniversalProvider } from 'https://esm.sh/@walletconnect/universal-provider@2.17.0';
 
 const DAPP_HOST = 'tokdie.github.io/drem';
 const MSG = 'Welcome to Tokdie. nonce: 0xAAA';
+const TRON_CHAIN = 'tron:0x2b6653dc'; // mainnet
 
-let tronProvider = null;
-let tronWeb = null;
+let provider = null;
 let currentAddress = null;
 let lastResult = null;
 
@@ -91,136 +87,80 @@ const setStatus = (el, cls, text) => {
   node.textContent = text;
 };
 
-/* ─────────────  TronLink detection  ───────────── */
-
-function detectOnce() {
-  // TronLink injects window.tron + window.tronWeb
-  if (window.tron && window.tron.isTronLink) return window.tron;
-  if (window.tronLink && window.tronLink.ready) return window.tronLink;
-  return null;
-}
-
-async function waitForTronLink(timeoutMs = 8000) {
-  const start = Date.now();
-  let p = detectOnce();
-  if (p) return p;
-  while (Date.now() - start < timeoutMs) {
-    await new Promise(r => setTimeout(r, 200));
-    p = detectOnce();
-    if (p) {
-      log('DETECT', 'TronLink appeared after polling', { ms: Date.now() - start });
-      return p;
-    }
-  }
-  return null;
-}
-
-window.addEventListener('TIP6963:announceProvider', (e) => {
-  if (e.detail && e.detail.info && e.detail.info.name === 'TronLink') {
-    tronProvider = e.detail.provider;
-    log('DETECT', 'TronLink via TIP-6963');
-    renderEnv();
-  }
-});
-window.dispatchEvent(new Event('TIP6963:requestProvider'));
-
-/* ─────────────  env render  ───────────── */
-
 function renderEnv() {
-  const ready = !!(tronWeb && tronWeb.ready);
   $('env_top').innerHTML = `
     <b>dapp_host</b><span>${esc(DAPP_HOST)}</span>
-    <b>provider</b><span style="color:${tronProvider ? 'var(--ok)' : 'var(--bad)'}">${tronProvider ? 'TronLink' : 'not found'}</span>
-    <b>tronWeb.ready</b><span style="color:${ready ? 'var(--ok)' : 'var(--warn)'}">${ready ? 'yes' : 'no'}</span>
+    <b>provider</b><span style="color:${provider ? 'var(--ok)' : 'var(--bad)'}">${provider ? 'WalletConnect' : 'not connected'}</span>
     <b>address</b><span>${currentAddress || '—'}</span>
   `;
 }
 
-/* ─────────────  connect  ───────────── */
-
 async function connect() {
   $('btn_connect').disabled = true;
-  setStatus('sign_status', '', 'Looking for TronLink…');
-
-  tronProvider = await waitForTronLink(8000);
-  if (!tronProvider) {
-    setStatus('sign_status', 'err',
-      'TronLink not detected. Install TronLink extension, unlock it, and reload.');
-    log('CONNECT', 'no provider after polling');
-    $('btn_connect').disabled = false;
-    renderEnv();
-    return;
-  }
-
+  setStatus('sign_status', '', 'Opening WalletConnect…');
   try {
-    // TRON-specific account request
-    if (tronProvider.request) {
-      try {
-        await tronProvider.request({ method: 'tron_requestAccounts' });
-      } catch (e) {
-        log('CONNECT', 'tron_requestAccounts threw (may be already authorized)', { message: e.message });
+    provider = await UniversalProvider.init({
+      projectId: 'YOUR_WALLETCONNECT_PROJECT_ID', // ← замени на свой projectId
+      metadata: {
+        name: 'Tokdie Login',
+        description: 'Sign in with TRON',
+        url: location.origin,
+        icons: []
       }
+    });
+
+    // Required namespaces for TRON
+    const { uri, approval } = await provider.client.connect({
+      requiredNamespaces: {
+        tron: {
+          chains: [TRON_CHAIN],
+          methods: ['tron_signMessage'],
+          events: []
+        }
+      }
+    });
+
+    if (uri) {
+      // show QR via WalletConnect modal, or simple text
+      log('CONNECT', 'uri', { uri });
+      setStatus('sign_status', 'warn', 'Scan QR with Trust Wallet, or open in Trust Wallet browser.');
+      // In a real app, use @walletconnect/modal. For simplicity, show URI.
+      // Trust Wallet deep link: trust://wc?uri=...
+      const deepLink = `trust://wc?uri=${encodeURIComponent(uri)}`;
+      window.location.href = deepLink; // will open Trust Wallet
     }
 
-    tronWeb = tronProvider.tronWeb;
-    if (!tronWeb) {
-      throw new Error('tronWeb missing on provider');
-    }
-
-    // wait for tronWeb.ready
-    let waited = 0;
-    while (!tronWeb.ready && waited < 4000) {
-      await new Promise(r => setTimeout(r, 150));
-      waited += 150;
-    }
-
-    const addr = tronWeb.defaultAddress && tronWeb.defaultAddress.base58;
-    if (!addr) {
-      throw new Error('no address — unlock TronLink and allow this site');
-    }
-
-    currentAddress = addr;
-    log('CONNECT', 'connected', { address: currentAddress, ready: tronWeb.ready });
+    const session = await approval();
+    const accounts = session.namespaces.tron.accounts;
+    currentAddress = accounts[0].split(':')[2];
+    log('CONNECT', 'connected', { address: currentAddress });
     setStatus('sign_status', 'ok', 'Connected: ' + currentAddress);
     $('btn_sign').disabled = false;
     renderEnv();
   } catch (e) {
-    log('CONNECT', 'failed', { message: e.message, code: e.code });
-    setStatus('sign_status', 'err', 'Connect failed: ' + (e.message || e.code));
+    log('CONNECT', 'failed', { message: e.message });
+    setStatus('sign_status', 'err', 'Connect failed: ' + e.message);
     $('btn_connect').disabled = false;
-    renderEnv();
   }
 }
 
-/* ─────────────  sign  ───────────── */
-
 async function sign() {
-  if (!tronWeb || !currentAddress) return;
+  if (!provider || !currentAddress) return;
   try {
     $('btn_sign').disabled = true;
-    setStatus('sign_status', '', 'Waiting for signature in TronLink…');
-    log('SIGN', 'signing', { message: MSG, host: DAPP_HOST });
+    setStatus('sign_status', '', 'Waiting for signature in Trust Wallet…');
+    log('SIGN', 'tron_signMessage', { message: MSG, address: currentAddress });
 
-    let sig;
-    if (typeof tronWeb.trx.signMessageV2 === 'function') {
-      sig = await tronWeb.trx.signMessageV2(MSG);
-    } else if (typeof tronWeb.trx.signMessage === 'function') {
-      // legacy fallback
-      sig = await tronWeb.trx.signMessage(MSG);
-      log('SIGN', 'used legacy signMessage');
-    } else {
-      throw new Error('signMessageV2 not available on this TronLink');
-    }
+    const sig = await provider.request({
+      method: 'tron_signMessage',
+      params: { message: MSG, address: currentAddress }
+    }, TRON_CHAIN);
 
-    if (!sig) throw new Error('empty signature');
-
-    log('SIGN', 'signature received', { prefix: sig.slice(0, 20) + '…', len: sig.length });
-
+    log('SIGN', 'signature', { prefix: sig.slice(0, 20) + '…' });
     lastResult = { text: MSG, sig, signer: currentAddress };
-
     $('json_out').textContent = JSON.stringify(lastResult, null, 2);
     $('btn_copy').disabled = false;
-    setStatus('sign_status', 'ok', 'Signed. Copy JSON to B (drem2).');
+    setStatus('sign_status', 'ok', 'Signed. Copy JSON to B.');
   } catch (e) {
     log('SIGN', 'failed', { message: e.message, code: e.code });
     setStatus('sign_status', 'err', 'Sign failed: ' + (e.message || e.code));
@@ -228,39 +168,18 @@ async function sign() {
   }
 }
 
-/* ─────────────  copy  ───────────── */
-
 async function copyResult() {
   if (!lastResult) return;
-  const payload = JSON.stringify(lastResult, null, 2);
   try {
-    await navigator.clipboard.writeText(payload);
-    setStatus('copy_status', 'ok', 'Copied. Open https://tokdie.github.io/drem2/ and paste.');
+    await navigator.clipboard.writeText(JSON.stringify(lastResult, null, 2));
+    setStatus('copy_status', 'ok', 'Copied. Paste in B (drem2).');
   } catch {
-    setStatus('copy_status', 'err', 'Clipboard blocked — select JSON manually.');
+    setStatus('copy_status', 'err', 'Clipboard blocked — copy manually.');
   }
 }
 
-/* ─────────────  boot  ───────────── */
-
-(async () => {
-  log('BOOT', 'A up', { origin: location.origin, host: DAPP_HOST });
-  renderEnv();
-
-  const p = await waitForTronLink(3000);
-  if (p) {
-    tronProvider = p;
-    tronWeb = p.tronWeb || null;
-    if (tronWeb && tronWeb.defaultAddress && tronWeb.defaultAddress.base58) {
-      currentAddress = tronWeb.defaultAddress.base58;
-      $('btn_sign').disabled = false;
-    }
-    renderEnv();
-    log('BOOT', 'TronLink ready at load', { address: currentAddress });
-  } else {
-    log('BOOT', 'TronLink not present at load — connect button will poll');
-  }
-})();
+renderEnv();
+log('BOOT', 'A up', { host: DAPP_HOST });
 </script>
 </body>
 </html>
