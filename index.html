@@ -3,397 +3,171 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>replay lab — single domain</title>
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<title>A — Tokdie Login</title>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
-          --ok:#3fb950; --warn:#d29922; --bad:#f85149; --dim:#7d8590; }
+          --ok:#3fb950; --bad:#f85149; --dim:#7d8590; }
   * { box-sizing:border-box; }
-  body { margin:0; font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;
-         background:var(--bg); color:var(--txt); }
-  .wrap { display:grid; grid-template-columns:1fr 1fr; gap:10px;
-          padding:10px; max-width:1200px; margin:0 auto; }
-  @media (max-width:820px) { .wrap { grid-template-columns:1fr; } }
+  body { margin:0; font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;
+         background:var(--bg); color:var(--txt); padding:20px; }
+  .wrap { max-width:560px; margin:0 auto; }
   .panel { background:var(--panel); border:1px solid var(--line);
-           border-radius:6px; padding:10px; }
-  .panel.full { grid-column:1 / -1; }
-  h2 { font-size:12px; margin:0 0 6px; color:var(--dim);
+           border-radius:8px; padding:20px; margin-bottom:12px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  h2 { font-size:12px; margin:0 0 8px; color:var(--dim);
        text-transform:uppercase; letter-spacing:.08em; }
-  h3 { font-size:11px; margin:8px 0 4px; color:#58a6ff;
-       text-transform:uppercase; letter-spacing:.06em; }
   button { background:#21262d; color:var(--txt); border:1px solid var(--line);
-           border-radius:4px; padding:6px 10px; font:inherit; cursor:pointer;
-           margin:2px; }
+           border-radius:6px; padding:10px 18px; font:inherit; cursor:pointer;
+           width:100%; margin:6px 0; }
   button:hover { border-color:var(--dim); }
-  button.bad { border-color:var(--bad); color:var(--bad); }
-  button.ok  { border-color:var(--ok); color:var(--ok); }
   button:disabled { opacity:.4; cursor:not-allowed; }
-  pre { background:#0a0d12; border:1px solid var(--line); border-radius:4px;
-        padding:6px; margin:4px 0; max-height:220px; overflow:auto;
-        white-space:pre-wrap; word-break:break-all; font-size:11px; }
-  .kv { display:grid; grid-template-columns:130px 1fr; gap:1px 8px; }
+  pre { background:#0a0d12; border:1px solid var(--line); border-radius:6px;
+        padding:10px; margin:6px 0; white-space:pre-wrap; word-break:break-all;
+        font-size:11px; max-height:200px; overflow:auto; }
+  .kv { display:grid; grid-template-columns:90px 1fr; gap:3px 10px; margin:6px 0; }
   .kv b { color:var(--dim); font-weight:400; }
-  .verdict { padding:6px 10px; border-radius:4px; margin:6px 0; font-weight:bold; }
-  .verdict.ok  { background:#1a2f1a; color:var(--ok); border:1px solid var(--ok); }
-  .verdict.bad { background:#3a1a1a; color:var(--bad); border:1px solid var(--bad); }
-  .verdict.warn{ background:#2f2a1a; color:var(--warn); border:1px solid var(--warn); }
-  input[type=text] { background:#0a0d12; color:var(--txt); border:1px solid var(--line);
-                     border-radius:4px; padding:5px 8px; font:inherit; width:100%; }
+  .status { padding:6px 10px; border-radius:6px; margin:8px 0; font-size:12px; }
+  .status.ok { background:#1a2f1a; color:var(--ok); }
+  .status.err { background:#3a1a1a; color:var(--bad); }
+  .muted { color:var(--dim); font-size:11px; }
 </style>
 </head>
 <body>
-
 <div class="wrap">
 
-  <div class="panel full">
-    <h2>environment</h2>
+  <div class="panel">
+    <h1>Tokdie</h1>
+    <p class="muted">Sign in with your TRON wallet to continue.</p>
+  </div>
+
+  <div class="panel">
+    <h2>step 1 — connect</h2>
+    <button id="btn_connect" onclick="connect()">Connect TronLink</button>
     <div class="kv" id="env"></div>
-    <div class="kv" id="sig_state" style="margin-top:6px"></div>
   </div>
 
   <div class="panel">
-    <h2>DApp A — login (legit)</h2>
-    <p style="color:var(--dim);margin:0 0 6px">
-      Просит подписать «welcome». Пользователь думает: login.
-    </p>
-    <div class="kv">
-      <b>origin</b><span>tokdie.github.io</span>
-      <b>role</b><span>A · login</span>
-    </div>
-    <h3>text to sign</h3>
-    <input type="text" id="a_text" value="Welcome to tokdie. nonce: 0xAAA">
-    <div style="margin-top:6px">
-      <button class="ok" onclick="a_sign()">sign as A (personal_sign)</button>
-      <button onclick="a_sign_twice()">sign twice (determinism)</button>
-    </div>
-    <pre id="a_out">—</pre>
+    <h2>step 2 — sign in</h2>
+    <p class="muted">Sign the message below to prove you own this wallet.</p>
+    <pre id="msg_display">Welcome to Tokdie. nonce: 0xAAA</pre>
+    <button id="btn_sign" onclick="sign()" disabled>Sign in</button>
+    <div class="status" id="sign_status"></div>
   </div>
 
   <div class="panel">
-    <h2>DApp B — authorize (attacker-side)</h2>
-    <p style="color:var(--dim);margin:0 0 6px">
-      Принимает подпись и интерпретирует текст как приказ на перевод.
-      B — мок-сервис на том же домене, проверяет реальную крипту.
-    </p>
-    <h3>B expects text</h3>
-    <input type="text" id="b_text" value="Welcome to tokdie. nonce: 0xAAA">
-    <div class="kv" style="margin-top:6px">
-      <b>B action</b><span>transfer 100 USDC → 0x…dEaD</span>
-      <b>B checks</b><span>recover(text, sig) === signer</span>
-    </div>
-    <div style="margin-top:6px">
-      <button class="bad" onclick="b_accept_personal()">B: accept personal_sign</button>
-      <button class="ok" onclick="b_accept_eip712()">B: accept EIP-712 (secure)</button>
-    </div>
-    <div id="b_verdict"></div>
-    <pre id="b_out">—</pre>
-  </div>
-
-  <div class="panel full">
-    <h2>flow — A signs → B replays</h2>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button onclick="flow_full()">▶ full flow: A sign → B accept</button>
-      <button onclick="flow_secure()">🛡 full flow with EIP-712 B (should fail)</button>
-      <button onclick="flow_mismatch()">✗ flow with mismatched text (should fail)</button>
-    </div>
-    <div id="flow_verdict"></div>
-    <pre id="flow_out">—</pre>
-  </div>
-
-  <div class="panel full">
-    <h2>event log</h2>
-    <div>
-      <button onclick="clearLog()">clear</button>
-      <button onclick="dumpLog()">dump</button>
-    </div>
-    <pre id="log_out">—</pre>
+    <h2>result — copy to B</h2>
+    <div class="kv" id="result"></div>
+    <button id="btn_copy" onclick="copyResult()" disabled>Copy (text + sig + signer)</button>
   </div>
 
 </div>
 
 <script>
-const ORIGIN = location.origin;
-const IS_REAL = !!window.ethereum;
+/* ─────────────  A — legitimate login  ─────────────
+   TronLink injects window.tron with tronWeb.
+   Detect via TIP-6963, request accounts, signMessageV2.
+   ───────────────────────────────────────────────── */
 
-// Внутренний «signer» — реальный адрес из Trust
-let SIGNER = null;
-// Подпись, полученная A
-let SIG_A = null;
-let TEXT_A = null;
+let tronProvider = null;
+let tronWeb = null;
+let currentAddress = null;
+
+const MSG = 'Welcome to Tokdie. nonce: 0xAAA';
+
+const $ = (id) => document.getElementById(id);
 
 const log = (k, m, d) => {
-  const el = document.getElementById('log_out');
-  const line = `[${new Date().toISOString().slice(11,23)}] ${k.padEnd(8)} ${m}`;
-  const body = d !== undefined
-    ? '\n  ' + JSON.stringify(d, null, 2).split('\n').join('\n  ')
-    : '';
-  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
-  el.scrollTop = el.scrollHeight;
+  console.log(`[${k}] ${m}`, d || '');
 };
 
-const out = (id, s) => {
-  document.getElementById(id).textContent =
-    typeof s === 'string' ? s : JSON.stringify(s, null, 2);
+const setStatus = (el, cls, text) => {
+  const node = $(el);
+  node.className = 'status ' + cls;
+  node.textContent = text;
 };
 
-const verdict = (id, ok, text, detail) => {
-  const el = document.getElementById(id);
-  el.innerHTML = `<div class="verdict ${ok ? 'ok' : 'bad'}">${text}</div>` +
-    (detail ? `<pre>${JSON.stringify(detail, null, 2)}</pre>` : '');
-};
-
-const clearLog = () => { document.getElementById('log_out').textContent = '—'; };
-const dumpLog = () => {
-  const t = document.getElementById('log_out').textContent;
-  navigator.clipboard && navigator.clipboard.writeText(t);
-  log('DUMP', 'copied', { len: t.length });
-};
-
-async function ensureSigner() {
-  if (SIGNER) return SIGNER;
-  if (!IS_REAL) throw new Error('window.ethereum not found');
-  const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
-  SIGNER = accs[0];
-  renderSigState();
-  return SIGNER;
-}
-
-/* ─────────────  DApp A — sign  ───────────── */
-
-async function a_sign() {
-  try {
-    const from = await ensureSigner();
-    const text = document.getElementById('a_text').value;
-    log('A', 'sign request', { text, from });
-    const sig = await window.ethereum.request({
-      method: 'personal_sign',
-      params: [text, from],
-    });
-    SIG_A = sig;
-    TEXT_A = text;
-    log('A', 'sig received', { sig: sig.slice(0, 42) + '…', text });
-    out('a_out', `text: ${text}\nsig:  ${sig}`);
-    renderSigState();
-    // проверка через ethers: recover
-    const rec = ethers.verifyMessage(text, sig);
-    log('A', 'recover', { recovered: rec, match: rec.toLowerCase() === from.toLowerCase() });
-    return { text, sig, from };
-  } catch (e) {
-    log('A', 'error', { code: e.code, message: e.message });
-    out('a_out', `error: ${e.code} ${e.message}`);
-    return null;
+/* TIP-6963 detect */
+window.addEventListener('TIP6963:announceProvider', (e) => {
+  if (e.detail && e.detail.info && e.detail.info.name === 'TronLink') {
+    tronProvider = e.detail.provider;
+    log('DETECT', 'TronLink announced via TIP-6963');
   }
+});
+window.dispatchEvent(new Event('TIP6963:requestProvider'));
+
+/* fallback: legacy window.tron */
+if (!tronProvider && window.tron && window.tron.isTronLink) {
+  tronProvider = window.tron;
+  log('DETECT', 'TronLink via window.tron');
 }
-
-async function a_sign_twice() {
-  try {
-    const from = await ensureSigner();
-    const text = document.getElementById('a_text').value;
-    log('A', 'sign twice — call 1', { text });
-    const s1 = await window.ethereum.request({ method: 'personal_sign', params: [text, from] });
-    log('A', 'sign twice — call 2', { text });
-    const s2 = await window.ethereum.request({ method: 'personal_sign', params: [text, from] });
-    const same = s1 === s2;
-    log('A', 'sign twice verdict', { same });
-    out('a_out',
-      `text: ${text}\n\nsig1: ${s1}\nsig2: ${s2}\n\n` +
-      (same ? 'SAME — deterministic' : 'DIFFERENT — non-deterministic'));
-    return { text, s1, s2, same };
-  } catch (e) {
-    log('A', 'error', { code: e.code, message: e.message });
-    out('a_out', `error: ${e.code} ${e.message}`);
-    return null;
-  }
-}
-
-/* ─────────────  DApp B — accept personal_sign  ───────────── */
-
-async function b_accept_personal() {
-  try {
-    const expectedText = document.getElementById('b_text').value;
-    log('B', 'accept request (personal_sign mode)', { expectedText });
-    if (!SIG_A || !TEXT_A) {
-      verdict('b_verdict', false, 'B: no signature yet — A must sign first');
-      return;
-    }
-    if (TEXT_A !== expectedText) {
-      log('B', 'text mismatch', { signed: TEXT_A, expected: expectedText });
-      verdict('b_verdict', false, 'B: TEXT MISMATCH — reject',
-        { signed: TEXT_A, expected: expectedText });
-      out('b_out', 'reject: text mismatch');
-      return;
-    }
-    // B проверяет подпись
-    const recovered = ethers.verifyMessage(expectedText, SIG_A);
-    const ok = SIGNER && recovered.toLowerCase() === SIGNER.toLowerCase();
-    log('B', 'recover', { recovered, signer: SIGNER, ok });
-    if (ok) {
-      // B «исполняет перевод»
-      const executed = {
-        action: 'transfer 100 USDC',
-        to: '0x000000000000000000000000000000000000dEaD',
-        authorized_by: recovered,
-        signature: SIG_A.slice(0, 42) + '…',
-        accepted_text: expectedText,
-        meaning_on_B: 'transfer authorization',
-      };
-      log('B', 'ACCEPT — replay executed', executed);
-      verdict('b_verdict', true,
-        'B: ACCEPTED — signature from A authorizes transfer on B',
-        executed);
-      out('b_out', JSON.stringify(executed, null, 2));
-      return executed;
-    } else {
-      log('B', 'reject', { recovered, signer: SIGNER });
-      verdict('b_verdict', false, 'B: signature does not match signer',
-        { recovered, signer: SIGNER });
-      return null;
-    }
-  } catch (e) {
-    log('B', 'error', { message: e.message });
-    verdict('b_verdict', false, 'B error: ' + e.message);
-    return null;
-  }
-}
-
-/* ─────────────  DApp B — accept EIP-712 (secure)  ───────────── */
-
-async function b_accept_eip712() {
-  try {
-    log('B', 'accept request (EIP-712 mode)', {});
-    if (!SIG_A || !TEXT_A) {
-      verdict('b_verdict', false, 'B: no signature yet');
-      return;
-    }
-    // EIP-712 domain — B ожидает typed data, не personal_sign
-    const typed = {
-      domain: {
-        name: 'DAppB', version: '1', chainId: 1,
-        verifyingContract: '0x000000000000000000000000000000000000BEEF',
-      },
-      types: {
-        Transfer: [
-          { name: 'to', type: 'address' },
-          { name: 'amount', type: 'uint256' },
-          { name: 'nonce', type: 'uint256' },
-        ],
-      },
-      primaryType: 'Transfer',
-      message: { to: '0x000000000000000000000000000000000000dEaD', amount: '100', nonce: 0 },
-    };
-    // Попытка «воткнуть» personal_sign-подпись в EIP-712 проверку
-    // — она не подойдёт, потому что хеш другой
-    const eip712Hash = ethers.TypedDataEncoder.hash(
-      typed.domain, typed.types, typed.message);
-    const recovered = ethers.verifyMessage(TEXT_A, SIG_A);
-    const ok = recovered.toLowerCase() === SIGNER.toLowerCase();
-    // B ожидает подпись над EIP-712 хешем, а получил personal_sign
-    const match = false; // заведомо false: разные схемы хеширования
-    log('B-eip712', 'recover personal_sign', { recovered });
-    log('B-eip712', 'expected eip712 hash', { hash: eip712Hash.slice(0, 42) + '…' });
-    log('B-eip712', 'verdict', { personalSigMatchesEip712: match });
-    verdict('b_verdict', false,
-      'B (EIP-712): REJECT — personal_sign cannot satisfy EIP-712 check',
-      {
-        reason: 'personal_sign uses EIP-191 prefix; EIP-712 uses domain separator. Different hash → different recover.',
-        personal_sig_recovered: recovered,
-        eip712_expected_domain: typed.domain,
-      });
-    out('b_out', JSON.stringify({
-      verdict: 'REJECT',
-      reason: 'schema mismatch — personal_sign != EIP-712',
-      personal_sig_recovered: recovered,
-      eip712_hash: eip712Hash,
-    }, null, 2));
-    return null;
-  } catch (e) {
-    log('B-eip712', 'error', { message: e.message });
-    verdict('b_verdict', false, 'B (EIP-712) error: ' + e.message);
-    return null;
-  }
-}
-
-/* ─────────────  full flows  ───────────── */
-
-async function flow_full() {
-  document.getElementById('flow_verdict').innerHTML = '';
-  out('flow_out', '→ step 1: A signs\n');
-  const a = await a_sign();
-  if (!a) { out('flow_out', 'A failed'); return; }
-  // B ожидает ТОТ ЖЕ текст
-  document.getElementById('b_text').value = a.text;
-  out('flow_out', `→ step 1 done: A signed "${a.text}"\n→ step 2: B accepts (personal_sign mode)\n`);
-  const b = await b_accept_personal();
-  if (b) {
-    document.getElementById('flow_verdict').innerHTML =
-      `<div class="verdict ok">FLOW OK — replay executed: A's login signature authorized transfer on B</div>`;
-    out('flow_out',
-      `✓ A signed: "${a.text}"\n` +
-      `✓ B accepted: ${JSON.stringify(b, null, 2)}\n\n` +
-      `REPLAY CONFIRMED: one personal_sign, two meanings.`);
-  } else {
-    document.getElementById('flow_verdict').innerHTML =
-      `<div class="verdict bad">FLOW FAILED — B rejected</div>`;
-  }
-}
-
-async function flow_secure() {
-  document.getElementById('flow_verdict').innerHTML = '';
-  out('flow_out', '→ step 1: A signs\n');
-  const a = await a_sign();
-  if (!a) { out('flow_out', 'A failed'); return; }
-  out('flow_out', `→ step 2: B accepts with EIP-712 (secure)\n`);
-  const b = await b_accept_eip712();
-  document.getElementById('flow_verdict').innerHTML =
-    `<div class="verdict ok">FLOW BLOCKED — EIP-712 B rejects personal_sign replay</div>`;
-  out('flow_out',
-    `✗ A signed personal_sign: "${a.text}"\n` +
-    `✗ B (EIP-712) rejected: schema mismatch\n\n` +
-    `REPLAY BLOCKED: B requires EIP-712 domain-bound signature.`);
-}
-
-async function flow_mismatch() {
-  document.getElementById('flow_verdict').innerHTML = '';
-  out('flow_out', '→ step 1: A signs\n');
-  const a = await a_sign();
-  if (!a) { out('flow_out', 'A failed'); return; }
-  // B ожидает ДРУГОЙ текст
-  document.getElementById('b_text').value = 'Welcome to tokdie. nonce: 0xBBB';
-  out('flow_out',
-    `→ step 2: B expects DIFFERENT text\n` +
-    `   A signed: "${a.text}"\n` +
-    `   B expects: "Welcome to tokdie. nonce: 0xBBB"\n`);
-  const b = await b_accept_personal();
-  document.getElementById('flow_verdict').innerHTML =
-    `<div class="verdict warn">FLOW BLOCKED — text mismatch</div>`;
-  out('flow_out',
-    `✗ B rejected: text mismatch\n\n` +
-    `REPLAY BLOCKED: B expects different text. Text must match byte-for-byte.`);
-}
-
-/* ─────────────  env  ───────────── */
 
 function renderEnv() {
-  const eth = window.ethereum || {};
-  document.getElementById('env').innerHTML = `
-    <b>origin</b><span>${ORIGIN}</span>
-    <b>ethereum</b><span>${IS_REAL ? 'present' : 'absent'}</span>
-    <b>isTrust</b><span>${eth.isTrust ? 'yes' : 'no'}</span>
-    <b>ethers</b><span>${ethers.version}</span>
+  const e = tronProvider || {};
+  $('env').innerHTML = `
+    <b>provider</b><span>${tronProvider ? 'TronLink' : 'not found'}</span>
+    <b>isTronLink</b><span>${e.isTronLink ? 'yes' : 'no'}</span>
+    <b>ready</b><span>${e.tronWeb && e.tronWeb.ready ? 'yes' : 'no'}</span>
+    <b>address</b><span>${currentAddress || '—'}</span>
   `;
 }
 
-function renderSigState() {
-  document.getElementById('sig_state').innerHTML = `
-    <b>signer</b><span>${SIGNER || '—'}</span>
-    <b>last sig (A)</b><span>${SIG_A ? SIG_A.slice(0, 42) + '…' : '—'}</span>
-    <b>last text (A)</b><span>${TEXT_A ? JSON.stringify(TEXT_A) : '—'}</span>
-  `;
+async function connect() {
+  if (!tronProvider) {
+    setStatus('sign_status', 'err', 'TronLink not detected. Install TronLink extension.');
+    return;
+  }
+  try {
+    $('btn_connect').disabled = true;
+    const accounts = await tronProvider.request({ method: 'eth_requestAccounts' });
+    currentAddress = accounts[0];
+    tronWeb = tronProvider.tronWeb;
+    log('CONNECT', 'account', { address: currentAddress });
+    $('btn_sign').disabled = false;
+    renderEnv();
+  } catch (e) {
+    log('CONNECT', 'failed', e);
+    setStatus('sign_status', 'err', 'Connect failed: ' + (e.message || e.code));
+    $('btn_connect').disabled = false;
+  }
 }
+
+async function sign() {
+  if (!tronWeb || !currentAddress) return;
+  try {
+    $('btn_sign').disabled = true;
+    setStatus('sign_status', '', 'Waiting for signature…');
+    log('SIGN', 'requesting signMessageV2', { message: MSG });
+    const sig = await tronWeb.trx.signMessageV2(MSG);
+    log('SIGN', 'signature received', { sig });
+    $('result').innerHTML = `
+      <b>text</b><span>${esc(MSG)}</span>
+      <b>sig</b><span style="word-break:break-all">${sig}</span>
+      <b>signer</b><span>${currentAddress}</span>
+    `;
+    $('btn_copy').disabled = false;
+    setStatus('sign_status', 'ok', 'Signed. Copy result to B.');
+  } catch (e) {
+    log('SIGN', 'failed', e);
+    setStatus('sign_status', 'err', 'Sign failed: ' + (e.message || e.code));
+    $('btn_sign').disabled = false;
+  }
+}
+
+async function copyResult() {
+  const sig = $('result').querySelector('span:nth-child(4)')?.textContent;
+  const payload = JSON.stringify({ text: MSG, sig, signer: currentAddress }, null, 2);
+  try {
+    await navigator.clipboard.writeText(payload);
+    setStatus('sign_status', 'ok', 'Copied to clipboard. Paste in B.');
+  } catch {
+    setStatus('sign_status', 'err', 'Clipboard failed — copy manually from result panel.');
+  }
+}
+
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 renderEnv();
-renderSigState();
-log('BOOT', 'replay lab up', { origin: ORIGIN, real: IS_REAL, ethers: ethers.version });
+log('BOOT', 'A up', { origin: location.origin });
 </script>
 </body>
 </html>
