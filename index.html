@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>A1 — Tokdie Login (WalletConnect TRON)</title>
+<title>A — Tokdie Login (WC TRON)</title>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
           --ok:#3fb950; --bad:#f85149; --warn:#d29922; --dim:#7d8590; --accent:#58a6ff; }
@@ -36,21 +36,20 @@
 </head>
 <body>
 <div class="wrap">
-
   <div class="panel">
     <h1>Tokdie</h1>
-    <p class="muted">Sign in with your TRON wallet via WalletConnect.</p>
+    <p class="muted">Sign in with TRON via WalletConnect.</p>
     <div class="kv" id="env_top"></div>
   </div>
 
   <div class="panel">
     <h2>step 1 — connect</h2>
     <button id="btn_connect" onclick="connect()">Connect WalletConnect</button>
+    <div class="status" id="connect_status"></div>
   </div>
 
   <div class="panel">
     <h2>step 2 — sign in</h2>
-    <p class="muted">Sign the message below to prove you own this wallet.</p>
     <pre id="msg_display">Welcome to Tokdie. nonce: 0xAAA</pre>
     <button class="primary" id="btn_sign" onclick="sign()" disabled>Sign in</button>
     <div class="status" id="sign_status"></div>
@@ -62,7 +61,6 @@
     <button id="btn_copy" onclick="copyResult()" disabled>Copy JSON</button>
     <div class="status" id="copy_status"></div>
   </div>
-
 </div>
 
 <script type="module">
@@ -78,8 +76,6 @@ let lastResult = null;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-
-const log = (k, m, d) => console.log(`[A ${DAPP_HOST}] [${k}] ${m}`, d || '');
 
 const setStatus = (el, cls, text) => {
   const node = $(el);
@@ -97,10 +93,11 @@ function renderEnv() {
 
 async function connect() {
   $('btn_connect').disabled = true;
-  setStatus('sign_status', '', 'Opening WalletConnect…');
+  setStatus('connect_status', '', 'Opening WalletConnect…');
+
   try {
     provider = await UniversalProvider.init({
-      projectId: 'YOUR_WALLETCONNECT_PROJECT_ID', // ← замени на свой projectId
+      projectId: 'YOUR_WALLETCONNECT_PROJECT_ID', // ← обязательно свой
       metadata: {
         name: 'Tokdie Login',
         description: 'Sign in with TRON',
@@ -109,7 +106,7 @@ async function connect() {
       }
     });
 
-    // Required namespaces for TRON
+    // TRON namespace per docs
     const { uri, approval } = await provider.client.connect({
       requiredNamespaces: {
         tron: {
@@ -121,25 +118,24 @@ async function connect() {
     });
 
     if (uri) {
-      // show QR via WalletConnect modal, or simple text
-      log('CONNECT', 'uri', { uri });
-      setStatus('sign_status', 'warn', 'Scan QR with Trust Wallet, or open in Trust Wallet browser.');
-      // In a real app, use @walletconnect/modal. For simplicity, show URI.
-      // Trust Wallet deep link: trust://wc?uri=...
-      const deepLink = `trust://wc?uri=${encodeURIComponent(uri)}`;
-      window.location.href = deepLink; // will open Trust Wallet
+      // Trust Wallet deep link per official docs
+      const deepLink = `https://link.trustwallet.com/wc?uri=${encodeURIComponent(uri)}`;
+      console.log('[A] deep link:', deepLink);
+      setStatus('connect_status', 'warn', 'Redirecting to Trust Wallet…');
+      window.location.href = deepLink;
     }
 
     const session = await approval();
     const accounts = session.namespaces.tron.accounts;
+    // CAIP-10: tron:0x2b6653dc:TAddress
     currentAddress = accounts[0].split(':')[2];
-    log('CONNECT', 'connected', { address: currentAddress });
-    setStatus('sign_status', 'ok', 'Connected: ' + currentAddress);
+
+    setStatus('connect_status', 'ok', 'Connected: ' + currentAddress);
     $('btn_sign').disabled = false;
     renderEnv();
   } catch (e) {
-    log('CONNECT', 'failed', { message: e.message });
-    setStatus('sign_status', 'err', 'Connect failed: ' + e.message);
+    console.error('[A connect]', e);
+    setStatus('connect_status', 'err', 'Connect failed: ' + (e.message || e));
     $('btn_connect').disabled = false;
   }
 }
@@ -148,22 +144,23 @@ async function sign() {
   if (!provider || !currentAddress) return;
   try {
     $('btn_sign').disabled = true;
-    setStatus('sign_status', '', 'Waiting for signature in Trust Wallet…');
-    log('SIGN', 'tron_signMessage', { message: MSG, address: currentAddress });
+    setStatus('sign_status', '', 'Waiting for signature in Trust…');
 
+    // tron_signMessage: { message: string, address: string } per docs
     const sig = await provider.request({
       method: 'tron_signMessage',
       params: { message: MSG, address: currentAddress }
     }, TRON_CHAIN);
 
-    log('SIGN', 'signature', { prefix: sig.slice(0, 20) + '…' });
+    console.log('[A sign] sig:', sig);
+
     lastResult = { text: MSG, sig, signer: currentAddress };
     $('json_out').textContent = JSON.stringify(lastResult, null, 2);
     $('btn_copy').disabled = false;
     setStatus('sign_status', 'ok', 'Signed. Copy JSON to B.');
   } catch (e) {
-    log('SIGN', 'failed', { message: e.message, code: e.code });
-    setStatus('sign_status', 'err', 'Sign failed: ' + (e.message || e.code));
+    console.error('[A sign]', e);
+    setStatus('sign_status', 'err', 'Sign failed: ' + (e.message || e));
     $('btn_sign').disabled = false;
   }
 }
@@ -172,14 +169,14 @@ async function copyResult() {
   if (!lastResult) return;
   try {
     await navigator.clipboard.writeText(JSON.stringify(lastResult, null, 2));
-    setStatus('copy_status', 'ok', 'Copied. Paste in B (drem2).');
+    setStatus('copy_status', 'ok', 'Copied. Paste in B.');
   } catch {
     setStatus('copy_status', 'err', 'Clipboard blocked — copy manually.');
   }
 }
 
 renderEnv();
-log('BOOT', 'A up', { host: DAPP_HOST });
+console.log('[A BOOT]', DAPP_HOST);
 </script>
 </body>
 </html>
