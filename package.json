@@ -1,3 +1,0 @@
-// package.json
-{"name":"drainer-relay","type":"commonjs",
- "dependencies":{"express":"^4","dotenv":"^16"}}
